@@ -1,47 +1,18 @@
-# 🛡️ Proyecto Jericó
+# 🛡️ Proyecto Jericó — AI-OS Kaisen AI (greenfield)
 
-> **Asistente Inteligente Propio de Kaisen AI**  
-> Evolución modular, autónoma y desacoplada del ecosistema operativo de Jarvis.
+> Spec canónica: `~/Kaisen_AI/01_Proyectos/Boceto_jerico/` (v2 20/09/2026). Nota viva: `~/Kaisen_AI/02_Obsidian_Kaisen/01_Proyectos/Proyecto_Jerico.md`.
 
----
+Stack v2: `GLM-5.3-Flash` (router/comercial) + `DeepSeek-V4.1-Flash` (código) + voz clonada propia (whisper + Fish/XTTS). Gemini AI Studio solo bootstrap. Infra v0: Oracle Free Tier limpio.
 
-## 📖 Visión General
-**Proyecto Jericó** es el núcleo de automatización y asistencia ejecutiva de Kaisen AI. Diseñado para centralizar la gestión de tareas de la empresa, el seguimiento de proyectos con clientes, el control de infraestructura en producción y el acompañamiento en hábitos personales y disciplina del CTO (Modo Cueva).
+## Estructura y rutas
 
-Sustituye la arquitectura monolítica previa basada en flujos de trabajo de n8n por un motor de microservicios con orquestación nativa de modelos de lenguaje (Gemini / Anthropic / Local LLM) y un registro tipado de herramientas.
+Ver `docs/ESTRUCTURA_Y_RUTAS.md` (índice único, sin duplicados).
 
----
+## Reglas Copilot
 
-## 🏛️ Documentación de Arquitectura y Especificaciones
-Toda la documentación técnica se encuentra organizada en [`docs/`](./docs/):
-* **[Arquitectura Modular del Sistema](./docs/ARQUITECTURA.md):** Diagramas de componentes, flujo de peticiones, router de tokens y orquestador.
-* **[Especificaciones Técnicas e Integraciones](./docs/ESPECIFICACIONES_TECNICAS.md):** Esquemas de bases de datos Notion (`DB-01` a `DB-07`), configuración de YouTrack, variables de entorno y red.
-* **[Bocetos y Prototipos](./docs/bocetos/README.md):** Diseños y esquemas de experimentación rápida.
+- `/.github/muse-instructions.md` — se carga solo en Copilot.
+- `/.github/prompts/generar-readme.prompt.md` — prompt para regenerar este README.
 
----
+## Quickstart v0
 
-## 🚀 Canales Soportados
-1. **Telegram:** Canal principal conversacional con soporte de texto y audio.
-2. **Siri / Apple Shortcuts:** Endpoint REST HTTP directo para consultas rápidas de voz desde dispositivos iOS.
-3. **CLI Developer:** Línea de comandos para pruebas e interacción técnica.
-
----
-
-## 🛠️ Estructura del Repositorio
-```
-Proyecto_Jerico/
-├── docs/
-│   ├── ARQUITECTURA.md             # Diseño del sistema y hoja de ruta
-│   ├── ESPECIFICACIONES_TECNICAS.md# Esquemas Notion, YouTrack y red
-│   └── bocetos/                    # Bocetos y diagramas preliminares
-├── src/                            # Código fuente del motor Jericó (próximamente)
-├── tests/                          # Pruebas automatizadas unitarias e integración
-└── README.md                       # Documentación principal
-```
-
----
-
-## 🔒 Gobernanza y Reglas de Contribución
-* **Identidad de Autor Git:** `Santiago Gonzalez <kaisen.ai.santiago.cto@gmail.com>`
-* **Organización GitHub:** `kaisen-ai-skynet`
-* **Protocolo de Seguridad:** Confirmación obligatoria antes de cualquier mutación o escritura en bases de datos y sistemas externos.
+`cp .env.example .env`, `pip install -e .`, `python -m jerico "..."`, `pytest -q`, `docker compose up`.
