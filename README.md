@@ -13,6 +13,11 @@ Ver `docs/ESTRUCTURA_Y_RUTAS.md` (índice único, sin duplicados).
 - `/.github/muse-instructions.md` — se carga solo en Copilot.
 - `/.github/prompts/generar-readme.prompt.md` — prompt para regenerar este README.
 
+## Documentación actualizable
+
+El repositorio incluye un prompt reutilizable en `/.github/prompts/generar-readme.prompt.md` para mantener este README alineado con el estado real del proyecto, sin inventar funcionalidades ni comandos no verificados.
+
 ## Quickstart v0
 
 `cp .env.example .env`, `pip install -e .`, `python -m jerico "..."`, `pytest -q`, `docker compose up`.
+
