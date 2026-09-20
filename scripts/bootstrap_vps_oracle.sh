@@ -94,10 +94,10 @@ create_team_user() {
     # Asignar sudo si aplica
     if [ "$is_sudo" = "true" ]; then
         usermod -aG sudo "$username"
-        # Permitir sudo sin password para automatizaciones controladas del CTO
+        # Permitir sudo sin password para administradores autorizados
         echo "$username ALL=(ALL) NOPASSWD:ALL" > "/etc/sudoers.d/99-$username"
         chmod 0440 "/etc/sudoers.d/99-$username"
-        log_success "Usuario $username configurado como SUDO SUPREMO."
+        log_success "Usuario $username configurado con privilegios SUDO TOTAL."
     else
         log_info "Usuario $username configurado con permisos estándar + Docker."
     fi
@@ -126,12 +126,12 @@ create_team_user() {
 # --- CLAVES PÚBLICAS (Reemplazar o inyectar las llaves del equipo) ---
 # Santiago González (CTO / Sudo Supremo)
 KEY_SANTIAGO="${KEY_SANTIAGO:-}"
-# Juan Pablo (Backend / Seguridad)
+# Nicolás (Sysadmin / Lead Companion - Sudo Total)
+KEY_NICOLAS="${KEY_NICOLAS:-}"
+# Juan Pablo (Backend / Seguridad / Sysadmin - Sudo)
 KEY_JPABLO="${KEY_JPABLO:-}"
 # Esteban (Infra / Workflows)
 KEY_ESTEBAN="${KEY_ESTEBAN:-}"
-# Nicolás (Equipo Técnico / Compañero)
-KEY_NICOLAS="${KEY_NICOLAS:-}"
 # Santiago Jr (Auditoría / Bases de Datos / Operaciones)
 KEY_SANTIAGOJR="${KEY_SANTIAGOJR:-}"
 
@@ -141,10 +141,11 @@ if [ -z "$KEY_SANTIAGO" ] && [ -f /home/ubuntu/.ssh/authorized_keys ]; then
     log_info "Usando la llave SSH inicial de /home/ubuntu para Santiago."
 fi
 
+# Asignación de roles y privilegios en el SO:
 create_team_user "santiago" "true" "$KEY_SANTIAGO"
-create_team_user "jpablo" "false" "$KEY_JPABLO"
+create_team_user "nicolas" "true" "$KEY_NICOLAS"
+create_team_user "jpablo" "true" "$KEY_JPABLO"
 create_team_user "esteban" "false" "$KEY_ESTEBAN"
-create_team_user "nicolas" "false" "$KEY_NICOLAS"
 create_team_user "santiagojr" "false" "$KEY_SANTIAGOJR"
 
 # 6. Hardening de SSH
