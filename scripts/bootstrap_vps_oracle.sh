@@ -130,6 +130,10 @@ KEY_SANTIAGO="${KEY_SANTIAGO:-}"
 KEY_JPABLO="${KEY_JPABLO:-}"
 # Esteban (Infra / Workflows)
 KEY_ESTEBAN="${KEY_ESTEBAN:-}"
+# Nicolás (Equipo Técnico / Compañero)
+KEY_NICOLAS="${KEY_NICOLAS:-}"
+# Santiago Jr (Auditoría / Bases de Datos / Operaciones)
+KEY_SANTIAGOJR="${KEY_SANTIAGOJR:-}"
 
 # Si la variable de entorno está vacía, se intenta heredar la llave del usuario 'ubuntu' inicial para Santiago
 if [ -z "$KEY_SANTIAGO" ] && [ -f /home/ubuntu/.ssh/authorized_keys ]; then
@@ -140,6 +144,8 @@ fi
 create_team_user "santiago" "true" "$KEY_SANTIAGO"
 create_team_user "jpablo" "false" "$KEY_JPABLO"
 create_team_user "esteban" "false" "$KEY_ESTEBAN"
+create_team_user "nicolas" "false" "$KEY_NICOLAS"
+create_team_user "santiagojr" "false" "$KEY_SANTIAGOJR"
 
 # 6. Hardening de SSH
 log_info "Paso 6: Aplicando directivas de Hardening a SSH..."
@@ -154,7 +160,7 @@ MaxAuthTries 3
 ClientAliveInterval 300
 ClientAliveCountMax 2
 X11Forwarding no
-AllowUsers santiago jpablo esteban ubuntu
+AllowUsers santiago jpablo esteban nicolas santiagojr ubuntu
 EOF
 
 # Validar sintaxis y recargar SSH
@@ -187,9 +193,11 @@ echo -e "Próximos pasos obligatorios:"
 echo -e "1. Conecta el servidor a Tailscale ejecutando:"
 echo -e "   ${YELLOW}sudo tailscale up --hostname=jerico-oracle --ssh${NC}"
 echo -e "2. Verifica que cada ingeniero pueda ingresar vía Tailscale:"
-echo -e "   - Santiago:   ${BLUE}ssh santiago@jerico-oracle${NC}"
-echo -e "   - Juan Pablo: ${BLUE}ssh jpablo@jerico-oracle${NC}"
-echo -e "   - Esteban:    ${BLUE}ssh esteban@jerico-oracle${NC}"
+echo -e "   - Santiago:    ${BLUE}ssh santiago@jerico-oracle${NC}"
+echo -e "   - Juan Pablo:  ${BLUE}ssh jpablo@jerico-oracle${NC}"
+echo -e "   - Esteban:     ${BLUE}ssh esteban@jerico-oracle${NC}"
+echo -e "   - Nicolás:     ${BLUE}ssh nicolas@jerico-oracle${NC}"
+echo -e "   - Santiago Jr: ${BLUE}ssh santiagojr@jerico-oracle${NC}"
 echo -e "3. Ingresa a la interfaz web de Coolify:"
 echo -e "   ${BLUE}http://jerico-oracle:8000${NC} (vía red Tailscale)"
 echo -e "4. Elimina el puerto 22 de la Security List pública de Oracle Cloud."
