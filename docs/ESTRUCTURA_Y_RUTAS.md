@@ -27,6 +27,7 @@ Proyecto_Jerico/
 | Stack v2 + plan 5 fases + Fase 0 Oracle | `~/Kaisen_AI/01_Proyectos/Boceto_jerico/EL_COMO_ARQUITECTURA_Y_PLAN.md` |
 | Arquitectura + router L0/L1/L2 + voz | `~/Kaisen_AI/01_Proyectos/Boceto_jerico/ARQUITECTURA.md` |
 | Notion DBs + YouTrack + guardrails | `~/Kaisen_AI/01_Proyectos/Boceto_jerico/ESPECIFICACIONES_TECNICAS.md` |
+| Plan conexión VPS Oracle equipo (Fase 0) | `~/Kaisen_AI/01_Proyectos/Boceto_jerico/PLAN_CONEXION_VPS_ORACLE_EQUIPO.md` |
 | Inventario rutas Jarvis/Jerico/server | `~/Kaisen_AI/01_Proyectos/Boceto_jerico/MAPA_RUTAS_INVENTARIO.md` |
 | Nota viva ejecutiva | `~/Kaisen_AI/02_Obsidian_Kaisen/01_Proyectos/Proyecto_Jerico.md` |
 | Reglas Copilot | `Proyecto_Jerico/.github/muse-instructions.md` |
