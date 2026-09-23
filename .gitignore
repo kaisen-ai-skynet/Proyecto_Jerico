@@ -1,0 +1,36 @@
+# Proyecto Jericó — gitignore v0
+
+# Secretos y entorno
+.env
+.env.*
+!.env.example
+
+# Voces clonadas (consentimiento + privacidad). Nunca al repo.
+voices/*
+!voices/consent.txt
+
+# Logs de auditoría runtime (audit.log en ./logs/; en Docker va en volumen)
+logs/
+
+# Config local de agente Pi (machine-specific)
+.pi/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# IDE / SO
+.idea/
+.vscode/
+*.swp
+.DS_Store

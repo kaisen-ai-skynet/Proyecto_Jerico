@@ -1,0 +1,5 @@
+Registro de consentimiento de voces clonadas.
+
+- Nunca commitear muestras ni modelos de voz en este repo (ver .gitignore).
+- Cada muestra debe tener consentimiento escrito del dueño de la voz.
+- Ruta local sugerida: ~/Kaisen_AI/03_Activos/voices/ (fuera del repo).

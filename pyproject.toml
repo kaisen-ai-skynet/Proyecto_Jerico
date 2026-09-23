@@ -1,0 +1,65 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "jerico"
+version = "0.1.0"
+description = "Proyecto Jericó — AI-OS de Kaisen AI (sucesor de Jarvis)"
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "Proprietary" }
+authors = [{ name = "Kaisen AI" }]
+dependencies = [
+    "fastapi>=0.115,<1",
+    "uvicorn[standard]>=0.30,<1",
+    "pydantic>=2.7,<3",
+    "pydantic-settings>=2.3,<3",
+    "typer>=0.12,<1",
+    "loguru>=0.7,<1",
+    "httpx>=0.27,<1",
+    "openai>=1.40,<2",
+    "python-dotenv>=1.0,<2",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8,<9",
+    "pytest-asyncio>=0.23,<2",
+    "ruff>=0.5,<1",
+    "mypy>=1.10,<2",
+]
+voice = [
+    "faster-whisper>=1.0,<2",
+]
+
+[project.scripts]
+jerico = "jerico.main:app"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/jerico"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "S"]
+ignore = [
+    "S104", # bind 0.0.0.0 intencional en contenedor
+    "S105", # api_key placeholder en defaults/tests
+    "S106", # api_token placeholder en defaults/tests
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S101"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+
+[tool.mypy]
+python_version = "3.12"
+strict = false
+mypy_path = "src"

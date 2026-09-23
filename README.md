@@ -1,6 +1,6 @@
 # 🛡️ Proyecto Jericó — AI-OS Kaisen AI (greenfield)
 
-> Spec canónica: `~/Kaisen_AI/01_Proyectos/Boceto_jerico/` (v2 20/09/2026). Nota viva: `~/Kaisen_AI/02_Obsidian_Kaisen/01_Proyectos/Proyecto_Jerico.md`.
+> Spec canónica: `docs/spec/` (v2, migrada desde `Boceto_jerico/` el 23/09/2026; el boceto queda como puntero inverso). Nota viva: `~/Kaisen_AI/02_Obsidian_Kaisen/01_Proyectos/Proyecto_Jerico.md`.
 
 Stack v2: `GLM-5.3-Flash` (router/comercial) + `DeepSeek-V4.1-Flash` (código) + voz clonada propia (whisper + Fish/XTTS). Gemini AI Studio solo bootstrap. Infra v0: Oracle Free Tier limpio.
 

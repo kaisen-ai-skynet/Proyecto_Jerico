@@ -1,0 +1,23 @@
+services:
+  jerico-core:
+    build: .
+    image: jerico-core:0.1.0
+    container_name: jerico-core
+    env_file: .env
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./logs:/app/logs
+    restart: unless-stopped
+    networks:
+      - skynet_net
+    # Voz (Fase 3): descomentar para STT/TTS CPU en ARM64
+    # deploy:
+    #   resources:
+    #     limits:
+    #       cpus: "2.0"
+
+networks:
+  skynet_net:
+    name: skynet_skynet_net
+    external: true
