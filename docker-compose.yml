@@ -1,7 +1,7 @@
 services:
   jerico-core:
     build: .
-    image: jerico-core:0.1.0
+    image: jerico-core:0.2.0
     container_name: jerico-core
     env_file: .env
     ports:
@@ -10,14 +10,12 @@ services:
       - ./logs:/app/logs
     restart: unless-stopped
     networks:
-      - skynet_net
-    # Voz (Fase 3): descomentar para STT/TTS CPU en ARM64
-    # deploy:
-    #   resources:
-    #     limits:
-    #       cpus: "2.0"
+      - jerico_net
 
 networks:
-  skynet_net:
-    name: skynet_skynet_net
-    external: true
+  jerico_net:
+    name: jerico_net
+# Red vieja del host en quarantine. No usar hasta salir de Fase 0:
+#   skynet_net:
+#     name: skynet_skynet_net
+#     external: true

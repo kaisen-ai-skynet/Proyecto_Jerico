@@ -2,7 +2,7 @@
 
 > Spec canónica: `docs/spec/` (v2, migrada desde `Boceto_jerico/` el 23/09/2026; el boceto queda como puntero inverso). Nota viva: `~/Kaisen_AI/02_Obsidian_Kaisen/01_Proyectos/Proyecto_Jerico.md`.
 
-Stack v2: `GLM-5.3-Flash` (router/comercial) + `DeepSeek-V4.1-Flash` (código) + voz clonada propia (whisper + Fish/XTTS). Gemini AI Studio solo bootstrap. Infra v0: Oracle Free Tier limpio.
+Modelos por env, no fijos en código: L0 local, L1 operativo, L2 código, L3 finanzas/legal. Gateway OpenAI-compatible (OpenRouter o claves directas). Voz: whisper + Fish/XTTS, muestras fuera del repo. Infra: Oracle ARM64, red `jerico_net`.
 
 ## Estructura y rutas
 
@@ -19,5 +19,5 @@ El repositorio incluye un prompt reutilizable en `/.github/prompts/generar-readm
 
 ## Quickstart v0
 
-`cp .env.example .env`, `pip install -e .`, `python -m jerico "..."`, `pytest -q`, `docker compose up`.
+`cp .env.example .env`, `pip install -e .`, `python -m jerico ask --verbose "..."`, `pytest -q`, `docker compose up`.
 

@@ -1,3 +1,4 @@
+import json
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -37,6 +38,6 @@ class BaseTool(BaseModel):
         try:
             AUDIT_LOG.parent.mkdir(parents=True, exist_ok=True)
             with AUDIT_LOG.open("a", encoding="utf-8") as fh:
-                fh.write(str(entry) + "\n")
+                fh.write(json.dumps(entry, ensure_ascii=False, default=str) + "\n")
         except OSError as exc:
             logger.warning(f"audit log no escribible: {exc}")
