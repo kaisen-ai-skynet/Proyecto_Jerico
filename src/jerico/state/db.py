@@ -3,6 +3,7 @@ import json
 import queue
 import sqlite3
 import threading
+import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime
@@ -168,27 +169,55 @@ class StateEngine:
         tool_call_id: str | None = None,
         reasoning: str | None = None,
     ) -> int:
+        return self.append_messages(
+            session_id,
+            [
+                {
+                    "role": role,
+                    "content": content,
+                    "tool_calls": tool_calls,
+                    "tool_call_id": tool_call_id,
+                    "reasoning": reasoning,
+                }
+            ],
+        )[0]
+
+    def append_messages(self, session_id: str, messages: list[dict[str, object]]) -> list[int]:
+        if not messages:
+            return []
         with self._transaction() as connection:
-            cursor = connection.execute(
-                "INSERT INTO messages(session_id, role, content, tool_calls_json, "
-                "tool_call_id, reasoning, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (
-                    session_id,
-                    role,
-                    content,
-                    json.dumps(tool_calls, ensure_ascii=False) if tool_calls is not None else None,
-                    tool_call_id,
-                    reasoning,
-                    _now(),
-                ),
-            )
+            ids: list[int] = []
+            for message in messages:
+                role = message.get("role")
+                content = message.get("content")
+                tool_calls = message.get("tool_calls")
+                if not isinstance(role, str) or not isinstance(content, str):
+                    raise ValueError("cada mensaje requiere role y content string")
+                if tool_calls is not None and not isinstance(tool_calls, list):
+                    raise ValueError("tool_calls debe ser una lista")
+                cursor = connection.execute(
+                    "INSERT INTO messages(session_id, role, content, tool_calls_json, "
+                    "tool_call_id, reasoning, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        session_id,
+                        role,
+                        content,
+                        json.dumps(tool_calls, ensure_ascii=False)
+                        if tool_calls is not None
+                        else None,
+                        message.get("tool_call_id"),
+                        message.get("reasoning"),
+                        _now(),
+                    ),
+                )
+                if cursor.lastrowid is None:
+                    raise RuntimeError("SQLite no devolvió id para el mensaje insertado")
+                ids.append(int(cursor.lastrowid))
             connection.execute(
                 "UPDATE sessions SET updated_at = ? WHERE session_id = ?",
                 (_now(), session_id),
             )
-            if cursor.lastrowid is None:
-                raise RuntimeError("SQLite no devolvió id para el mensaje insertado")
-            return int(cursor.lastrowid)
+            return ids
 
     def get_session_transcript(
         self, session_id: str, limit: int | None = None
@@ -244,6 +273,30 @@ class StateEngine:
             "completion_tokens": int(row["completion_tokens"]),
             "cached_tokens": int(row["cached_tokens"]),
         }
+
+    def try_acquire_session_lease(
+        self, session_id: str, owner_token: str, lease_seconds: float
+    ) -> bool:
+        if lease_seconds <= 0:
+            raise ValueError("lease_seconds debe ser positivo")
+        now = time.time()
+        with self._transaction() as connection:
+            cursor = connection.execute(
+                "INSERT INTO session_leases(session_id, owner_token, expires_at, acquired_at) "
+                "VALUES (?, ?, ?, ?) ON CONFLICT(session_id) DO UPDATE SET "
+                "owner_token = excluded.owner_token, expires_at = excluded.expires_at, "
+                "acquired_at = excluded.acquired_at WHERE session_leases.expires_at <= ?",
+                (session_id, owner_token, now + lease_seconds, now, now),
+            )
+            return cursor.rowcount == 1
+
+    def release_session_lease(self, session_id: str, owner_token: str) -> bool:
+        with self._transaction() as connection:
+            cursor = connection.execute(
+                "DELETE FROM session_leases WHERE session_id = ? AND owner_token = ?",
+                (session_id, owner_token),
+            )
+            return cursor.rowcount == 1
 
     def close(self) -> None:
         if self._writer is not None:

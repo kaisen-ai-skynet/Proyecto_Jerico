@@ -8,6 +8,9 @@ from fastapi import Depends, FastAPI, Header, HTTPException
 from loguru import logger
 from pydantic import BaseModel, Field
 
+from jerico.agent.conversation_loop import AgentTurnLoop
+from jerico.agent.prompt_builder import PromptBuilder
+from jerico.agent.types import SurfaceType, ToolsetPosture
 from jerico.config import Settings, get_settings, token_configured
 from jerico.llm_client import AsyncLLMClient, LLMError
 from jerico.memory import memory
@@ -19,6 +22,7 @@ from jerico.redis_backends import (
     redis_client,
 )
 from jerico.router import TokenRouter
+from jerico.state import StateEngine
 
 app = FastAPI(title="Jerico AI-OS", version="0.2.0")
 
@@ -94,6 +98,18 @@ def get_rate_limiter() -> LocalAsyncRateLimiter | RedisRateLimiter:
     return RedisRateLimiter(redis_client(settings.redis_url), limiter)
 
 
+@lru_cache(maxsize=1)
+def get_agent_loop() -> AgentTurnLoop:
+    settings = get_settings()
+    state = StateEngine(settings.state_db_path)
+    return AgentTurnLoop(
+        state,
+        get_llm(),
+        router=TokenRouter(settings),
+        prompt_builder=PromptBuilder(""),
+    )
+
+
 def require_token(authorization: str, settings: Settings) -> None:
     if not token_configured(settings.api_token):
         raise HTTPException(status_code=401, detail="token_not_configured")
@@ -101,6 +117,13 @@ def require_token(authorization: str, settings: Settings) -> None:
     # En bytes: compare_digest con str no-ASCII lanza TypeError (500 en vez de 401).
     if not secrets.compare_digest(authorization.encode(), expected.encode()):
         raise HTTPException(status_code=401, detail="unauthorized")
+
+
+def get_authenticated_agent_loop(
+    authorization: str = Header(default=""),
+) -> AgentTurnLoop:
+    require_token(authorization, get_settings())
+    return get_agent_loop()
 
 
 @app.get("/health")
@@ -112,29 +135,23 @@ async def health() -> dict[str, str]:
 @app.post("/api/v1/ask", response_model=AskResponse)
 async def ask(
     req: AskRequest,
-    llm: Annotated[AsyncLLMClient, Depends(get_llm)],
-    memory_backend: Annotated[
-        LocalAsyncMemoryManager | RedisMemoryManager, Depends(get_memory_backend)
-    ],
+    agent: Annotated[AgentTurnLoop, Depends(get_authenticated_agent_loop)],
     rate_limiter: Annotated[LocalAsyncRateLimiter | RedisRateLimiter, Depends(get_rate_limiter)],
     authorization: str = Header(default=""),
 ) -> AskResponse:
     settings = get_settings()
-    require_token(authorization, settings)
     if not await rate_limiter.allow(authorization, settings.rate_limit_per_min):
         raise HTTPException(status_code=429, detail="rate_limit")
-    decision = get_router().route(req.prompt)
-    if decision.answer is not None:
-        answer = decision.answer
-    else:
-        try:
-            answer = await llm.complete(
-                req.prompt,
-                level=decision.level,
-                history=await memory_backend.context(req.session_id),
-            )
-        except LLMError as exc:
-            logger.warning(f"llm_unavailable: {exc}")
-            raise HTTPException(status_code=502, detail="llm_unavailable") from exc
-    await memory_backend.record_turn(req.session_id, req.prompt, answer)
-    return AskResponse(level=decision.level, model=decision.model, answer=answer)
+    try:
+        result = await agent.run_turn(
+            req.session_id,
+            req.prompt,
+            posture=ToolsetPosture.DEFAULT,
+            surface=SurfaceType.REST,
+        )
+    except TimeoutError as exc:
+        raise HTTPException(status_code=409, detail="session_busy") from exc
+    except LLMError as exc:
+        logger.warning(f"llm_unavailable: {exc}")
+        raise HTTPException(status_code=502, detail="llm_unavailable") from exc
+    return AskResponse(level=result.level, model=result.model, answer=result.answer)

@@ -1,14 +1,19 @@
 from typing import Any
 
-from openai import APIError, AsyncOpenAI
+from openai import APIConnectionError, APIError, APITimeoutError, AsyncOpenAI, RateLimitError
 
 from jerico.agent.turn_request_assembly import assemble_turn_request
 from jerico.config import Settings, get_settings
 from jerico.llm.token_accounting import LLMCompletion, extract_token_usage
+from jerico.llm.tool_calls import extract_tool_calls
 
 
 class LLMError(RuntimeError):
     """Fallo del proveedor (red, timeout, HTTP, respuesta sin choices)."""
+
+    def __init__(self, message: str, *, retryable: bool = False) -> None:
+        super().__init__(message)
+        self.retryable = retryable
 
 
 class AsyncLLMClient:
@@ -26,6 +31,7 @@ class AsyncLLMClient:
         system: str | None = None,
         history: list[dict[str, str]] | None = None,
         ephemeral_messages: list[dict[str, Any]] | None = None,
+        tools: list[dict[str, Any]] | None = None,
     ) -> str:
         result = await self.complete_with_usage(
             prompt,
@@ -33,6 +39,7 @@ class AsyncLLMClient:
             system=system,
             history=history,
             ephemeral_messages=ephemeral_messages,
+            tools=tools,
         )
         return result.content
 
@@ -44,29 +51,53 @@ class AsyncLLMClient:
         system: str | None = None,
         history: list[dict[str, str]] | None = None,
         ephemeral_messages: list[dict[str, Any]] | None = None,
+        tools: list[dict[str, Any]] | None = None,
     ) -> LLMCompletion:
-        if level <= 0:
-            raise ValueError("nivel 0 se responde local; no se llama al LLM")
-        client, model = self._client_for(level)
         request = assemble_turn_request(
             system,
             prompt,
             history=history,
             ephemeral_messages=ephemeral_messages,
         )
+        return await self.complete_messages_with_usage(
+            list(request.messages),
+            level=level,
+            tools=tools,
+        )
+
+    async def complete_messages_with_usage(
+        self,
+        messages: list[dict[str, Any]],
+        *,
+        level: int = 1,
+        tools: list[dict[str, Any]] | None = None,
+    ) -> LLMCompletion:
+        if level <= 0:
+            raise ValueError("nivel 0 se responde local; no se llama al LLM")
+        client, model = self._client_for(level)
+        request: dict[str, Any] = {"model": model, "messages": messages, "temperature": 0.2}
+        if tools is not None:
+            request["tools"] = tools
         try:
-            resp = await client.chat.completions.create(
-                model=model,
-                messages=list(request.messages),  # type: ignore[arg-type]
-                temperature=0.2,
-            )
+            resp = await client.chat.completions.create(**request)
         except APIError as exc:
-            raise LLMError(f"{type(exc).__name__} en L{level} ({model})") from exc
+            status_code = getattr(exc, "status_code", None)
+            retryable = isinstance(exc, (APIConnectionError, APITimeoutError, RateLimitError)) or (
+                isinstance(status_code, int) and status_code >= 500
+            )
+            raise LLMError(
+                f"{type(exc).__name__} en L{level} ({model})", retryable=retryable
+            ) from exc
         if not resp.choices:
             raise LLMError(f"respuesta sin choices en L{level} ({model})")
+        try:
+            tool_calls = extract_tool_calls(resp)
+        except (TypeError, ValueError) as exc:
+            raise LLMError(f"tool calls inválidas en L{level} ({model})") from exc
         return LLMCompletion(
             content=resp.choices[0].message.content or "",
             usage=extract_token_usage(resp),
+            tool_calls=tool_calls,
         )
 
     def _client_for(self, level: int) -> tuple[AsyncOpenAI, str]:
@@ -77,7 +108,7 @@ class AsyncLLMClient:
                 base_url=base,
                 api_key=key,
                 timeout=self.settings.llm_timeout_s,
-                max_retries=self.settings.llm_max_retries,
+                max_retries=0,
             )
             self._clients[(base, key)] = client
         return client, model

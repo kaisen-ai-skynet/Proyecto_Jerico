@@ -79,3 +79,20 @@ def test_fallos_fk_o_role_invalido_hacen_rollback(tmp_path):
         assert state.get_session_transcript("s") == []
         with pytest.raises(sqlite3.IntegrityError):
             state.record_usage("missing", "model", 1, 1)
+
+
+def test_append_messages_es_atomico(tmp_path):
+    import sqlite3
+
+    with StateEngine(tmp_path / "state.db") as state:
+        state.get_or_create_session("s", "system", "model")
+        with pytest.raises(sqlite3.IntegrityError):
+            state.append_messages(
+                "s",
+                [
+                    {"role": "user", "content": "debe rollback"},
+                    {"role": "invalid", "content": "fallo"},
+                ],
+            )
+        assert state.get_session_transcript("s") == []
+        assert state.append_messages("s", []) == []

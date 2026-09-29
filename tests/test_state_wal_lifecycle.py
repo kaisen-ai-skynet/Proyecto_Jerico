@@ -18,7 +18,7 @@ def test_inicializa_wal_pragmas_esquema_y_pool(tmp_path):
         assert engine._writer.execute("PRAGMA synchronous").fetchone()[0] == 1
         assert engine._writer.execute("PRAGMA busy_timeout").fetchone()[0] == BUSY_TIMEOUT_MS
         assert engine._writer.execute("PRAGMA foreign_keys").fetchone()[0] == 1
-        assert engine._writer.execute("PRAGMA user_version").fetchone()[0] == 1
+        assert engine._writer.execute("PRAGMA user_version").fetchone()[0] == 2
         assert engine._read_pool.qsize() == 3
         engine.initialize_database(path)
     finally:
@@ -64,7 +64,13 @@ def test_esquema_idempotente_a_nivel_de_archivo(tmp_path):
                 row[0]
                 for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")
             }
-        assert {"system_prompts", "sessions", "messages", "session_model_usage"} <= names
+        assert {
+            "system_prompts",
+            "sessions",
+            "messages",
+            "session_model_usage",
+            "session_leases",
+        } <= names
     finally:
         second.close()
 
@@ -101,3 +107,28 @@ def test_operational_error_locked_activa_diagnostico(tmp_path, monkeypatch):
         assert scanned == [engine.db_path]
     finally:
         engine.close()
+
+
+def test_actualiza_schema_v1_sin_perder_transcript(tmp_path):
+    path = tmp_path / "state.db"
+    original = StateEngine(path)
+    original.get_or_create_session("s", "system", "model")
+    original.append_message("s", "user", "persistido")
+    original.close()
+    with sqlite3.connect(path) as connection:
+        connection.execute("DROP TABLE session_leases")
+        connection.execute("PRAGMA user_version=1")
+
+    upgraded = StateEngine(path)
+    try:
+        assert upgraded.get_session_transcript("s")[0].content == "persistido"
+        assert upgraded._writer is not None
+        assert upgraded._writer.execute("PRAGMA user_version").fetchone()[0] == 2
+        assert (
+            upgraded._writer.execute(
+                "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='session_leases'"
+            ).fetchone()[0]
+            == 1
+        )
+    finally:
+        upgraded.close()

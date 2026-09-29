@@ -1,6 +1,6 @@
 import sqlite3
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS system_prompts (
@@ -42,6 +42,15 @@ CREATE TABLE IF NOT EXISTS session_model_usage (
     updated_at TEXT NOT NULL,
     PRIMARY KEY (session_id, model)
 );
+
+CREATE TABLE IF NOT EXISTS session_leases (
+    session_id TEXT PRIMARY KEY,
+    owner_token TEXT NOT NULL,
+    expires_at REAL NOT NULL,
+    acquired_at REAL NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_session_leases_expiry ON session_leases(expires_at);
 """
 
 

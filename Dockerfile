@@ -26,7 +26,9 @@ COPY --from=base /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.
 COPY --from=base /usr/local/bin/jerico /usr/local/bin/jerico
 COPY --from=base /app /app
 
-RUN useradd --create-home jerico
+RUN useradd --create-home jerico \
+    && mkdir -p /app/data \
+    && chown jerico:jerico /app/data
 USER jerico
 
 EXPOSE 8000

@@ -2,6 +2,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
+from jerico.llm.tool_calls import ToolCallRequest
+
 
 @dataclass(frozen=True)
 class TokenUsage:
@@ -15,6 +17,7 @@ class TokenUsage:
 class LLMCompletion:
     content: str
     usage: TokenUsage
+    tool_calls: tuple[ToolCallRequest, ...] = ()
 
 
 def extract_token_usage(response: Any) -> TokenUsage:

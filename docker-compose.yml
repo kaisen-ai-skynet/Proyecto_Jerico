@@ -6,10 +6,12 @@ services:
     env_file: .env
     environment:
       JERICO_REDIS_URL: redis://redis:6379/0
+      JERICO_STATE_DB_PATH: /app/data/jerico_state.db
     ports:
       - "127.0.0.1:8000:8000"
     volumes:
       - ./logs:/app/logs
+      - jerico_state_data:/app/data
     restart: unless-stopped
     depends_on:
       redis:
@@ -41,6 +43,8 @@ networks:
 volumes:
   jerico_redis_data:
     name: jerico_redis_data
+  jerico_state_data:
+    name: jerico_state_data
 # Red vieja del host en quarantine. No usar hasta salir de Fase 0:
 #   skynet_net:
 #     name: skynet_skynet_net

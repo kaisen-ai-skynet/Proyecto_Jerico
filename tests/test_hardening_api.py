@@ -7,11 +7,15 @@ import pytest
 from fastapi.testclient import TestClient
 
 from jerico import api
+from jerico.agent.conversation_loop import AgentTurnLoop
+from jerico.agent.prompt_builder import PromptBuilder
 from jerico.api import MAX_PROMPT_CHARS, RateLimiter, app, limiter
 from jerico.config import Settings
+from jerico.llm.token_accounting import LLMCompletion, TokenUsage
 from jerico.llm_client import LLMError
 from jerico.memory import memory
 from jerico.router import TokenRouter
+from jerico.state import StateEngine
 
 AUTH = {"Authorization": "Bearer test-token"}
 
@@ -21,11 +25,15 @@ class FakeLLM:
         self.calls: list[dict[str, Any]] = []
         self.fail = fail
 
-    async def complete(self, prompt: str, *, level: int = 1, history=None, system=None) -> str:
-        self.calls.append({"prompt": prompt, "level": level, "history": history or []})
+    async def complete_messages_with_usage(self, messages, *, level: int = 1, tools=None):
+        prompt = next(
+            (message["content"] for message in reversed(messages) if message["role"] == "user"),
+            "",
+        )
+        self.calls.append({"prompt": prompt, "level": level, "history": messages[1:-1]})
         if self.fail:
             raise LLMError("APITimeoutError en L1 (model-l1)")
-        return f"echo:{prompt}"
+        return LLMCompletion(f"echo:{prompt}", TokenUsage())
 
 
 def _settings(**overrides: object) -> Settings:
@@ -49,11 +57,16 @@ def fake() -> FakeLLM:
 
 
 @pytest.fixture
-def client(monkeypatch, fake) -> TestClient:
+def client(monkeypatch, fake, tmp_path) -> TestClient:
     settings = _settings()
     monkeypatch.setattr("jerico.api.get_settings", lambda: settings)
-    monkeypatch.setitem(app.dependency_overrides, api.get_llm, lambda: fake)
-    monkeypatch.setattr("jerico.api.get_router", lambda: TokenRouter(settings))
+    agent = AgentTurnLoop(
+        StateEngine(tmp_path / "state.db"),
+        fake,  # type: ignore[arg-type]
+        router=TokenRouter(settings),
+        prompt_builder=PromptBuilder(""),
+    )
+    monkeypatch.setattr("jerico.api.get_agent_loop", lambda: agent)
     memory.clear_all()
     limiter.reset()
     return TestClient(app, raise_server_exceptions=False)
@@ -93,10 +106,16 @@ def test_token_placeholder_en_mayusculas_no_autentica(monkeypatch, fake):
     assert res.json()["detail"] == "token_not_configured"
 
 
-def test_401_no_consume_cupo_del_rate_limit(monkeypatch, fake):
+def test_401_no_consume_cupo_del_rate_limit(monkeypatch, fake, tmp_path):
     settings = _settings(rate_limit_per_min=1)
     monkeypatch.setattr("jerico.api.get_settings", lambda: settings)
-    monkeypatch.setattr("jerico.api.get_router", lambda: TokenRouter(settings))
+    agent = AgentTurnLoop(
+        StateEngine(tmp_path / "state.db"),
+        fake,  # type: ignore[arg-type]
+        router=TokenRouter(settings),
+        prompt_builder=PromptBuilder(""),
+    )
+    monkeypatch.setattr("jerico.api.get_agent_loop", lambda: agent)
     limiter.reset()
     client = TestClient(app)
     for _ in range(3):
@@ -154,9 +173,8 @@ def test_json_invalido_es_422(client):
 # --- Errores del LLM ---
 
 
-def test_fallo_del_llm_es_502_y_no_ensucia_memoria(monkeypatch, client):
-    failing = FakeLLM(fail=True)
-    monkeypatch.setitem(app.dependency_overrides, api.get_llm, lambda: failing)
+def test_fallo_del_llm_es_502_y_no_ensucia_memoria(client, fake):
+    fake.fail = True
     res = client.post(
         "/api/v1/ask", json={"prompt": "agenda de hoy", "session_id": "s-err"}, headers=AUTH
     )
@@ -169,7 +187,8 @@ def test_fallo_del_llm_es_502_y_no_ensucia_memoria(monkeypatch, client):
 def test_turnos_quedan_en_pares_user_assistant(client):
     for prompt in ["uno", "dos", "hola"]:
         client.post("/api/v1/ask", json={"prompt": prompt, "session_id": "p"}, headers=AUTH)
-    roles = [m["role"] for m in memory.context("p")]
+    agent = api.get_agent_loop()
+    roles = [message.role for message in agent.state.get_session_transcript("p")]
     assert roles == ["user", "assistant"] * 3
 
 

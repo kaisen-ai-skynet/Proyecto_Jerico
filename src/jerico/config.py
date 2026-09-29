@@ -1,5 +1,6 @@
 import re
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -52,6 +53,7 @@ class Settings(BaseSettings):
 
     redis_url: str = ""
     postgres_url: str = ""
+    state_db_path: Path = Path("jerico_state.db")
     memory_ttl_hours: int = 24
     memory_max_sessions: int = 100
 
