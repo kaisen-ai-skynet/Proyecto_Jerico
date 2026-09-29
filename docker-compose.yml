@@ -4,17 +4,43 @@ services:
     image: jerico-core:0.2.0
     container_name: jerico-core
     env_file: .env
+    environment:
+      JERICO_REDIS_URL: redis://redis:6379/0
     ports:
       - "127.0.0.1:8000:8000"
     volumes:
       - ./logs:/app/logs
     restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_started
     networks:
       - jerico_net
+
+  redis:
+    image: redis:7.4-alpine
+    container_name: jerico-redis
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - jerico_redis_data:/data
+    restart: unless-stopped
+    networks:
+      - jerico_net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
 
 networks:
   jerico_net:
     name: jerico_net
+
+volumes:
+  jerico_redis_data:
+    name: jerico_redis_data
 # Red vieja del host en quarantine. No usar hasta salir de Fase 0:
 #   skynet_net:
 #     name: skynet_skynet_net

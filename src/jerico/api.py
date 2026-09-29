@@ -11,6 +11,13 @@ from pydantic import BaseModel, Field
 from jerico.config import Settings, get_settings, token_configured
 from jerico.llm_client import AsyncLLMClient, LLMError
 from jerico.memory import memory
+from jerico.redis_backends import (
+    LocalAsyncMemoryManager,
+    LocalAsyncRateLimiter,
+    RedisMemoryManager,
+    RedisRateLimiter,
+    redis_client,
+)
 from jerico.router import TokenRouter
 
 app = FastAPI(title="Jerico AI-OS", version="0.2.0")
@@ -68,6 +75,25 @@ def get_llm() -> AsyncLLMClient:
     return AsyncLLMClient(get_settings())
 
 
+def get_memory_backend() -> LocalAsyncMemoryManager | RedisMemoryManager:
+    settings = get_settings()
+    if not settings.redis_url:
+        return LocalAsyncMemoryManager(memory)
+    return RedisMemoryManager(
+        redis_client(settings.redis_url),
+        memory,
+        ttl_seconds=settings.memory_ttl_hours * 3600,
+        max_sessions=settings.memory_max_sessions,
+    )
+
+
+def get_rate_limiter() -> LocalAsyncRateLimiter | RedisRateLimiter:
+    settings = get_settings()
+    if not settings.redis_url:
+        return LocalAsyncRateLimiter(limiter)
+    return RedisRateLimiter(redis_client(settings.redis_url), limiter)
+
+
 def require_token(authorization: str, settings: Settings) -> None:
     if not token_configured(settings.api_token):
         raise HTTPException(status_code=401, detail="token_not_configured")
@@ -87,11 +113,17 @@ async def health() -> dict[str, str]:
 async def ask(
     req: AskRequest,
     llm: Annotated[AsyncLLMClient, Depends(get_llm)],
+    memory_backend: Annotated[
+        LocalAsyncMemoryManager | RedisMemoryManager, Depends(get_memory_backend)
+    ],
+    rate_limiter: Annotated[
+        LocalAsyncRateLimiter | RedisRateLimiter, Depends(get_rate_limiter)
+    ],
     authorization: str = Header(default=""),
 ) -> AskResponse:
     settings = get_settings()
     require_token(authorization, settings)
-    if not limiter.allow(authorization, settings.rate_limit_per_min):
+    if not await rate_limiter.allow(authorization, settings.rate_limit_per_min):
         raise HTTPException(status_code=429, detail="rate_limit")
     decision = get_router().route(req.prompt)
     if decision.answer is not None:
@@ -101,10 +133,10 @@ async def ask(
             answer = await llm.complete(
                 req.prompt,
                 level=decision.level,
-                history=memory.context(req.session_id),
+                history=await memory_backend.context(req.session_id),
             )
         except LLMError as exc:
             logger.warning(f"llm_unavailable: {exc}")
             raise HTTPException(status_code=502, detail="llm_unavailable") from exc
-    memory.record_turn(req.session_id, req.prompt, answer)
+    await memory_backend.record_turn(req.session_id, req.prompt, answer)
     return AskResponse(level=decision.level, model=decision.model, answer=answer)
