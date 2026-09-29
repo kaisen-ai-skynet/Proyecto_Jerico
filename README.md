@@ -21,3 +21,8 @@ El repositorio incluye un prompt reutilizable en `/.github/prompts/generar-readm
 
 `cp .env.example .env`, `pip install -e .`, `python -m jerico ask --verbose "..."`, `pytest -q`, `docker compose up`.
 
+## Desarrollo y acceso a la API
+
+Con Docker Compose, el puerto `8000` se publica solo en `127.0.0.1`; la API queda accesible desde el mismo host en `http://127.0.0.1:8000` y no se expone directamente a la LAN. Dentro del contenedor, Jericó escucha en `0.0.0.0:8000` para que Docker pueda reenviar las conexiones.
+
+Si más adelante necesitas acceso desde la LAN o Tailscale, cambia en `docker-compose.yml` la IP de enlace de `ports` por la IP concreta de esa interfaz, conservando el formato `IP_DEL_HOST:8000:8000`. Por ejemplo, usa la IP LAN del servidor (`192.168.1.20:8000:8000`) o su IP Tailscale, que puedes consultar con `tailscale ip -4` (`100.x.y.z:8000:8000`). Evita `8000:8000` o `0.0.0.0:8000:8000`, que publican el puerto en todas las interfaces. Reinicia con `docker compose up -d` y limita también el acceso con el firewall y un `JERICO_API_TOKEN` fuerte en `.env`.
