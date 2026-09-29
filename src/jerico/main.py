@@ -44,8 +44,7 @@ def ask(prompt: str, session_id: str = "default", verbose: bool = False) -> None
             level=decision.level,
             history=memory.context(session_id),
         )
-    memory.append(session_id, "user", prompt)
-    memory.append(session_id, "assistant", answer)
+    memory.record_turn(session_id, prompt, answer)
     typer.echo(answer)
 
 

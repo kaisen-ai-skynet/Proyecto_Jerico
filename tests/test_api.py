@@ -1,4 +1,5 @@
 from typing import Any
+
 from fastapi.testclient import TestClient
 
 from jerico.api import app, limiter

@@ -1,20 +1,27 @@
 import secrets
+import threading
 import time
+from functools import lru_cache
 
 from fastapi import FastAPI, Header, HTTPException
-from pydantic import BaseModel
+from loguru import logger
+from pydantic import BaseModel, Field
 
 from jerico.config import Settings, get_settings, token_configured
-from jerico.llm_client import LLMClient
+from jerico.llm_client import LLMClient, LLMError
 from jerico.memory import memory
 from jerico.router import TokenRouter
 
 app = FastAPI(title="Jerico AI-OS", version="0.2.0")
 
+# Tope de costo/memoria: cada prompt viaja al LLM y queda en el historial de la sesión.
+MAX_PROMPT_CHARS = 20_000
+MAX_SESSION_ID_CHARS = 128
+
 
 class AskRequest(BaseModel):
-    prompt: str
-    session_id: str = "default"
+    prompt: str = Field(max_length=MAX_PROMPT_CHARS)
+    session_id: str = Field(default="default", min_length=1, max_length=MAX_SESSION_ID_CHARS)
 
 
 class AskResponse(BaseModel):
@@ -26,31 +33,37 @@ class AskResponse(BaseModel):
 class RateLimiter:
     def __init__(self) -> None:
         self._hits: dict[str, list[float]] = {}
+        self._lock = threading.Lock()
 
     def allow(self, key: str, limit: int, window: float = 60.0) -> bool:
         if limit <= 0:
             return True
-        now = time.monotonic()
-        hits = [stamp for stamp in self._hits.get(key, []) if now - stamp < window]
-        if len(hits) >= limit:
+        with self._lock:
+            now = time.monotonic()
+            hits = [stamp for stamp in self._hits.get(key, []) if now - stamp < window]
+            if len(hits) >= limit:
+                self._hits[key] = hits
+                return False
+            hits.append(now)
             self._hits[key] = hits
-            return False
-        hits.append(now)
-        self._hits[key] = hits
-        return True
+            return True
 
     def reset(self) -> None:
-        self._hits.clear()
+        with self._lock:
+            self._hits.clear()
 
 
 limiter = RateLimiter()
 
 
+@lru_cache(maxsize=1)
 def get_router() -> TokenRouter:
     return TokenRouter(get_settings())
 
 
+@lru_cache(maxsize=1)
 def get_llm() -> LLMClient:
+    # Una instancia: reutiliza el pool HTTP en vez de abrir un cliente por request.
     return LLMClient(get_settings())
 
 
@@ -58,12 +71,14 @@ def require_token(authorization: str, settings: Settings) -> None:
     if not token_configured(settings.api_token):
         raise HTTPException(status_code=401, detail="token_not_configured")
     expected = f"Bearer {settings.api_token}"
-    if not secrets.compare_digest(authorization, expected):
+    # En bytes: compare_digest con str no-ASCII lanza TypeError (500 en vez de 401).
+    if not secrets.compare_digest(authorization.encode(), expected.encode()):
         raise HTTPException(status_code=401, detail="unauthorized")
 
 
 @app.get("/health")
-def health() -> dict[str, str]:
+async def health() -> dict[str, str]:
+    # async: no compite por el threadpool con /ask (hasta ~90 s por request al LLM).
     return {"status": "ok", "service": "jerico", "version": "0.2.0"}
 
 
@@ -77,11 +92,14 @@ def ask(req: AskRequest, authorization: str = Header(default="")) -> AskResponse
     if decision.answer is not None:
         answer = decision.answer
     else:
-        answer = get_llm().complete(
-            req.prompt,
-            level=decision.level,
-            history=memory.context(req.session_id),
-        )
-    memory.append(req.session_id, "user", req.prompt)
-    memory.append(req.session_id, "assistant", answer)
+        try:
+            answer = get_llm().complete(
+                req.prompt,
+                level=decision.level,
+                history=memory.context(req.session_id),
+            )
+        except LLMError as exc:
+            logger.warning(f"llm_unavailable: {exc}")
+            raise HTTPException(status_code=502, detail="llm_unavailable") from exc
+    memory.record_turn(req.session_id, req.prompt, answer)
     return AskResponse(level=decision.level, model=decision.model, answer=answer)

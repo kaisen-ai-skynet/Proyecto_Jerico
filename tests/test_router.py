@@ -1,4 +1,5 @@
 from typing import Any
+
 from jerico.config import Settings
 from jerico.router import RouteDecision, TokenRouter
 

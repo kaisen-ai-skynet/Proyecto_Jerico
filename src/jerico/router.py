@@ -16,6 +16,7 @@ L0_ANSWERS = {
     "adios": "Hasta luego.",
     "ok": "Ok.",
 }
+EMPTY_ANSWER = "¿En qué te ayudo?"
 
 
 @dataclass
@@ -29,7 +30,15 @@ class RouteDecision:
 def _pattern(keywords: tuple[str, ...]) -> re.Pattern[str] | None:
     if not keywords:
         return None
-    return re.compile("|".join(rf"\b{re.escape(word)}\b" for word in keywords))
+    # Plural opcional: "contratos" y "bugs" no pueden escaparse del nivel.
+    # Lookarounds en vez de \b: con \b, keywords como "c++" o "c#" nunca matchean.
+    return re.compile(
+        "|".join(rf"(?<!\w){re.escape(word)}(?:s|es)?(?!\w)" for word in keywords)
+    )
+
+
+def _l0_key(text: str) -> str:
+    return re.sub(r"\s+", " ", re.sub(r"[^\w\s]", "", text)).strip()
 
 
 class TokenRouter:
@@ -43,13 +52,15 @@ class TokenRouter:
 
     def classify(self, prompt: str) -> int:
         text = normalize(prompt)
-        if not text or text in L0_ANSWERS:
+        key = _l0_key(text)
+        if not key or key in L0_ANSWERS:
             return 0
+        # Las excepciones son de L2: nunca degradan una señal de alto riesgo.
+        if self._l3 and self._l3.search(text):
+            return 3
         scanned = text
         for phrase in sorted(self._exceptions, key=len, reverse=True):
             scanned = scanned.replace(phrase, " ")
-        if self._l3 and self._l3.search(scanned):
-            return 3
         if self._l2 and self._l2.search(scanned):
             return 2
         return 1
@@ -60,7 +71,7 @@ class TokenRouter:
     def route(self, prompt: str) -> RouteDecision:
         level = self.classify(prompt)
         if level == 0:
-            answer = L0_ANSWERS.get(normalize(prompt))
+            answer = L0_ANSWERS.get(_l0_key(normalize(prompt)), EMPTY_ANSWER)
             return RouteDecision(0, "none", "saludo/conversacional", answer)
         reason = {3: "l3-keyword", 2: "l2-keyword"}.get(level, "operativo")
         return RouteDecision(level, self.model_for_level(level), reason)

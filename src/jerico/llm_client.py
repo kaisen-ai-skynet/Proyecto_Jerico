@@ -1,8 +1,12 @@
 from typing import Any
 
-from openai import OpenAI
+from openai import APIError, OpenAI
 
 from jerico.config import Settings, get_settings
+
+
+class LLMError(RuntimeError):
+    """Fallo del proveedor (red, timeout, HTTP, respuesta sin choices)."""
 
 
 class LLMClient:
@@ -20,6 +24,8 @@ class LLMClient:
         system: str | None = None,
         history: list[dict[str, str]] | None = None,
     ) -> str:
+        if level <= 0:
+            raise ValueError("nivel 0 se responde local; no se llama al LLM")
         client, model = self._client_for(level)
         messages: list[dict[str, Any]] = []
         if system:
@@ -29,9 +35,16 @@ class LLMClient:
             content = item.get("content", "")
             if role in {"user", "assistant", "system"} and content:
                 messages.append({"role": role, "content": content})
-        if not messages or messages[-1].get("content") != prompt:
+        # Solo se omite si el historial ya trae este mismo turno del usuario.
+        last = messages[-1] if messages else {}
+        if last.get("role") != "user" or last.get("content") != prompt:
             messages.append({"role": "user", "content": prompt})
-        resp = client.chat.completions.create(model=model, messages=messages, temperature=0.2)  # type: ignore[arg-type]
+        try:
+            resp = client.chat.completions.create(model=model, messages=messages, temperature=0.2)  # type: ignore[arg-type]
+        except APIError as exc:
+            raise LLMError(f"{type(exc).__name__} en L{level} ({model})") from exc
+        if not resp.choices:
+            raise LLMError(f"respuesta sin choices en L{level} ({model})")
         return resp.choices[0].message.content or ""
 
     def _client_for(self, level: int) -> tuple[OpenAI, str]:

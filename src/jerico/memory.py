@@ -1,6 +1,9 @@
+import threading
 import time
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+
+from jerico.config import get_settings
 
 
 @dataclass
@@ -11,7 +14,8 @@ class Session:
 
 
 class MemoryManager:
-    """Memoria de corto plazo en proceso, con TTL y tope de sesiones."""
+    """Memoria de corto plazo en proceso, con TTL y tope de sesiones. Thread-safe:
+    FastAPI corre los endpoints síncronos en un threadpool."""
 
     def __init__(
         self,
@@ -24,8 +28,13 @@ class MemoryManager:
         self._max_sessions = max_sessions
         self._sessions: dict[str, Session] = {}
         self._seen: dict[str, float] = {}
+        self._lock = threading.RLock()
 
     def get(self, session_id: str) -> Session:
+        with self._lock:
+            return self._get(session_id)
+
+    def _get(self, session_id: str) -> Session:
         self._purge()
         if session_id not in self._sessions:
             self._evict_if_needed()
@@ -34,21 +43,39 @@ class MemoryManager:
         return self._sessions[session_id]
 
     def append(self, session_id: str, role: str, content: str) -> None:
-        session = self.get(session_id)
-        session.messages.append({"role": role, "content": content})
-        if len(session.messages) > self._max_messages:
-            session.messages = session.messages[-self._max_messages :]
+        with self._lock:
+            session = self._get(session_id)
+            session.messages.append({"role": role, "content": content})
+            if len(session.messages) > self._max_messages:
+                session.messages = session.messages[-self._max_messages :]
+
+    def record_turn(self, session_id: str, prompt: str, answer: str) -> None:
+        """Pregunta y respuesta juntas: dos requests concurrentes no se intercalan."""
+        with self._lock:
+            self.append(session_id, "user", prompt)
+            self.append(session_id, "assistant", answer)
 
     def context(self, session_id: str) -> list[dict[str, str]]:
-        return list(self.get(session_id).messages)
+        with self._lock:
+            session = self._sessions.get(session_id)
+            if session is None or self._expired(session_id):
+                return []
+            return [dict(msg) for msg in session.messages]
 
     def clear(self, session_id: str) -> None:
-        self._sessions.pop(session_id, None)
-        self._seen.pop(session_id, None)
+        with self._lock:
+            self._sessions.pop(session_id, None)
+            self._seen.pop(session_id, None)
 
     def clear_all(self) -> None:
-        self._sessions.clear()
-        self._seen.clear()
+        with self._lock:
+            self._sessions.clear()
+            self._seen.clear()
+
+    def _expired(self, session_id: str) -> bool:
+        if self._ttl_seconds <= 0:
+            return False
+        return time.monotonic() - self._seen.get(session_id, 0.0) > self._ttl_seconds
 
     def _purge(self) -> None:
         if self._ttl_seconds <= 0:
@@ -64,4 +91,12 @@ class MemoryManager:
             self.clear(oldest)
 
 
-memory = MemoryManager()
+def _from_settings() -> MemoryManager:
+    settings = get_settings()
+    return MemoryManager(
+        ttl_seconds=settings.memory_ttl_hours * 3600,
+        max_sessions=settings.memory_max_sessions,
+    )
+
+
+memory = _from_settings()

@@ -1,5 +1,5 @@
-from typing import Any
 from pathlib import Path
+from typing import Any
 
 
 class STT:
@@ -12,7 +12,7 @@ class STT:
 
     def _load(self) -> Any:
         if self._model is None:
-            from faster_whisper import WhisperModel  # type: ignore[import-untyped, import-not-found]
+            from faster_whisper import WhisperModel  # type: ignore[import-untyped,import-not-found]
 
             self._model = WhisperModel(self.model_size, compute_type="int8")
         return self._model

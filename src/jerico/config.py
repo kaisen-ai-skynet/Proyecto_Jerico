@@ -1,11 +1,13 @@
+import re
 from functools import lru_cache
 
-from pydantic import field_validator
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from jerico.textutil import normalize
 
 PLACEHOLDER_TOKENS = frozenset({"", "changeme"})
+_FLOATING_ALIAS = re.compile(r"[-:@](latest|preview)$")
 
 
 def _csv(raw: str) -> tuple[str, ...]:
@@ -13,8 +15,8 @@ def _csv(raw: str) -> tuple[str, ...]:
 
 
 def _reject_floating_alias(value: str) -> str:
-    low = value.lower()
-    if low.endswith("-latest") or low.endswith("-preview"):
+    value = value.strip()
+    if _FLOATING_ALIAS.search(value.lower()):
         raise ValueError(f"alias flotante prohibido: {value}")
     return value
 
@@ -62,6 +64,19 @@ class Settings(BaseSettings):
     def pin_model(cls, value: str) -> str:
         return _reject_floating_alias(value)
 
+    @model_validator(mode="after")
+    def endpoint_overrides_complete(self) -> "Settings":
+        # Override parcial = la key del gateway viaja al proveedor directo (o al revés).
+        for level in (1, 2, 3):
+            base = getattr(self, f"llm_base_url_l{level}")
+            key = getattr(self, f"llm_api_key_l{level}")
+            if bool(base) != bool(key):
+                raise ValueError(
+                    f"override L{level} incompleto: define JERICO_LLM_BASE_URL_L{level} "
+                    f"y JERICO_LLM_API_KEY_L{level} juntos, o ninguno"
+                )
+        return self
+
     @property
     def l2_keywords(self) -> tuple[str, ...]:
         return _csv(self.router_l2_keywords)
@@ -89,13 +104,16 @@ class Settings(BaseSettings):
         return self.llm_model_l1
 
     def endpoint_for(self, level: int) -> tuple[str, str, str]:
+        # L3 sin modelo propio usa el modelo L2: también su endpoint, o el ID no existe.
+        if level >= 3 and not self.llm_model_l3:
+            level = 2
         base = getattr(self, f"llm_base_url_l{level}", "") or self.llm_base_url
         key = getattr(self, f"llm_api_key_l{level}", "") or self.llm_api_key
         return base, key, self.model_for_level(level)
 
 
 def token_configured(token: str) -> bool:
-    return token.strip() not in PLACEHOLDER_TOKENS
+    return token.strip().lower() not in PLACEHOLDER_TOKENS
 
 
 @lru_cache
