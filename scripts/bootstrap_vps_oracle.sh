@@ -41,8 +41,8 @@ echo -e "${GREEN}======================================================${NC}"
 # 1. Actualización del Sistema
 log_info "Paso 1: Actualizando paquetes del sistema base..."
 export DEBIAN_FRONTEND=noninteractive
-apt update -y && apt upgrade -y
-apt install -y curl wget git jq ufw iptables-persistent net-tools htop ca-certificates gnupg lsb-release
+apt-get update -qq -y && apt-get upgrade -qq -y
+apt-get install -qq -y curl wget git jq ufw iptables-persistent net-tools htop ca-certificates gnupg lsb-release
 
 # 2. Corrección de Firewall de Oracle Cloud (Oracle aplica reglas iptables por defecto)
 log_info "Paso 2: Ajustando reglas de iptables internas de Oracle..."

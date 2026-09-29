@@ -27,3 +27,5 @@ Desplegar utilizando `docker compose` con restricción estricta al `127.0.0.1`. 
 ### Decisiones que necesito del CTO
 - [ ] ¿Aprueba el modelo Docker Compose como estándar para el VPS Oracle (incluyendo los binds limitados a `127.0.0.1`/Tailscale IP)?
 - [ ] ¿Autoriza la ejecución del script `bootstrap_vps_oracle.sh` en la infraestructura de producción durante la próxima ventana operativa?
+
+### Estado 29/09/2026: APROBADO por el CTO. Etapa actual: guía ejecutable lista en docs/despliegue-vps.md; pendiente ventana operativa.
