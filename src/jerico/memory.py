@@ -60,7 +60,7 @@ class MemoryManager:
 
     def _evict_if_needed(self) -> None:
         while len(self._sessions) >= self._max_sessions and self._seen:
-            oldest = min(self._seen, key=self._seen.get)
+            oldest = min(self._seen, key=self._seen.__getitem__)
             self.clear(oldest)
 
 

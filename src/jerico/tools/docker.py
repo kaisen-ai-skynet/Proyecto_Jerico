@@ -6,7 +6,7 @@ class DockerListContainersTool(BaseTool):
     description: str = "Lista contenedores Docker del host. Read-only."
     readonly: bool = True
 
-    def _execute(self, all: bool = True) -> dict[str, object]:
+    def _execute(self, all: bool = True) -> dict[str, object]:  # type: ignore[override]
         return {
             "ok": True,
             "tool": self.name,

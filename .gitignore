@@ -34,3 +34,7 @@ htmlcov/
 .vscode/
 *.swp
 .DS_Store
+
+# Agent files
+.agents/
+skills-lock.json

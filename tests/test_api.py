@@ -1,3 +1,4 @@
+from typing import Any
 from fastapi.testclient import TestClient
 
 from jerico.api import app, limiter
@@ -24,7 +25,7 @@ class FakeLLM:
 
 
 def _settings(**overrides: object) -> Settings:
-    data: dict[str, object] = {
+    data: dict[str, Any] = {
         "llm_base_url": "http://localhost/v1",
         "llm_api_key": "test",
         "llm_model_l1": "model-l1",

@@ -1,9 +1,10 @@
+from typing import Any
 from jerico.config import Settings
 from jerico.router import RouteDecision, TokenRouter
 
 
 def make_settings(**overrides: object) -> Settings:
-    data: dict[str, object] = {
+    data: dict[str, Any] = {
         "llm_base_url": "http://localhost/v1",
         "llm_api_key": "test",
         "llm_model_l1": "glm-5.3-flash",

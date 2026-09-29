@@ -31,7 +31,7 @@ class LLMClient:
                 messages.append({"role": role, "content": content})
         if not messages or messages[-1].get("content") != prompt:
             messages.append({"role": "user", "content": prompt})
-        resp = client.chat.completions.create(model=model, messages=messages, temperature=0.2)
+        resp = client.chat.completions.create(model=model, messages=messages, temperature=0.2)  # type: ignore[arg-type]
         return resp.choices[0].message.content or ""
 
     def _client_for(self, level: int) -> tuple[OpenAI, str]:

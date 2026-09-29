@@ -6,7 +6,7 @@ class YouTrackListIssuesTool(BaseTool):
     description: str = "Lista issues de kaisensky.youtrack.cloud (read-only)."
     readonly: bool = True
 
-    def _execute(
+    def _execute(  # type: ignore[override]
         self, project: str = "DEMO", query: str = "", limit: int = 10
     ) -> dict[str, object]:
         return {

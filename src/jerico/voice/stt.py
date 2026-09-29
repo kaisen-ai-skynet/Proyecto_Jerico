@@ -1,3 +1,4 @@
+from typing import Any
 from pathlib import Path
 
 
@@ -7,11 +8,11 @@ class STT:
     def __init__(self, model_size: str = "small") -> None:
         self.model_size = model_size
 
-        self._model = None
+        self._model: Any = None
 
-    def _load(self) -> object:
+    def _load(self) -> Any:
         if self._model is None:
-            from faster_whisper import WhisperModel
+            from faster_whisper import WhisperModel  # type: ignore[import-untyped, import-not-found]
 
             self._model = WhisperModel(self.model_size, compute_type="int8")
         return self._model

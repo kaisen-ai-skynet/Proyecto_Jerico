@@ -6,7 +6,7 @@ class NotionQueryDBTool(BaseTool):
     description: str = "Consulta una DB del Segundo Cerebro (DB-01..DB-07). Read-only."
     readonly: bool = True
 
-    def _execute(
+    def _execute(  # type: ignore[override]
         self, db_id: str = "", filter_property: str = "", limit: int = 10
     ) -> dict[str, object]:
         return {
