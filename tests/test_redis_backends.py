@@ -56,9 +56,7 @@ async def test_redis_memory_transacciones_no_intercalan_turnos():
     client = fakeredis.aioredis.FakeRedis(decode_responses=True)
     manager = RedisMemoryManager(client, MemoryManager(), max_messages=500)
     try:
-        await asyncio.gather(
-            *(manager.record_turn("shared", f"q{i}", f"a{i}") for i in range(100))
-        )
+        await asyncio.gather(*(manager.record_turn("shared", f"q{i}", f"a{i}") for i in range(100)))
         messages = await manager.context("shared")
         assert len(messages) == 200
         for user, assistant in zip(messages[::2], messages[1::2], strict=True):

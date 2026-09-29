@@ -116,9 +116,7 @@ async def ask(
     memory_backend: Annotated[
         LocalAsyncMemoryManager | RedisMemoryManager, Depends(get_memory_backend)
     ],
-    rate_limiter: Annotated[
-        LocalAsyncRateLimiter | RedisRateLimiter, Depends(get_rate_limiter)
-    ],
+    rate_limiter: Annotated[LocalAsyncRateLimiter | RedisRateLimiter, Depends(get_rate_limiter)],
     authorization: str = Header(default=""),
 ) -> AskResponse:
     settings = get_settings()

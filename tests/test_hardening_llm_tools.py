@@ -98,7 +98,8 @@ async def test_content_none_devuelve_cadena_vacia():
         openai.APITimeoutError(request=httpx.Request("POST", "http://x")),
         openai.APIConnectionError(request=httpx.Request("POST", "http://x")),
         openai.RateLimitError(
-            "rate", response=httpx.Response(429, request=httpx.Request("POST", "http://x")),
+            "rate",
+            response=httpx.Response(429, request=httpx.Request("POST", "http://x")),
             body=None,
         ),
     ],

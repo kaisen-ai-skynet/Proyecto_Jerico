@@ -109,9 +109,7 @@ async def test_endpoint_async_awaits_cliente_llm(monkeypatch):
     monkeypatch.setitem(app.dependency_overrides, get_llm, lambda: fake)
     memory.clear_all()
     limiter.reset()
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as client:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         res = await client.post(
             "/api/v1/ask",
             json={"prompt": "agenda de hoy"},

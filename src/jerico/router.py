@@ -32,9 +32,7 @@ def _pattern(keywords: tuple[str, ...]) -> re.Pattern[str] | None:
         return None
     # Plural opcional: "contratos" y "bugs" no pueden escaparse del nivel.
     # Lookarounds en vez de \b: con \b, keywords como "c++" o "c#" nunca matchean.
-    return re.compile(
-        "|".join(rf"(?<!\w){re.escape(word)}(?:s|es)?(?!\w)" for word in keywords)
-    )
+    return re.compile("|".join(rf"(?<!\w){re.escape(word)}(?:s|es)?(?!\w)" for word in keywords))
 
 
 def _l0_key(text: str) -> str:

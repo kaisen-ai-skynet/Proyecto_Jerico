@@ -41,7 +41,9 @@ class AsyncLLMClient:
             messages.append({"role": "user", "content": prompt})
         try:
             resp = await client.chat.completions.create(
-                model=model, messages=messages, temperature=0.2  # type: ignore[arg-type]
+                model=model,
+                messages=messages,  # type: ignore[arg-type]
+                temperature=0.2,
             )
         except APIError as exc:
             raise LLMError(f"{type(exc).__name__} en L{level} ({model})") from exc

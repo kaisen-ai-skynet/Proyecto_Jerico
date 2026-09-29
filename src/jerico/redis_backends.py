@@ -85,9 +85,7 @@ class RedisMemoryManager:
     async def record_turn(self, session_id: str, prompt: str, answer: str) -> None:
         key = self._key(session_id)
         user_message = json.dumps({"role": "user", "content": prompt}, ensure_ascii=False)
-        assistant_message = json.dumps(
-            {"role": "assistant", "content": answer}, ensure_ascii=False
-        )
+        assistant_message = json.dumps({"role": "assistant", "content": answer}, ensure_ascii=False)
         try:
             pipe = self.client.pipeline(transaction=True)
             pipe.rpush(key, user_message, assistant_message)
