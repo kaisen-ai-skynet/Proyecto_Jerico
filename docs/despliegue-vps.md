@@ -32,7 +32,7 @@ curl --fail --silent --show-error http://127.0.0.1:8000/health
 docker compose exec redis redis-cli ping
 ```
 
-La API debe responder `status: ok` y Redis debe responder `PONG`. Después, desde el host del VPS, ejecuta `scripts/test_e2e.sh` con `JERICO_API_TOKEN` disponible en el entorno de la terminal mediante el gestor de secretos del equipo. La prueba envía una solicitud L0 autenticada al endpoint real; tras la migración, también comprueba el recorrido de sesión/memoria configurado para Redis. Si falla cualquiera de estas comprobaciones, revisa `docker compose ps` y `docker compose logs --tail=100 jerico-core redis` antes de dar el despliegue por válido.
+La API debe responder `status: ok` y Redis debe responder `PONG`. Después, desde el host del VPS, ejecuta `scripts/test_e2e.sh` con `JERICO_API_TOKEN` disponible en el entorno de la terminal mediante el gestor de secretos del equipo. La prueba envía una solicitud L0 autenticada al endpoint real y ejercita el recorrido de sesión/memoria. Un `200` por sí solo no demuestra que la aplicación esté usando Redis en vez del fallback en RAM; confirma además el `PONG` y que la suite de la revisión cubre la integración y el comportamiento ante fallback. Si falla cualquiera de estas comprobaciones, revisa `docker compose ps` y `docker compose logs --tail=100 jerico-core redis` antes de dar el despliegue por válido.
 
 Antes de desplegar una revisión, ejecuta `bash scripts/verify.sh` en el entorno de desarrollo con `.venv` instalada. Ese control reúne Ruff, mypy y pytest; la suite debe pasar incluyendo las pruebas de la ruta asíncrona y del adaptador Redis de esa revisión.
 
