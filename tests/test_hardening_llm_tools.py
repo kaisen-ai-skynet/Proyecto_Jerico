@@ -76,6 +76,7 @@ async def test_historial_filtra_roles_invalidos_y_vacios():
     await _llm(comp).complete("p", history=history, system="sys")
     assert comp.kwargs["messages"] == [
         {"role": "system", "content": "sys"},
+        {"role": "tool", "content": "inyectado"},
         {"role": "assistant", "content": "valido"},
         {"role": "user", "content": "p"},
     ]
