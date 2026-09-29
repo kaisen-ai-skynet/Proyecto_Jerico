@@ -1,7 +1,7 @@
 # Runbook de Aprovisionamiento VPS Oracle — Proyecto Jericó
-**Fase 4 · Frente 3 (Infraestructura & Operaciones)**  
-**Kaisen AI — Fecha:** 29/09/2026  
-**Autor:** Santiago González (CTO / Sudo Supremo) & Frente Infraestructura  
+**Fase 4 · Frente 3 (Infraestructura & Operaciones)**
+**Kaisen AI — Fecha:** 29/09/2026
+**Autor:** Santiago González (CTO / Sudo Supremo) & Frente Infraestructura
 **Objetivo:** Guía operativa paso a paso, idempotente y determinista para el aprovisionamiento desde cero de la instancia VPS en Oracle Cloud Infrastructure (OCI), hardening del sistema, red privada Tailscale y puesta en marcha de Jericó con Docker Compose y Redis.
 
 ---
@@ -338,10 +338,10 @@ Para declarar la ventana formalmente **CERRADA Y EXITOSA**, se requiere verifica
 
 ```markdown
 # 📋 Reporte de Cierre de Ventana Operativa — Aprovisionamiento VPS Oracle
-**Fecha:** [AAAA-MM-DD HH:MM UTC-5]  
-**Responsable de Operación:** [Nombre del Operador]  
-**Aprobador:** Santiago González (CTO Kaisen AI)  
-**Resultado:** [EXITOSA / ROLLBACK EJECUTADO]  
+**Fecha:** [AAAA-MM-DD HH:MM UTC-5]
+**Responsable de Operación:** [Nombre del Operador]
+**Aprobador:** Santiago González (CTO Kaisen AI)
+**Resultado:** [EXITOSA / ROLLBACK EJECUTADO]
 
 ## 1. Identificación del Nodo
 - **Hostname en Tailscale:** jerico-oracle

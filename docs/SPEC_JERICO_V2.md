@@ -1,11 +1,11 @@
 # Especificación Arquitectónica de Jericó v2 (SPEC_JERICO_V2)
 
-**Documento Canónico de Arquitectura de Sistemas y Transferencia Tecnológica**  
-**Organización:** Kaisen AI  
-**Autor:** Santiago Gonzalez (CTO) & Equipo de Arquitectura  
-**Fecha:** 29 de septiembre de 2026  
-**Referencia upstream:** [`nousresearch/hermes-agent`](https://github.com/nousresearch/hermes-agent)  
-**Estado:** Aprobado para implementación por fases  
+**Documento Canónico de Arquitectura de Sistemas y Transferencia Tecnológica**
+**Organización:** Kaisen AI
+**Autor:** Santiago Gonzalez (CTO) & Equipo de Arquitectura
+**Fecha:** 29 de septiembre de 2026
+**Referencia upstream:** [`nousresearch/hermes-agent`](https://github.com/nousresearch/hermes-agent)
+**Estado:** Aprobado para implementación por fases
 
 ---
 
@@ -425,19 +425,19 @@ class CronScheduler:
 
 ### Matriz de Riesgos Técnicos
 
-1. **Riesgo:** Bloqueos concurrentes en SQLite WAL (`database is locked`) entre el Gateway multi-hilo y las tareas de fondo del Cron/Curador.  
+1. **Riesgo:** Bloqueos concurrentes en SQLite WAL (`database is locked`) entre el Gateway multi-hilo y las tareas de fondo del Cron/Curador.
    **Mitigación:** Configuración mandatoria de pragmas `busy_timeout=60000`, `synchronous=NORMAL`, segregación de conexiones en un pool de solo lectura para búsquedas (`readpool`) y despliegue del módulo forense `hermes_state_lockowners` para identificar PIDs contrapuestos.
 
-2. **Riesgo:** Invalidación involuntaria de Prompt Caching por variaciones sutiles en llamadas consecutivas (mutaciones de whitespace, fecha dinámica en system prompt o reordenamiento de tools).  
+2. **Riesgo:** Invalidación involuntaria de Prompt Caching por variaciones sutiles en llamadas consecutivas (mutaciones de whitespace, fecha dinámica en system prompt o reordenamiento de tools).
    **Mitigación:** Deduplicación estricta de system prompts por hash SHA-256 antes del envío a la API; prohibición absoluta de variables de entorno o marcas de tiempo en el system prompt; ordenamiento canónico alfabético de los esquemas de herramientas enviados al proveedor; tests de regresión que verifiquen la igualdad de bytes del prefijo.
 
-3. **Riesgo:** Alucinación o pérdida de directivas críticas durante la Capa 2 de compresión de contexto con modelos de bajo coste.  
+3. **Riesgo:** Alucinación o pérdida de directivas críticas durante la Capa 2 de compresión de contexto con modelos de bajo coste.
    **Mitigación:** Preservación incondicional de los últimos $N$ mensajes (`protect_last_n = 10`), preservación del árbol genealógico de sesiones (`parent_session_id`), y plantilla de resumen estructurado determinista con campos explícitos e inmutables (metas activas, acuerdos con el usuario, restricciones de seguridad).
 
-4. **Riesgo:** Ejecución de acciones destructivas o no autorizadas sobre la infraestructura de producción mediante herramientas de shell o Docker.  
+4. **Riesgo:** Ejecución de acciones destructivas o no autorizadas sobre la infraestructura de producción mediante herramientas de shell o Docker.
    **Mitigación:** Blindaje inmutable a nivel de clase (`BaseTool.readonly = True` por defecto); el despachador intercepta llamadas mutables y exige aprobación interactiva con timeout mediante el Protocolo Santiago (`confirm=True`), registrando invariablemente cada intento en `logs/audit.log` antes de interactuar con el entorno de ejecución.
 
-5. **Riesgo:** Latencia acumulada y consumo excesivo de tokens por bucles infinitos en el ciclo de turnos agéntico.  
+5. **Riesgo:** Latencia acumulada y consumo excesivo de tokens por bucles infinitos en el ciclo de turnos agéntico.
    **Mitigación:** Límite duro de iteraciones por turno (`max_iterations = 8`), presupuesto decreciente de tokens, control estricto de alternancia de roles (rechazo de turnos consecutivos sin avance) y desconexión automática (*circuit breaker*) con respuesta de degradación graciosa al usuario.
 
 ### Estrategia de Rollback
