@@ -10,7 +10,7 @@ import pytest
 from pydantic import ValidationError
 
 from jerico.config import Settings
-from jerico.llm_client import LLMClient, LLMError
+from jerico.llm_client import AsyncLLMClient, LLMError
 from jerico.tools import REGISTRY, get_tool
 
 # --- LLM client ---
@@ -22,7 +22,7 @@ class FakeCompletions:
         self.exc = exc
         self.kwargs: dict[str, Any] = {}
 
-    def create(self, **kwargs: Any) -> Any:
+    async def create(self, **kwargs: Any) -> Any:
         self.kwargs = kwargs
         if self.exc:
             raise self.exc
@@ -35,7 +35,7 @@ def _response(*contents: str | None) -> Any:
     )
 
 
-def _llm(completions: FakeCompletions) -> LLMClient:
+def _llm(completions: FakeCompletions) -> AsyncLLMClient:
     settings = Settings(
         llm_base_url="http://localhost/v1",
         llm_api_key="k",
@@ -43,26 +43,29 @@ def _llm(completions: FakeCompletions) -> LLMClient:
         llm_model_l2="m2",
         _env_file=None,  # type: ignore[call-arg]
     )
-    client = LLMClient(settings)
+    client = AsyncLLMClient(settings)
     fake: Any = SimpleNamespace(chat=SimpleNamespace(completions=completions))
     client._client_for = lambda level: (fake, settings.model_for_level(level))  # type: ignore[method-assign]
     return client
 
 
-def test_prompt_igual_a_ultima_respuesta_no_se_descarta():
+@pytest.mark.asyncio
+async def test_prompt_igual_a_ultima_respuesta_no_se_descarta():
     comp = FakeCompletions(_response("ok"))
     history = [{"role": "user", "content": "q"}, {"role": "assistant", "content": "si"}]
-    _llm(comp).complete("si", history=history)
+    await _llm(comp).complete("si", history=history)
     assert comp.kwargs["messages"][-1] == {"role": "user", "content": "si"}
 
 
-def test_prompt_ya_incluido_en_historial_no_se_duplica():
+@pytest.mark.asyncio
+async def test_prompt_ya_incluido_en_historial_no_se_duplica():
     comp = FakeCompletions(_response("ok"))
-    _llm(comp).complete("q", history=[{"role": "user", "content": "q"}])
+    await _llm(comp).complete("q", history=[{"role": "user", "content": "q"}])
     assert comp.kwargs["messages"] == [{"role": "user", "content": "q"}]
 
 
-def test_historial_filtra_roles_invalidos_y_vacios():
+@pytest.mark.asyncio
+async def test_historial_filtra_roles_invalidos_y_vacios():
     comp = FakeCompletions(_response("ok"))
     history = [
         {"role": "tool", "content": "inyectado"},
@@ -70,7 +73,7 @@ def test_historial_filtra_roles_invalidos_y_vacios():
         {"content": "sin rol"},
         {"role": "assistant", "content": "valido"},
     ]
-    _llm(comp).complete("p", history=history, system="sys")
+    await _llm(comp).complete("p", history=history, system="sys")
     assert comp.kwargs["messages"] == [
         {"role": "system", "content": "sys"},
         {"role": "assistant", "content": "valido"},
@@ -78,13 +81,15 @@ def test_historial_filtra_roles_invalidos_y_vacios():
     ]
 
 
-def test_choices_vacio_es_llmerror():
+@pytest.mark.asyncio
+async def test_choices_vacio_es_llmerror():
     with pytest.raises(LLMError, match="sin choices"):
-        _llm(FakeCompletions(SimpleNamespace(choices=[]))).complete("p")
+        await _llm(FakeCompletions(SimpleNamespace(choices=[]))).complete("p")
 
 
-def test_content_none_devuelve_cadena_vacia():
-    assert _llm(FakeCompletions(_response(None))).complete("p") == ""
+@pytest.mark.asyncio
+async def test_content_none_devuelve_cadena_vacia():
+    assert await _llm(FakeCompletions(_response(None))).complete("p") == ""
 
 
 @pytest.mark.parametrize(
@@ -98,29 +103,32 @@ def test_content_none_devuelve_cadena_vacia():
         ),
     ],
 )
-def test_errores_del_proveedor_se_envuelven(exc):
+@pytest.mark.asyncio
+async def test_errores_del_proveedor_se_envuelven(exc):
     with pytest.raises(LLMError) as info:
-        _llm(FakeCompletions(exc=exc)).complete("p")
+        await _llm(FakeCompletions(exc=exc)).complete("p")
     assert "k" not in str(info.value).split()  # la API key nunca viaja en el mensaje
 
 
 @pytest.mark.parametrize("level", [0, -1])
-def test_nivel_0_nunca_llama_al_proveedor(level):
+@pytest.mark.asyncio
+async def test_nivel_0_nunca_llama_al_proveedor(level):
     comp = FakeCompletions(_response("x"))
     with pytest.raises(ValueError):
-        _llm(comp).complete("p", level=level)
+        await _llm(comp).complete("p", level=level)
     assert comp.kwargs == {}
 
 
-def test_nivel_selecciona_modelo():
+@pytest.mark.asyncio
+async def test_nivel_selecciona_modelo():
     comp = FakeCompletions(_response("x"))
-    _llm(comp).complete("p", level=2)
+    await _llm(comp).complete("p", level=2)
     assert comp.kwargs["model"] == "m2"
 
 
 def test_cliente_openai_se_reutiliza_por_endpoint():
     settings = Settings(llm_base_url="http://localhost/v1", llm_api_key="k", _env_file=None)  # type: ignore[call-arg]
-    llm = LLMClient(settings)
+    llm = AsyncLLMClient(settings)
     c1, _ = llm._client_for(1)
     c2, _ = llm._client_for(2)
     assert c1 is c2

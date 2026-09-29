@@ -1,8 +1,10 @@
 from typing import Any
 
+import pytest
 from fastapi.testclient import TestClient
+from httpx import ASGITransport, AsyncClient
 
-from jerico.api import app, limiter
+from jerico.api import app, get_llm, limiter
 from jerico.config import Settings, token_configured
 from jerico.main import resolve_bind
 from jerico.memory import memory
@@ -13,7 +15,7 @@ class FakeLLM:
     def __init__(self) -> None:
         self.calls: list[dict[str, object]] = []
 
-    def complete(
+    async def complete(
         self,
         prompt: str,
         *,
@@ -44,7 +46,7 @@ def _settings(**overrides: object) -> Settings:
 
 def _client(monkeypatch, settings: Settings, fake: FakeLLM) -> TestClient:
     monkeypatch.setattr("jerico.api.get_settings", lambda: settings)
-    monkeypatch.setattr("jerico.api.get_llm", lambda: fake)
+    monkeypatch.setitem(app.dependency_overrides, get_llm, lambda: fake)
     monkeypatch.setattr("jerico.api.get_router", lambda: TokenRouter(settings))
     memory.clear_all()
     limiter.reset()
@@ -96,6 +98,27 @@ def test_ask_pasa_historial(monkeypatch):
     assert second.status_code == 200
     assert fake.calls[1]["history"][0]["content"] == "agenda de mañana"
     assert fake.calls[1]["level"] == 1
+
+
+@pytest.mark.asyncio
+async def test_endpoint_async_awaits_cliente_llm(monkeypatch):
+    settings = _settings()
+    fake = FakeLLM()
+    monkeypatch.setattr("jerico.api.get_settings", lambda: settings)
+    monkeypatch.setattr("jerico.api.get_router", lambda: TokenRouter(settings))
+    monkeypatch.setitem(app.dependency_overrides, get_llm, lambda: fake)
+    memory.clear_all()
+    limiter.reset()
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        res = await client.post(
+            "/api/v1/ask",
+            json={"prompt": "agenda de hoy"},
+            headers={"Authorization": "Bearer test-token"},
+        )
+    assert res.status_code == 200
+    assert res.json()["answer"] == "echo:agenda de hoy"
 
 
 def test_token_placeholder_no_arranca():

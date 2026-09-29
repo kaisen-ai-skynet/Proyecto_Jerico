@@ -1,6 +1,6 @@
 from typing import Any
 
-from openai import APIError, OpenAI
+from openai import APIError, AsyncOpenAI
 
 from jerico.config import Settings, get_settings
 
@@ -9,14 +9,14 @@ class LLMError(RuntimeError):
     """Fallo del proveedor (red, timeout, HTTP, respuesta sin choices)."""
 
 
-class LLMClient:
-    """Cliente OpenAI-compatible. Un gateway compartido o credenciales por nivel."""
+class AsyncLLMClient:
+    """Cliente OpenAI-compatible asíncrono, compartido por endpoint y credenciales."""
 
     def __init__(self, settings: Settings | None = None) -> None:
         self.settings = settings or get_settings()
-        self._clients: dict[tuple[str, str], OpenAI] = {}
+        self._clients: dict[tuple[str, str], AsyncOpenAI] = {}
 
-    def complete(
+    async def complete(
         self,
         prompt: str,
         *,
@@ -40,18 +40,20 @@ class LLMClient:
         if last.get("role") != "user" or last.get("content") != prompt:
             messages.append({"role": "user", "content": prompt})
         try:
-            resp = client.chat.completions.create(model=model, messages=messages, temperature=0.2)  # type: ignore[arg-type]
+            resp = await client.chat.completions.create(
+                model=model, messages=messages, temperature=0.2  # type: ignore[arg-type]
+            )
         except APIError as exc:
             raise LLMError(f"{type(exc).__name__} en L{level} ({model})") from exc
         if not resp.choices:
             raise LLMError(f"respuesta sin choices en L{level} ({model})")
         return resp.choices[0].message.content or ""
 
-    def _client_for(self, level: int) -> tuple[OpenAI, str]:
+    def _client_for(self, level: int) -> tuple[AsyncOpenAI, str]:
         base, key, model = self.settings.endpoint_for(level)
         client = self._clients.get((base, key))
         if client is None:
-            client = OpenAI(
+            client = AsyncOpenAI(
                 base_url=base,
                 api_key=key,
                 timeout=self.settings.llm_timeout_s,

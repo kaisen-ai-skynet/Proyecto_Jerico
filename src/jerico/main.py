@@ -1,3 +1,5 @@
+import asyncio
+
 import typer
 
 from jerico.config import Settings, get_settings, token_configured
@@ -29,7 +31,7 @@ def serve(
 @app.command()
 def ask(prompt: str, session_id: str = "default", verbose: bool = False) -> None:
     """Consulta directa por CLI. --verbose imprime nivel y modelo."""
-    from jerico.llm_client import LLMClient
+    from jerico.llm_client import AsyncLLMClient
     from jerico.memory import memory
     from jerico.router import TokenRouter
 
@@ -39,10 +41,12 @@ def ask(prompt: str, session_id: str = "default", verbose: bool = False) -> None
     if decision.answer is not None:
         answer = decision.answer
     else:
-        answer = LLMClient().complete(
-            prompt,
-            level=decision.level,
-            history=memory.context(session_id),
+        answer = asyncio.run(
+            AsyncLLMClient().complete(
+                prompt,
+                level=decision.level,
+                history=memory.context(session_id),
+            )
         )
     memory.record_turn(session_id, prompt, answer)
     typer.echo(answer)

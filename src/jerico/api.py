@@ -2,13 +2,14 @@ import secrets
 import threading
 import time
 from functools import lru_cache
+from typing import Annotated
 
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException
 from loguru import logger
 from pydantic import BaseModel, Field
 
 from jerico.config import Settings, get_settings, token_configured
-from jerico.llm_client import LLMClient, LLMError
+from jerico.llm_client import AsyncLLMClient, LLMError
 from jerico.memory import memory
 from jerico.router import TokenRouter
 
@@ -62,9 +63,9 @@ def get_router() -> TokenRouter:
 
 
 @lru_cache(maxsize=1)
-def get_llm() -> LLMClient:
+def get_llm() -> AsyncLLMClient:
     # Una instancia: reutiliza el pool HTTP en vez de abrir un cliente por request.
-    return LLMClient(get_settings())
+    return AsyncLLMClient(get_settings())
 
 
 def require_token(authorization: str, settings: Settings) -> None:
@@ -83,7 +84,11 @@ async def health() -> dict[str, str]:
 
 
 @app.post("/api/v1/ask", response_model=AskResponse)
-def ask(req: AskRequest, authorization: str = Header(default="")) -> AskResponse:
+async def ask(
+    req: AskRequest,
+    llm: Annotated[AsyncLLMClient, Depends(get_llm)],
+    authorization: str = Header(default=""),
+) -> AskResponse:
     settings = get_settings()
     require_token(authorization, settings)
     if not limiter.allow(authorization, settings.rate_limit_per_min):
@@ -93,7 +98,7 @@ def ask(req: AskRequest, authorization: str = Header(default="")) -> AskResponse
         answer = decision.answer
     else:
         try:
-            answer = get_llm().complete(
+            answer = await llm.complete(
                 req.prompt,
                 level=decision.level,
                 history=memory.context(req.session_id),

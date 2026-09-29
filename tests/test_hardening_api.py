@@ -21,7 +21,7 @@ class FakeLLM:
         self.calls: list[dict[str, Any]] = []
         self.fail = fail
 
-    def complete(self, prompt: str, *, level: int = 1, history=None, system=None) -> str:
+    async def complete(self, prompt: str, *, level: int = 1, history=None, system=None) -> str:
         self.calls.append({"prompt": prompt, "level": level, "history": history or []})
         if self.fail:
             raise LLMError("APITimeoutError en L1 (model-l1)")
@@ -52,7 +52,7 @@ def fake() -> FakeLLM:
 def client(monkeypatch, fake) -> TestClient:
     settings = _settings()
     monkeypatch.setattr("jerico.api.get_settings", lambda: settings)
-    monkeypatch.setattr("jerico.api.get_llm", lambda: fake)
+    monkeypatch.setitem(app.dependency_overrides, api.get_llm, lambda: fake)
     monkeypatch.setattr("jerico.api.get_router", lambda: TokenRouter(settings))
     memory.clear_all()
     limiter.reset()
@@ -156,7 +156,7 @@ def test_json_invalido_es_422(client):
 
 def test_fallo_del_llm_es_502_y_no_ensucia_memoria(monkeypatch, client):
     failing = FakeLLM(fail=True)
-    monkeypatch.setattr("jerico.api.get_llm", lambda: failing)
+    monkeypatch.setitem(app.dependency_overrides, api.get_llm, lambda: failing)
     res = client.post(
         "/api/v1/ask", json={"prompt": "agenda de hoy", "session_id": "s-err"}, headers=AUTH
     )
