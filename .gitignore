@@ -1,9 +1,19 @@
 # Proyecto Jericó — gitignore v0
 
 # Secretos y entorno
-.env
-.env.*
+.env*
 !.env.example
+secretos/
+**/credenciales*
+*.key
+*.pem
+*.p12
+*.pfx
+
+# Bases de datos y dumps
+*.db
+*.sqlite*
+*.sql.gz
 
 # Voces clonadas (consentimiento + privacidad). Nunca al repo.
 voices/*
