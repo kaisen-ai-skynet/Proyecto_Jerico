@@ -1,6 +1,8 @@
 import sqlite3
 
-SCHEMA_VERSION = 2
+from jerico.state.fts import initialize_fts
+
+SCHEMA_VERSION = 3
 
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS system_prompts (
@@ -60,4 +62,5 @@ def initialize_schema(connection: sqlite3.Connection) -> None:
     if current > SCHEMA_VERSION:
         raise RuntimeError(f"database schema {current} is newer than supported {SCHEMA_VERSION}")
     connection.executescript(SCHEMA_SQL)
+    initialize_fts(connection)
     connection.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")

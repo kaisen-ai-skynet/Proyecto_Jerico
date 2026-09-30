@@ -14,6 +14,7 @@ from loguru import logger
 from jerico.state.lockowners import scan_database_lockowners
 from jerico.state.messages import MessageRecord, SessionRecord
 from jerico.state.schema import initialize_schema
+from jerico.state.search import SearchResult, search_history
 
 BUSY_TIMEOUT_MS = 60_000
 DEFAULT_READ_POOL_SIZE = 4
@@ -307,6 +308,12 @@ class StateEngine:
                 self._read_pool.get_nowait().close()
             except queue.Empty:
                 break
+
+    def search_history_fts(
+        self, query: str, limit: int = 10, *, session_id: str | None = None
+    ) -> list[SearchResult]:
+        with self._reader() as connection:
+            return search_history(connection, query, limit, session_id)
 
     def __enter__(self) -> "StateEngine":
         if self._writer is None:

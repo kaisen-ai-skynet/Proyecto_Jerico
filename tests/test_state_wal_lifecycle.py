@@ -18,7 +18,7 @@ def test_inicializa_wal_pragmas_esquema_y_pool(tmp_path):
         assert engine._writer.execute("PRAGMA synchronous").fetchone()[0] == 1
         assert engine._writer.execute("PRAGMA busy_timeout").fetchone()[0] == BUSY_TIMEOUT_MS
         assert engine._writer.execute("PRAGMA foreign_keys").fetchone()[0] == 1
-        assert engine._writer.execute("PRAGMA user_version").fetchone()[0] == 2
+        assert engine._writer.execute("PRAGMA user_version").fetchone()[0] == 3
         assert engine._read_pool.qsize() == 3
         engine.initialize_database(path)
     finally:
@@ -123,7 +123,7 @@ def test_actualiza_schema_v1_sin_perder_transcript(tmp_path):
     try:
         assert upgraded.get_session_transcript("s")[0].content == "persistido"
         assert upgraded._writer is not None
-        assert upgraded._writer.execute("PRAGMA user_version").fetchone()[0] == 2
+        assert upgraded._writer.execute("PRAGMA user_version").fetchone()[0] == 3
         assert (
             upgraded._writer.execute(
                 "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='session_leases'"

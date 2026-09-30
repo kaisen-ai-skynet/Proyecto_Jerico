@@ -22,6 +22,7 @@ from jerico.llm_client import AsyncLLMClient, LLMError
 from jerico.router import TokenRouter
 from jerico.state import StateEngine
 from jerico.state.messages import MessageRecord
+from jerico.tools.session_search import SessionSearchTool
 
 
 class AgentTurnLoop:
@@ -149,7 +150,13 @@ class AgentTurnLoop:
             usage = TokenUsage()
             tool_results: list[dict[str, Any]] = []
             user_persisted = False
-            tool_schemas = self.tool_round.provider_schemas(posture=posture, surface=surface)
+            session_tools = TurnToolRound(
+                {
+                    **self.tool_round.registry,
+                    "session_search": SessionSearchTool(self.state, session_id),
+                }
+            )
+            tool_schemas = session_tools.provider_schemas(posture=posture, surface=surface)
 
             for iteration in range(1, self.max_iterations + 1):
                 try:
@@ -179,7 +186,7 @@ class AgentTurnLoop:
 
                 if iteration == self.max_iterations:
                     break
-                outcome = await self.tool_round.execute(completion.tool_calls)
+                outcome = await session_tools.execute(completion.tool_calls)
                 assistant_message: dict[str, object] = {
                     "role": "assistant",
                     "content": completion.content,
