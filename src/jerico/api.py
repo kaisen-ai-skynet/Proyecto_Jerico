@@ -10,8 +10,10 @@ from pydantic import BaseModel, Field
 
 from jerico.agent.conversation_loop import AgentTurnLoop
 from jerico.agent.prompt_builder import PromptBuilder
-from jerico.agent.types import SurfaceType, ToolsetPosture
+from jerico.agent.types import SurfaceType
 from jerico.config import Settings, get_settings, token_configured
+from jerico.gateway.platforms.rest import handle_rest
+from jerico.gateway.runner import OmniGateway
 from jerico.llm_client import AsyncLLMClient, LLMError
 from jerico.memory import memory
 from jerico.redis_backends import (
@@ -143,15 +145,38 @@ async def ask(
     if not await rate_limiter.allow(authorization, settings.rate_limit_per_min):
         raise HTTPException(status_code=429, detail="rate_limit")
     try:
-        result = await agent.run_turn(
-            req.session_id,
-            req.prompt,
-            posture=ToolsetPosture.DEFAULT,
-            surface=SurfaceType.REST,
+        response = await handle_rest(
+            OmniGateway(agent, settings), req.session_id, req.prompt, authorization
         )
+        result = response.result
     except TimeoutError as exc:
         raise HTTPException(status_code=409, detail="session_busy") from exc
     except LLMError as exc:
         logger.warning(f"llm_unavailable: {exc}")
         raise HTTPException(status_code=502, detail="llm_unavailable") from exc
     return AskResponse(level=result.level, model=result.model, answer=result.answer)
+
+
+@app.post("/api/v1/siri", response_model=AskResponse)
+async def ask_siri(
+    req: AskRequest,
+    agent: Annotated[AgentTurnLoop, Depends(get_authenticated_agent_loop)],
+    rate_limiter: Annotated[LocalAsyncRateLimiter | RedisRateLimiter, Depends(get_rate_limiter)],
+    authorization: str = Header(default=""),
+) -> AskResponse:
+    settings = get_settings()
+    if not await rate_limiter.allow(authorization, settings.rate_limit_per_min):
+        raise HTTPException(status_code=429, detail="rate_limit")
+    try:
+        response = await OmniGateway(agent, settings).handle_inbound_turn(
+            req.session_id, req.prompt, SurfaceType.SIRI, authorization
+        )
+    except TimeoutError as exc:
+        raise HTTPException(status_code=409, detail="session_busy") from exc
+    except LLMError as exc:
+        logger.warning(f"llm_unavailable: {exc}")
+        raise HTTPException(status_code=502, detail="llm_unavailable") from exc
+    answer = " ".join(response.answer.split())
+    if len(answer) > 280:
+        answer = answer[:279] + "…"
+    return AskResponse(level=response.result.level, model=response.result.model, answer=answer)
