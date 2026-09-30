@@ -7,6 +7,7 @@ from jerico.agent.types import SurfaceType, ToolsetPosture
 from jerico.llm.tool_calls import ToolCallRequest
 from jerico.tools import REGISTRY
 from jerico.tools.base import BaseTool
+from jerico.tools.registry import ToolRegistry
 
 
 @dataclass(frozen=True)
@@ -21,6 +22,9 @@ class TurnToolRound:
 
     def __init__(self, registry: dict[str, BaseTool] | None = None) -> None:
         self.registry = registry if registry is not None else REGISTRY
+        self.catalog = ToolRegistry()
+        for tool in self.registry.values():
+            self.catalog.register(tool)
 
     def provider_schemas(
         self,
@@ -28,22 +32,7 @@ class TurnToolRound:
         posture: ToolsetPosture = ToolsetPosture.DEFAULT,
         surface: SurfaceType = SurfaceType.REST,
     ) -> list[dict[str, Any]]:
-        del posture, surface  # posture-aware filtering is introduced with the toolset registry
-        return [
-            {
-                "type": "function",
-                "function": {
-                    "name": name,
-                    "description": tool.description or f"Jerico tool: {name}",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {},
-                        "additionalProperties": True,
-                    },
-                },
-            }
-            for name, tool in sorted(self.registry.items())
-        ]
+        return self.catalog.resolve_for_session(posture, surface)
 
     async def execute(self, calls: tuple[ToolCallRequest, ...]) -> ToolRoundOutcome:
         messages: list[dict[str, Any]] = []
