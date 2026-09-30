@@ -2,8 +2,10 @@ import asyncio
 from collections.abc import Callable
 from typing import Any
 
+from jerico.agent.compression import summary_as_context
 from jerico.agent.prompt_builder import PromptBuilder
 from jerico.agent.turn_api_call import TurnApiCaller
+from jerico.agent.turn_context_compaction import ContextCompactor
 from jerico.agent.turn_finalizer import TurnFinalizer
 from jerico.agent.turn_preflight import SessionLease, TurnPreflightGate
 from jerico.agent.turn_recovery import MAX_ITERATIONS, exhausted_iterations_answer
@@ -50,10 +52,12 @@ class AgentTurnLoop:
         self.preflight = preflight or TurnPreflightGate(state)
         self.tool_round = tool_round or TurnToolRound()
         self.api_caller = api_caller or TurnApiCaller(llm)
+        self.compactor = ContextCompactor(llm)
         self.max_iterations = max_iterations
         self.window_limit = window_limit
         self._active_tasks: dict[str, asyncio.Task[Any]] = {}
         self._token_estimator: Callable[[str], int] = _estimate_tokens
+        self._last_compaction: Any | None = None
 
     async def run_turn(
         self,
@@ -84,14 +88,11 @@ class AgentTurnLoop:
             history_tokens = sum(
                 self._token_estimator(str(item.get("content", ""))) for item in history
             )
-            pressure = self.preflight.evaluate_token_pressure(
+            self.preflight.evaluate_token_pressure(
                 session_id,
                 history_tokens,
                 self.window_limit,
             )
-            if pressure is TokenPressureLevel.OVERFLOW:
-                raise LLMError("historial supera la ventana de contexto")
-
             if decision.answer is not None:
                 return await TurnFinalizer(self.state).finalize(
                     session_id=session_id,
@@ -103,7 +104,47 @@ class AgentTurnLoop:
                     usage=TokenUsage(),
                 )
 
-            request = self.prompt_builder.assemble(user_prompt, history=history)
+            ephemeral_messages: list[dict[str, Any]] = []
+            if self.compactor.should_compact(history_tokens, self.window_limit):
+                compacted = await self.compactor.compact(
+                    session_id,
+                    history,
+                    preserve_tail_turns=5,
+                    preserve_last_n=10,
+                )
+                history = compacted.messages
+                if compacted.summarized and compacted.summary is not None:
+                    ephemeral_messages.append(
+                        {
+                            "role": "user",
+                            "content": summary_as_context(compacted.summary),
+                        }
+                    )
+                history_tokens = sum(
+                    self._token_estimator(str(item.get("content", ""))) for item in history
+                )
+                self._last_compaction = compacted
+                if (
+                    self.preflight.evaluate_token_pressure(
+                        session_id,
+                        history_tokens,
+                        self.window_limit,
+                    )
+                    is TokenPressureLevel.OVERFLOW
+                ):
+                    raise LLMError("historial supera la ventana de contexto tras compactar")
+
+            effective_prompt = user_prompt
+            if ephemeral_messages:
+                effective_prompt = (
+                    str(ephemeral_messages[0]["content"])
+                    + "\n\nPregunta original del usuario:\n"
+                    + user_prompt
+                )
+            request = self.prompt_builder.assemble(
+                effective_prompt,
+                history=history,
+            )
             messages = [dict(message) for message in request.messages]
             usage = TokenUsage()
             tool_results: list[dict[str, Any]] = []

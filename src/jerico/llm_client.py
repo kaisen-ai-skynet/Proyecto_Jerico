@@ -32,6 +32,7 @@ class AsyncLLMClient:
         history: list[dict[str, str]] | None = None,
         ephemeral_messages: list[dict[str, Any]] | None = None,
         tools: list[dict[str, Any]] | None = None,
+        model_override: str | None = None,
     ) -> str:
         result = await self.complete_with_usage(
             prompt,
@@ -40,6 +41,7 @@ class AsyncLLMClient:
             history=history,
             ephemeral_messages=ephemeral_messages,
             tools=tools,
+            model_override=model_override,
         )
         return result.content
 
@@ -52,6 +54,7 @@ class AsyncLLMClient:
         history: list[dict[str, str]] | None = None,
         ephemeral_messages: list[dict[str, Any]] | None = None,
         tools: list[dict[str, Any]] | None = None,
+        model_override: str | None = None,
     ) -> LLMCompletion:
         request = assemble_turn_request(
             system,
@@ -63,6 +66,7 @@ class AsyncLLMClient:
             list(request.messages),
             level=level,
             tools=tools,
+            model_override=model_override,
         )
 
     async def complete_messages_with_usage(
@@ -71,10 +75,12 @@ class AsyncLLMClient:
         *,
         level: int = 1,
         tools: list[dict[str, Any]] | None = None,
+        model_override: str | None = None,
     ) -> LLMCompletion:
         if level <= 0:
             raise ValueError("nivel 0 se responde local; no se llama al LLM")
         client, model = self._client_for(level)
+        model = model_override or model
         request: dict[str, Any] = {"model": model, "messages": messages, "temperature": 0.2}
         if tools is not None:
             request["tools"] = tools

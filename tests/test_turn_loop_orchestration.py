@@ -155,3 +155,49 @@ async def test_tool_call_desconocida_se_devuelve_como_error_validado():
     assert outcome.tool_messages[0]["role"] == "tool"
     assert outcome.tool_messages[0]["tool_call_id"] == "bad"
     assert "UNKNOWN_TOOL" in str(outcome.results[0])
+
+
+@pytest.mark.asyncio
+async def test_loop_compacta_con_historial_sobre_80_por_ciento_y_no_muta_ultimos_turnos(
+    tmp_path,
+):
+    class CompactingLLM(FakeLLM):
+        async def complete_with_usage(self, *_args, **kwargs):
+            assert kwargs["model_override"] == "glm-5.3-flash"
+            return LLMCompletion(
+                '{"active_goals":[],"agreements":[],"security_constraints":[],'
+                '"decisions":[],"open_questions":[]}',
+                TokenUsage(50, 5, 30),
+            )
+
+    fake = CompactingLLM([LLMCompletion("final", TokenUsage())])
+    loop = _loop(tmp_path / "state.db", fake)
+    loop.window_limit = 600
+    try:
+        loop.state.get_or_create_session("compact", "stable system", "model-l1")
+        old_messages: list[dict[str, Any]] = []
+        for index in range(12):
+            old_messages.extend(
+                [
+                    {"role": "user", "content": f"old question {index} " + "x" * 80},
+                    {"role": "assistant", "content": f"old answer {index} " + "y" * 80},
+                ]
+            )
+        loop.state.append_messages("compact", old_messages)
+        expected_tail = [
+            message.content for message in loop.state.get_session_transcript("compact")[-10:]
+        ]
+        result = await loop.run_turn("compact", "new question")
+        assert result.answer == "final"
+        assert loop._last_compaction.summarized
+        llm_request = fake.calls[-1]["messages"]
+        assert llm_request[0] == {"role": "system", "content": "stable system"}
+        assert "Resumen estructurado" in llm_request[-1]["content"]
+        assert "new question" in llm_request[-1]["content"]
+        persisted_tail = [
+            message.content for message in loop.state.get_session_transcript("compact")[14:24]
+        ]
+        assert persisted_tail == expected_tail
+        assert [message["content"] for message in llm_request[-11:-1]] == expected_tail
+    finally:
+        loop.state.close()
