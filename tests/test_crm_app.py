@@ -1,0 +1,391 @@
+"""Tests del cableado, jobs, arranque y reinicio (T24).
+
+Requisitos: VCRM-162 y 168 (aviso al CTO), VCRM-078 y 049 (de extremo a extremo).
+"""
+
+import asyncio
+import os
+from collections.abc import Iterator
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any
+
+import pytest
+from loguru import logger
+
+from crm_support import FakeClock, FakeEmailSender, FakeRunner, FakeTelegram, make_settings
+from jerico.crm import app as app_mod
+from jerico.crm import leads, repo
+from jerico.crm.app import (
+    EXIT_CONFIG,
+    CrmApp,
+    fingerprint_keys,
+    main,
+    missing_secrets,
+    run_service,
+)
+from jerico.crm.jobs import BACKUP_CRON, DAILY_CRON, register_jobs
+from jerico.crm.model import LeadState, Role, User
+from jerico.crm.ports import Update
+from jerico.cron.scheduler import CronScheduler
+
+NOW = datetime(2026, 3, 2, 15, 0, tzinfo=UTC)
+CTO_TG = 1000
+COM_TG = 2000
+LAW_TG = 3000
+SECRET_TOKEN = "123:token-super-secreto"
+SECRET_KEY = "clave-hmac-secreta"
+COMPLETE: dict[str, Any] = {
+    "client_type": "persona natural",
+    "doc_type": "cédula de ciudadanía",
+    "doc_number": "1020304050",
+    "phone_e164": "+573001112233",
+    "email": "ana@cliente.co",
+    "service": "Desarrollo de chatbot",
+    "agreed_value": "12.000.000 COP",
+    "start_term": "01/04/2026",
+}
+
+
+def _settings(tmp_path: Path, **overrides: Any) -> Any:
+    base: dict[str, Any] = {
+        "telegram_bot_token": SECRET_TOKEN,
+        "fingerprint_key": SECRET_KEY,
+        "seed_cto_telegram_id": str(CTO_TG),
+        "seed_cto_email": "cto@k.co",
+        "data_dir": tmp_path / "crm-data",
+        **overrides,
+    }
+    return make_settings(**base)
+
+
+class Env:
+    def __init__(self, tmp_path: Path) -> None:
+        self.tmp_path = tmp_path
+        self.tg = FakeTelegram()
+        self.mail = FakeEmailSender()
+        self.runner = FakeRunner()
+        self.clock = FakeClock(NOW)
+        self.apps: list[CrmApp] = []
+
+    def build(self, **overrides: Any) -> CrmApp:
+        app = CrmApp(
+            _settings(self.tmp_path, **overrides),
+            telegram=self.tg,
+            email=self.mail,
+            runner=self.runner,
+            clock=self.clock.now,
+        )
+        self.apps.append(app)
+        return app
+
+
+@pytest.fixture(autouse=True)
+def _hermetic(monkeypatch: pytest.MonkeyPatch) -> None:
+    for name in list(os.environ):
+        if name.startswith("JERICO_CRM_"):
+            monkeypatch.delenv(name)
+
+
+@pytest.fixture
+def env(tmp_path: Path) -> Iterator[Env]:
+    e = Env(tmp_path)
+    yield e
+    for app in e.apps:
+        app.close()
+
+
+def _texts(tg: FakeTelegram, chat_id: int) -> list[str]:
+    return [s.text for s in tg.sent if s.chat_id == chat_id]
+
+
+# --- Jobs (plan §9) -----------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_vcrm078_register_jobs_crons_fire_on_tick() -> None:
+    calls: list[str] = []
+
+    async def daily() -> None:
+        calls.append("daily")
+
+    async def backup() -> None:
+        calls.append("backup")
+
+    scheduler = CronScheduler()
+    register_jobs(scheduler, daily=daily, backup=backup)
+    assert (DAILY_CRON, BACKUP_CRON) == ("0 13 * * *", "0 8 * * *")
+    assert set(scheduler.jobs) == {"crm-daily", "crm-backup"}
+    await scheduler.tick(datetime(2026, 3, 2, 8, 0, tzinfo=UTC))
+    await asyncio.gather(*scheduler.tasks.values())
+    assert calls == ["backup"]
+    await scheduler.tick(datetime(2026, 3, 2, 13, 0, tzinfo=UTC))
+    await asyncio.gather(*scheduler.tasks.values())
+    assert calls == ["backup", "daily"]
+    await scheduler.tick(datetime(2026, 3, 2, 13, 1, tzinfo=UTC))
+    assert calls == ["backup", "daily"]
+
+
+def test_vcrm078_app_scheduler_has_both_jobs(env: Env) -> None:
+    app = env.build()
+    assert set(app.scheduler.jobs) == {"crm-daily", "crm-backup"}
+    assert app.scheduler.timeout == 1800 and app.scheduler.interval == 20
+
+
+# --- Secretos y claves ----------------------------------------------------------------------
+
+
+def test_vcrm162_missing_secrets_names_only(tmp_path: Path) -> None:
+    assert missing_secrets(_settings(tmp_path)) == []
+    names = missing_secrets(_settings(tmp_path, telegram_bot_token=None, fingerprint_key=""))
+    assert names == ["JERICO_CRM_TELEGRAM_BOT_TOKEN", "JERICO_CRM_FINGERPRINT_KEY"]
+
+
+def test_fingerprint_keys_current_first_then_previous(tmp_path: Path) -> None:
+    s = _settings(tmp_path, fingerprint_previous_keys=" k0 , ,k-1")
+    assert fingerprint_keys(s) == [SECRET_KEY, "k0", "k-1"]
+
+
+@pytest.mark.parametrize("missing", ["telegram_bot_token", "fingerprint_key"])
+def test_vcrm162_main_exits_2_without_secret_and_logs_no_secret(
+    tmp_path: Path, missing: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    lines: list[str] = []
+    sink = logger.add(lines.append, level="DEBUG")
+    called: list[Any] = []
+
+    async def fake_service(settings: Any) -> None:
+        called.append(settings)
+
+    monkeypatch.setattr(app_mod, "run_service", fake_service)
+    try:
+        with pytest.raises(SystemExit) as exc:
+            main(_settings(tmp_path, **{missing: None}))
+    finally:
+        logger.remove(sink)
+    assert exc.value.code == EXIT_CONFIG == 2
+    assert called == []
+    log = "".join(lines)
+    assert f"JERICO_CRM_{missing.upper()}" in log
+    assert SECRET_TOKEN not in log and SECRET_KEY not in log
+
+
+def test_main_runs_service_with_complete_settings(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    called: list[Any] = []
+
+    async def fake_service(settings: Any) -> None:
+        called.append(settings)
+
+    monkeypatch.setattr(app_mod, "run_service", fake_service)
+    settings = _settings(tmp_path)
+    main(settings)
+    assert called == [settings]
+
+
+# --- Arranque: avisos al CTO (VCRM-162, 168), siembra, barrido y latido ------------------------
+
+
+def test_vcrm162_startup_warns_cto_of_out_of_bound_params(env: Env) -> None:
+    app = env.build(query_deadline_business_days=12, backup_retention_days=60)
+    asyncio.run(app.startup())
+    texts = _texts(env.tg, CTO_TG)
+    query = [t for t in texts if "query_deadline_business_days" in t]
+    backup = [t for t in texts if "backup_retention_days" in t]
+    assert len(query) == 1 and "12" in query[0] and "10" in query[0]
+    assert len(backup) == 1 and "60" in backup[0] and "30" in backup[0]
+    assert app.params.query_deadline_business_days == 10
+
+
+def test_vcrm168_invalid_extra_holiday_warns_cto_and_startup_continues(
+    env: Env, tmp_path: Path
+) -> None:
+    missing_file = tmp_path / "no-existe.txt"
+    app = env.build(extra_holidays=f"2026-12-24, 2026-02-30, {missing_file}")
+    asyncio.run(app.startup())
+    texts = _texts(env.tg, CTO_TG)
+    assert any("2026-02-30" in t and "AAAA-MM-DD" in t for t in texts)
+    assert any(str(missing_file) in t and "no legible" in t for t in texts)
+    assert app.params.extra_holidays == frozenset({datetime(2026, 12, 24).date()})
+    assert (app.data_dir / "heartbeat").exists()
+
+
+def test_startup_without_warnings_sends_nothing_and_seeds_cto(env: Env) -> None:
+    app = env.build()
+    asyncio.run(app.startup())
+    assert env.tg.sent == []
+    with app.db.read() as conn:
+        ctos = repo.active_users(conn, Role.CTO)
+    assert [c.telegram_id for c in ctos] == [CTO_TG]
+
+
+def test_startup_warning_failed_delivery_is_recorded(env: Env) -> None:
+    env.tg.fail_next(CTO_TG)
+    app = env.build(escalation_business_days=3)
+    asyncio.run(app.startup())
+    with app.db.read() as conn:
+        rows = conn.execute(
+            "SELECT status FROM crm_outbox WHERE kind = ?", (app_mod.STARTUP_NOTICE_KIND,)
+        ).fetchall()
+    assert [r["status"] for r in rows] == ["fallida"]
+
+
+def test_vcrm078_startup_runs_recovery_daily_sweep(
+    env: Env, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seen: list[dict[str, Any]] = []
+
+    async def fake_sweep(db: Any, telegram: Any, now: datetime, params: Any, **kw: Any) -> None:
+        seen.append({"now": now, "params": params, **kw})
+
+    monkeypatch.setattr(app_mod, "daily_sweep", fake_sweep)
+    app = env.build(fingerprint_previous_keys="k0")
+    asyncio.run(app.startup())
+    assert len(seen) == 1
+    assert seen[0]["now"] == NOW and seen[0]["params"] is app.params
+    assert seen[0]["keys"] == [SECRET_KEY, "k0"] and seen[0]["store"] is app.files
+
+
+def test_heartbeat_updates_mtime(env: Env) -> None:
+    app = env.build()
+    path = app.data_dir / "heartbeat"
+    app.heartbeat()
+    os.utime(path, (0, 0))
+    app.heartbeat()
+    assert path.stat().st_mtime > 0
+
+
+# --- Respaldo cableado (VCRM-097, 098) --------------------------------------------------------
+
+
+def test_backup_job_uses_config_paths_and_runner(env: Env) -> None:
+    app = env.build(backup_age_recipient="age1destinatario", backup_remote="remoto:crm")
+    asyncio.run(app.startup())
+    asyncio.run(app.run_backup_job())
+    progs = [c[:2] for c in env.runner.calls]
+    assert ["age", "--encrypt"] in progs
+    age = next(c for c in env.runner.calls if c[0] == "age")
+    assert "age1destinatario" in age
+    assert any(c[0] == "rclone" and any("remoto:crm/" in a for a in c) for c in env.runner.calls)
+    assert not list((app.data_dir / "backup-tmp").glob("*"))
+
+
+def test_vcrm098_backup_without_config_warns_cto(env: Env) -> None:
+    app = env.build()
+    asyncio.run(app.startup())
+    asyncio.run(app.run_backup_job())
+    assert any("JERICO_CRM_BACKUP_AGE_RECIPIENT" in t for t in _texts(env.tg, CTO_TG))
+    mails = [m for m in env.mail.sent if m.to == "cto@k.co"]
+    assert any("JERICO_CRM_BACKUP_AGE_RECIPIENT" in m.body for m in mails)
+
+
+# --- Servicio --------------------------------------------------------------------------------
+
+
+class StoppingTelegram(FakeTelegram):
+    def __init__(self, stop: asyncio.Event) -> None:
+        super().__init__()
+        self.stop = stop
+
+    async def get_updates(self, offset: int | None, timeout_s: int) -> list[Update]:
+        self.stop.set()
+        return await super().get_updates(offset, timeout_s)
+
+
+@pytest.mark.asyncio
+async def test_run_service_starts_and_stops_cleanly(tmp_path: Path) -> None:
+    stop = asyncio.Event()
+    tg = StoppingTelegram(stop)
+    settings = _settings(tmp_path)
+    await run_service(
+        settings,
+        telegram=tg,
+        email=FakeEmailSender(),
+        runner=FakeRunner(),
+        clock=FakeClock(NOW).now,
+        stop=stop,
+    )
+    assert (settings.data_dir / "heartbeat").exists()
+    assert (settings.data_dir / "crm.db").exists()
+
+
+# --- De extremo a extremo: reinicio (VCRM-078, 049) --------------------------------------------
+
+
+def _msg(update_id: int, user_tg: int, text: str = "", data: str | None = None) -> Update:
+    return Update(
+        update_id=update_id,
+        user_id=user_tg,
+        chat_id=user_tg,
+        chat_type="private",
+        text=text or None,
+        callback_data=data,
+        callback_id=f"cb{update_id}" if data else None,
+    )
+
+
+def _yes(out: list[Any]) -> str:
+    for row in out[-1].buttons:
+        for text, data in row:
+            if text == "✅":
+                return str(data)
+    raise AssertionError("sin ✅")
+
+
+def test_vcrm078_vcrm049_restart_keeps_leads_history_and_resumes_pending(env: Env) -> None:
+    env.tg.fail_next(LAW_TG, 2)  # el Telegram del abogado cae en los dos primeros intentos
+    app1 = env.build()
+    asyncio.run(app1.startup())
+    with app1.db.tx() as tx:
+        com = repo.insert_user(
+            tx, telegram_id=COM_TG, role=Role.COMMERCIAL, email="c@k.co", now=NOW
+        )
+        repo.insert_user(tx, telegram_id=LAW_TG, role=Role.LAWYER, email="l@k.co", now=NOW)
+    asyncio.run(app1.bot.process_update(_msg(1, COM_TG, "/nuevo Ana Pérez; 3001234567")))
+    with app1.db.read() as conn:
+        (lead,) = repo.leads_of_user(conn, com.id)
+    with app1.db.tx() as tx:
+        repo.update_lead(tx, lead.id, {"state": LeadState.CONTACTADO, **COMPLETE}, now=NOW)
+        out = leads.request_accept(tx, com, lead.id, NOW)
+    asyncio.run(app1.bot.process_update(_msg(2, COM_TG, data=_yes(out))))
+    asyncio.run(app1.worker.deliver_due())
+    law_item = _lawyer_telegram_item(app1, LAW_TG)
+    assert law_item["status"] != "entregada" and law_item["attempts"] == 1
+    app1.close()
+
+    env.clock.advance(seconds=61)
+    app2 = env.build()
+    asyncio.run(app2.startup())
+    with app2.db.read() as conn:
+        again = repo.get_lead(conn, lead.id)
+        events = conn.execute(
+            "SELECT COUNT(*) FROM crm_lead_events WHERE lead_id = ?", (lead.id,)
+        ).fetchone()[0]
+    assert again is not None and again.state == LeadState.ACEPTADO and events >= 1
+    asyncio.run(app2.worker.deliver_due())
+    assert _lawyer_telegram_item(app2, LAW_TG)["attempts"] == 2
+    env.clock.advance(seconds=300)
+    asyncio.run(app2.worker.deliver_due())
+    final = _lawyer_telegram_item(app2, LAW_TG)
+    assert final["attempts"] == 3 and final["status"] == "entregada"
+    assert any(f"L-{lead.id:04d}" in t for t in _texts(env.tg, LAW_TG))
+
+
+def _lawyer_telegram_item(app: CrmApp, law_tg: int) -> Any:
+    with app.db.read() as conn:
+        law: User | None = repo.active_user_by_telegram(conn, law_tg)
+        assert law is not None
+        row = conn.execute(
+            "SELECT status, attempts FROM crm_outbox WHERE critical = 1 AND channel = 'telegram' "
+            "AND recipient_user_id = ? AND kind = 'aceptacion'",
+            (law.id,),
+        ).fetchone()
+    assert row is not None
+    return dict(row)
+
+
+def test_close_is_idempotent(env: Env) -> None:
+    app = env.build()
+    app.close()
+    app.close()
