@@ -4,7 +4,7 @@ Runbook para desplegar la API con Docker Compose, AsyncOpenAI y Redis en la red 
 
 ## Requisitos previos
 
-- VPS preparado con Docker Engine y el plugin Docker Compose. `scripts/bootstrap_vps_oracle.sh` es una preparación de infraestructura de una sola vez, no forma parte de cada despliegue.
+- VPS preparado con Docker Engine y el plugin Docker Compose. `scripts/oci/01_bootstrap.sh` es una preparación de infraestructura de una sola vez, no forma parte de cada despliegue.
 - Acceso al VPS por SSH/Tailscale y una revisión o tag aprobado del repositorio.
 - Secretos configurados en `.env` mediante el mecanismo seguro del equipo. No subir `.env` al repositorio ni incluir valores secretos en comandos guardados en el historial.
 - `JERICO_API_TOKEN` fuerte y credenciales/endpoint del proveedor LLM válidos para las solicitudes que usan AsyncOpenAI. Las solicitudes locales L0 no requieren una llamada al proveedor.
@@ -49,3 +49,6 @@ docker compose ps
 ```
 
 Repite las verificaciones de salud, Redis y E2E. Las sesiones de memoria son datos de corto plazo: considera que pueden perderse al reiniciar o cambiar la configuración de Redis, salvo que el servicio se haya configurado explícitamente con persistencia.
+
+---
+> 🕒 **Última modificación:** 11/10/2026 18:25 (Claude Code · Opus 5.5)

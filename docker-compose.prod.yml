@@ -1,0 +1,43 @@
+# Override de producción (VM Oracle). Añade PostgreSQL 16 (decisiones D1/D2).
+# Uso en la VM (alias `jc` creado por scripts/oci/01_bootstrap.sh):
+#   docker compose -p jerico -f docker-compose.yml -f docker-compose.prod.yml up -d
+# Autosuficiente: `-p jerico -f docker-compose.prod.yml up -d postgres` levanta solo Postgres.
+#
+# Seguridad: 5432 se publica ÚNICAMENTE en 127.0.0.1 del host. Los contenedores
+# de Jericó lo alcanzan como `postgres:5432` por la red interna jerico_net.
+# La contraseña vive fuera de Git en /opt/jerico/secrets/postgres_password.
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: jerico-postgres
+    environment:
+      POSTGRES_USER: jerico
+      POSTGRES_DB: jerico
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256"
+    secrets:
+      - postgres_password
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - jerico_postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    networks:
+      - jerico_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U jerico -d jerico"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+secrets:
+  postgres_password:
+    file: ${JERICO_SECRETS_DIR:-/opt/jerico/secrets}/postgres_password
+
+networks:
+  jerico_net:
+    name: jerico_net
+
+volumes:
+  jerico_postgres_data:
+    name: jerico_postgres_data

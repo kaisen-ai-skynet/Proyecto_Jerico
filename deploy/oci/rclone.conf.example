@@ -1,0 +1,13 @@
+# Copiar a /etc/jerico/rclone.conf (root:root, 600). NUNCA a Git con valores reales.
+# OCI Object Storage por su API compatible con S3 (Always Free: 20 GB).
+# - access_key_id / secret_access_key: Perfil → "Customer secret keys" → Generate.
+# - <NAMESPACE>: Object Storage → Bucket → "Namespace" (también en Tenancy details).
+[oci-backups]
+type = s3
+provider = Other
+access_key_id = REEMPLAZAR
+secret_access_key = REEMPLAZAR
+region = sa-bogota-1
+endpoint = https://<NAMESPACE>.compat.objectstorage.sa-bogota-1.oraclecloud.com
+force_path_style = true
+no_check_bucket = true

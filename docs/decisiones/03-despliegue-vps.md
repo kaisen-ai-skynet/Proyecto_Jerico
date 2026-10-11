@@ -1,7 +1,7 @@
 # Dossier 03: Despliegue en VPS Oracle
 
 ## Estado Real
-El proyecto cuenta con un script de preparación de infraestructura en `scripts/bootstrap_vps_oracle.sh`, pero aún no se ha formalizado la arquitectura de despliegue sobre el VPS para el ambiente operativo de la API. 
+El proyecto cuenta con un script de preparación de infraestructura en `scripts/oci/01_bootstrap.sh`, pero aún no se ha formalizado la arquitectura de despliegue sobre el VPS para el ambiente operativo de la API. 
 
 ## Arquitectura Objetivo
 El modelo recomendado se basa en un esquema de **Contenedorización (Docker Compose)**.
@@ -26,6 +26,9 @@ Desplegar utilizando `docker compose` con restricción estricta al `127.0.0.1`. 
 
 ### Decisiones que necesito del CTO
 - [ ] ¿Aprueba el modelo Docker Compose como estándar para el VPS Oracle (incluyendo los binds limitados a `127.0.0.1`/Tailscale IP)?
-- [ ] ¿Autoriza la ejecución del script `bootstrap_vps_oracle.sh` en la infraestructura de producción durante la próxima ventana operativa?
+- [ ] ¿Autoriza la ejecución del script `scripts/oci/01_bootstrap.sh` en la infraestructura de producción durante la próxima ventana operativa?
 
 ### Estado 29/09/2026: APROBADO por el CTO. Etapa actual: guía ejecutable lista en docs/despliegue-vps.md; pendiente ventana operativa.
+
+---
+> 🕒 **Última modificación:** 11/10/2026 18:25 (Claude Code · Opus 5.5)

@@ -1,5 +1,8 @@
 # 🛡️ Plan Maestro de Conexión y Estructuración de VPS Oracle para el Equipo
 ### Seguridad Zero-Trust, Accesos Individuales SSH, Tailscale Mesh y Despliegue con Coolify
+
+> [!WARNING]
+> **Revisión 11/10/2026:** Coolify (capa 4 de este plan) queda **fuera de Fase 0**: con el Always Free reducido a 2 OCPU / 12 GB y la API en el puerto 8000 se usa Docker Compose. Las capas de red, Tailscale, usuarios individuales y la prohibición de exponer 5432/6379/8000 siguen vigentes. Procedimiento operativo actual: `docs/guia-oci-principiantes.md` y `scripts/oci/`.
 **Proyecto:** Jericó AI-OS — Kaisen AI  
 **Repositorio Oficial:** `https://github.com/kaisen-ai-skynet/Proyecto_Jerico.git`  
 **Entorno:** Oracle Cloud Infrastructure (OCI Free Tier - VM.Standard.A1.Flex ARM64 / Ubuntu 24.04 LTS)  
@@ -236,7 +239,7 @@ sequenceDiagram
     CTO->>OCI: Crear instancia A1.Flex (4 OCPU / 24GB RAM)
     CTO->>OCI: Configurar VCN (Cerrar puerto 22 a 0.0.0.0/0)
     CTO->>VPS: Primer login SSH temporal vía IP pública (con clave personal)
-    CTO->>VPS: Ejecutar bootstrap_vps_oracle.sh
+    CTO->>VPS: Ejecutar scripts/oci/01_bootstrap.sh
     VPS->>TS: tailscale up (Unirse al Tailnet Kaisen)
     VPS->>VPS: Crear usuarios santiago, jpablo, esteban con sus llaves SSH
     VPS->>VPS: Instalar Docker, Docker Compose y Coolify
@@ -264,8 +267,8 @@ Una vez que el VPS esté en estado *Running*, Santiago se conecta por primera ve
 ssh -i ~/.ssh/id_ed25519 ubuntu@<IP_PUBLICA_ORACLE>
 
 # Descargar y ejecutar el script de inicialización:
-curl -sSL https://raw.githubusercontent.com/kaisen-ai-skynet/Proyecto_Jerico/main/scripts/bootstrap_vps_oracle.sh -o bootstrap.sh
-# (o subirlo mediante scp desde ~/Kaisen_AI/01_Proyectos/Boceto_jerico/scripts/bootstrap_vps_oracle.sh)
+curl -sSL https://raw.githubusercontent.com/kaisen-ai-skynet/Proyecto_Jerico/main/scripts/oci/01_bootstrap.sh -o bootstrap.sh
+# (o subirlo mediante scp desde ~/Kaisen_AI/01_Proyectos/Proyecto_Jerico/scripts/oci/01_bootstrap.sh)
 chmod +x bootstrap.sh
 sudo ./bootstrap.sh
 ```
@@ -352,9 +355,12 @@ Si un integrante del equipo se desvincula o su equipo portátil es comprometido:
 
 - [ ] **Paso 0:** Recoger las 5 llaves públicas SSH (`santiago`, `jpablo`, `esteban`, `nicolas`, `santiagojr`).
 - [ ] **Paso 1:** Crear instancia Oracle Cloud A1.Flex (Ubuntu 24.04 ARM64).
-- [ ] **Paso 2:** Ejecutar `bootstrap_vps_oracle.sh`.
+- [ ] **Paso 2:** Ejecutar `scripts/oci/01_bootstrap.sh`.
 - [ ] **Paso 3:** Vincular el nodo a Tailscale y verificar `jerico-oracle`.
 - [ ] **Paso 4:** Remover la regla Ingress puerto 22 para 0.0.0.0/0 en OCI Security List.
 - [ ] **Paso 5:** Acceder a Coolify (`http://jerico-oracle:8000`), crear admin y enlazar GitHub App de `kaisen-ai-skynet`.
 - [ ] **Paso 6:** Desplegar base de datos PostgreSQL 16 y Redis 7 iniciales.
 - [ ] **Paso 7:** Probar primer despliegue continuo de `Proyecto_Jerico`.
+
+---
+> 🕒 **Última modificación:** 11/10/2026 18:25 (Claude Code · Opus 5.5)

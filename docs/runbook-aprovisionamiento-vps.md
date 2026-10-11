@@ -1,141 +1,55 @@
+---
+modificado: "11/10/2026 18:15"
+---
+
 # Runbook de Aprovisionamiento VPS Oracle — Proyecto Jericó
 **Fase 4 · Frente 3 (Infraestructura & Operaciones)**
-**Kaisen AI — Fecha:** 29/09/2026
+**Kaisen AI — Fecha:** 29/09/2026 · **Revisado:** 11/10/2026
 **Autor:** Santiago González (CTO / Sudo Supremo) & Frente Infraestructura
-**Objetivo:** Guía operativa paso a paso, idempotente y determinista para el aprovisionamiento desde cero de la instancia VPS en Oracle Cloud Infrastructure (OCI), hardening del sistema, red privada Tailscale y puesta en marcha de Jericó con Docker Compose y Redis.
+**Objetivo:** Guía operativa paso a paso, idempotente y determinista para el aprovisionamiento desde cero de la instancia VPS en Oracle Cloud Infrastructure (OCI), hardening del sistema, red privada Tailscale y puesta en marcha de Jericó con Docker Compose, Redis y PostgreSQL 16.
 
 ---
 
 > [!IMPORTANT]
 > **Modo de Operación: Solo Preparación.** Este documento es un runbook ejecutable para ser corrido durante la ventana operativa autorizada por el CTO. No ejecutar comandos remotos fuera de la ventana programada.
 
+> [!WARNING]
+> **Revisión 11/10/2026.** Oracle redujo el Always Free ARM a **2 OCPU / 12 GB** (antes 4/24). Decisiones del CTO: región **Bogotá (`sa-bogota-1`)**, cuenta **Always Free pura**, **una sola VM** con Postgres co-locado en `127.0.0.1`, sin Coolify en Fase 0 y sin contingencia x86.
+> Los pasos de creación de cuenta, red, VM, Tailscale, Postgres, backups y cierre perimetral (antes §1–§2) viven ahora en **`docs/guia-oci-principiantes.md`** con los scripts de `scripts/oci/`. Este runbook conserva el pre-vuelo resumido y el despliegue de Jericó (§3 en adelante).
+
 ---
 
 ## 1. Pre-vuelo (Checklist Binaria)
 
-Antes de iniciar la ventana de aprovisionamiento, el operador debe validar el cumplimiento del 100% de los siguientes ítems:
-
 | Ítem | Requisito / Especificación | Criterio de Aceptación (Binario) | Estado |
 | :--- | :--- | :--- | :---: |
-| **1.1. Cuenta OCI** | Tenancy activa en Oracle Cloud Infrastructure con permisos de administrador en Compute y VCN. | Acceso confirmado a la consola OCI sin alertas de facturación ni suspensión. | [ ] |
-| **1.2. Región** | Región asignada (ej. `sa-saopaulo-1`, `us-ashburn-1` o tenancy corporativa Kaisen AI). | Región seleccionada en consola con disponibilidad de recursos Free Tier / Pay-as-you-go. | [ ] |
-| **1.3. Shape & Arquitectura** | Primario: `VM.Standard.A1.Flex` (Ampere ARM64 - 4 OCPU, 24 GB RAM).<br>Contingencia: `VM.Standard.E2.1.Micro` (AMD64 - 1 OCPU, 1 GB RAM). | Capacidad de cómputo verificada en el Availability Domain (AD) destino. | [ ] |
-| **1.4. Almacenamiento** | Boot Volume de 50 GB a 100 GB (rendimiento balanceado, Ubuntu 24.04 LTS). | Volumen asignado dentro del margen gratuito OCI (hasta 200 GB acumulados). | [ ] |
-| **1.5. Llaves SSH** | 5 llaves públicas `ed25519` del equipo técnico recolectadas:<br>- `santiago` (CTO)<br>- `nicolas` (Lead Sysadmin)<br>- `jpablo` (Backend)<br>- `esteban` (Infra)<br>- `santiagojr` (Ops/BD) | Claves públicas validadas en formato `ssh-ed25519 AAAAC3... email@kaisen.ai` sin claves privadas expuestas. | [ ] |
-| **1.6. Firewall / NSG** | OCI VCN Default Security List preparada:<br>- Ingress temporal: TCP 22 desde IP pública del operador (o `0.0.0.0/0` solo durante bootstrap inicial).<br>- UDP 41641 (Tailscale WireGuard direct peer, opcional).<br>- PROHIBIDO abrir a `0.0.0.0/0`: TCP 8000, TCP 6379, TCP 5432. | Reglas de ingress validadas en consola OCI antes de encender la máquina. | [ ] |
-| **1.7. Red Privada / DNS** | Tailnet corporativa Kaisen AI activa en Tailscale (`kaisen.ai`).<br>Nombre de máquina planeado: `jerico-oracle`. | MagicDNS habilitado y sesión de administrador en Tailscale abierta para aprobar el nodo. | [ ] |
-| **1.8. Presupuesto** | 0.00 USD (Always Free Tier) o presupuesto asignado con alerta en $1 USD. | Alarma de presupuesto (Budget Alert) activa en OCI Cost Management. | [ ] |
-| **1.9. Ventana Operativa** | Ventana acordada: 60 minutos de duración máxima.<br>Canal de comunicación síncrono activo con el CTO y desarrolladores. | Notificación de inicio enviada al equipo Kaisen AI. | [ ] |
+| **1.1. Cuenta OCI** | Tenancy Always Free con MFA, compartment `kaisen-jerico` y alerta de presupuesto de 1 USD. | Guía, Parte B completada. | [ ] |
+| **1.2. Región** | `sa-bogota-1` (Colombia Central). Irreversible. | Home region confirmada en la consola. | [ ] |
+| **1.3. Shape & Arquitectura** | `VM.Standard.A1.Flex` ARM64, **2 OCPU / 12 GB** (máximo Always Free vigente). Sin contingencia x86 (rompe la regla ARM64). Ante falta de capacidad: Plan B de la guía (Parte D). | VM `RUNNING` con etiqueta Always Free-eligible. | [ ] |
+| **1.4. Almacenamiento** | Boot Volume de 100 GB, Ubuntu 24.04 LTS aarch64 (límite gratuito: 200 GB acumulados). | Volumen asignado sin costo. | [ ] |
+| **1.5. Llaves SSH** | Llaves públicas `ed25519` del equipo: `santiago` (CTO), `nicolas`, `jpablo`, `esteban`, `santiagojr`. Las ausentes se añaden después. | Formato `ssh-ed25519 AAAA...`; ninguna llave privada compartida. | [ ] |
+| **1.6. Firewall / Security List** | Ingress temporal TCP 22 solo desde la IP del operador (`/32`); UDP 41641 opcional. PROHIBIDO abrir TCP 8000, 6379, 5432. Dentro de la VM: ufw deny entrante (lo aplica `01_bootstrap.sh`). | Reglas validadas en consola antes de crear la VM. | [ ] |
+| **1.7. Red Privada / DNS** | Tailnet Kaisen AI activa; nombre de máquina `jerico-oracle`. | Sesión de administrador de Tailscale abierta para aprobar el nodo. | [ ] |
+| **1.8. Presupuesto** | 0.00 USD (Always Free puro) con alerta en 1 USD. | Budget Alert activa. | [ ] |
+| **1.9. Backups** | Bucket `jerico-backups` (Object Storage, privado) y llave age generada en la laptop del CTO. | Guía, Parte H completada y restauración probada. | [ ] |
+| **1.10. Ventana Operativa** | 60 minutos máximo; canal síncrono con el CTO. | Notificación de inicio enviada al equipo. | [ ] |
 
 ---
 
-## 2. Pasos Numerados de Aprovisionamiento
+## 2. Aprovisionamiento (resumen; detalle en la guía)
 
-Todos los comandos son idempotentes y reproducibles.
+| Paso | Dónde | Comando / acción | Verificación |
+| :--- | :--- | :--- | :--- |
+| 2.1 Cuenta, red y VM | Consola OCI | Guía, Partes B–D (Plan B: `scripts/oci/00_retry_launch_a1.sh` en Cloud Shell) | VM `RUNNING`, IP pública anotada |
+| 2.2 Bootstrap | VM, `ubuntu` + sudo | `sudo KEY_...=... ./01_bootstrap.sh` (copiado con `scp`) | Termina en `BOOTSTRAP COMPLETADO` |
+| 2.3 Tailscale | VM | `sudo tailscale up --hostname=jerico-oracle` | `ssh santiago@jerico-oracle` desde la laptop |
+| 2.4 Código | Laptop | `scripts/oci/sync_repo_to_vps.sh santiago@jerico-oracle` | `/opt/jerico/app/.deployed_rev` = commit esperado |
+| 2.5 PostgreSQL 16 | VM, `santiago` | `/opt/jerico/app/scripts/oci/02_postgres.sh` | `5432 solo en 127.0.0.1` |
+| 2.6 Backups | VM, sudo | `/etc/jerico/{backup.env,rclone.conf}` + `sudo scripts/oci/03_backups.sh` | Backup de prueba en el bucket |
+| 2.7 Cierre perimetral | VM por Tailscale, sudo | `sudo scripts/oci/04_lockdown.sh` + borrar regla 22 en la Security List | `ssh -o ConnectTimeout=5 ubuntu@<IP_PUBLICA>` falla por timeout |
+| 2.8 Verificación | VM, sudo | `sudo scripts/oci/verify_vps.sh` | `RESULTADO: OK` |
 
-### Paso 2.1: Creación de la Instancia en OCI Console
-1. Entrar a **OCI Console** ➔ **Compute** ➔ **Instances** ➔ **Create Instance**.
-2. Parámetros de creación:
-   - **Name:** `jerico-core-oracle-01`
-   - **Placement:** Availability Domain por defecto.
-   - **Image:** Canonical Ubuntu 24.04 LTS (aarch64 / ARM64).
-   - **Shape:** Ampere `VM.Standard.A1.Flex` con **4 OCPUs** y **24 GB de Memoria**.
-   - **Networking:** Asignar a la VCN principal, subred pública, con **Assign a public IPv4 address** activado temporalmente.
-   - **SSH Keys:** Seleccionar "Paste public keys" y pegar la llave pública del CTO (`KEY_SANTIAGO`).
-   - **Boot Volume:** 50 GB (extensión por defecto).
-3. Hacer clic en **Create**.
-4. **Verificación:** La instancia pasa al estado `RUNNING` y se anota la `<IP_PUBLICA_ORACLE>`.
-
-### Paso 2.2: Conexión Inicial y Preparación de Insumos
-Desde la estación de trabajo autorizada del operador:
-
-```bash
-# Probar conexión SSH inicial con la clave de provisión
-ssh -o StrictHostKeyChecking=accept-new -i ~/.ssh/id_ed25519_kaisen ubuntu@<IP_PUBLICA_ORACLE>
-```
-
-**Verificación:** Acceso exitoso al shell `ubuntu@jerico-core-oracle-01:~$`.
-
-### Paso 2.3: Inyección de Llaves y Ejecución de Bootstrap
-Subir o definir en el entorno remoto las claves públicas del equipo y ejecutar el script `scripts/bootstrap_vps_oracle.sh`:
-
-```bash
-# En el VPS como root o mediante sudo:
-sudo -i
-
-# Exportar las claves públicas del equipo antes de invocar el bootstrap
-export KEY_SANTIAGO="ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI... santiago@kaisen.ai"
-export KEY_NICOLAS="ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI... nicolas@kaisen.ai"
-export KEY_JPABLO="ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI... jpablo@kaisen.ai"
-export KEY_ESTEBAN="ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI... esteban@kaisen.ai"
-export KEY_SANTIAGOJR="ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI... santiagojr@kaisen.ai"
-
-# Descargar o clonar el script de bootstrap desde el repositorio
-mkdir -p /opt/jerico/scripts
-curl -fsSL https://raw.githubusercontent.com/kaisen-ai-skynet/Proyecto_Jerico/main/scripts/bootstrap_vps_oracle.sh -o /opt/jerico/scripts/bootstrap_vps_oracle.sh
-chmod +x /opt/jerico/scripts/bootstrap_vps_oracle.sh
-
-# Ejecutar el bootstrap idempotente
-/opt/jerico/scripts/bootstrap_vps_oracle.sh
-```
-
-**¿Qué ejecuta este paso de forma determinista?**
-1. Actualización de paquetes base del OS (`apt-get update && apt-get upgrade`).
-2. Desbloqueo y persistencia de iptables de Oracle para interfaz `tailscale0`.
-3. Instalación de Tailscale daemon.
-4. Instalación de Docker CE y plugin Compose (`docker-compose-plugin`).
-5. Creación de usuarios locales (`santiago`, `nicolas`, `jpablo`, `esteban`, `santiagojr`) con pertenencia al grupo `docker`, llaves en `~/.ssh/authorized_keys` y sudoers según matriz.
-6. Hardening de SSH en `/etc/ssh/sshd_config.d/01-kaisen-security.conf` (`PermitRootLogin no`, `PasswordAuthentication no`, `AllowUsers`).
-7. Despliegue de Coolify en `/data/coolify`.
-8. Creación del directorio de trabajo `/opt/jerico/{data,backups,logs}` con permisos `santiago:docker` (775).
-
-**Verificación:**
-```bash
-# 1. Comprobar Docker y Compose
-docker --version && docker compose version
-
-# 2. Comprobar usuarios y grupos
-id santiago && id jpablo && id esteban
-
-# 3. Comprobar sintaxis SSH
-sshd -t
-```
-*Criterio:* Los comandos retornan código de salida 0 sin advertencias de sintaxis.
-
-### Paso 2.4: Activación y Enlace a Tailscale Mesh
-En el shell del VPS:
-
-```bash
-sudo tailscale up --hostname=jerico-oracle --ssh --accept-routes
-```
-
-1. El comando imprime una URL de autenticación (`https://login.tailscale.com/a/...`).
-2. El operador abre la URL en su navegador y autoriza la máquina dentro del Tailnet `kaisen.ai`.
-3. Validar estado y dirección IP interna asignada:
-
-```bash
-tailscale status
-tailscale ip -4
-```
-
-**Verificación:** `tailscale ip -4` retorna una IP en el rango CGNAT `100.x.y.z`, y el nodo figura activo como `jerico-oracle` en la consola de Tailscale.
-
-### Paso 2.5: Verificación de Acceso SSH por Tailscale y Cierre Perimetral OCI
-1. Desde la máquina local del operador (conectada a Tailscale):
-```bash
-ssh santiago@jerico-oracle
-```
-2. Confirmar que el login funciona sin contraseña mediante la llave `ed25519`.
-3. **Cierre de Brecha Perimetral en OCI Console:**
-   - Ir a **Networking** ➔ **Virtual Cloud Networks** ➔ Seleccionar VCN ➔ **Security Lists** ➔ **Default Security List**.
-   - **ELIMINAR** la regla de Ingress: `TCP Port 22` desde `0.0.0.0/0`.
-   - Mantener únicamente: Egress total (`0.0.0.0/0`) y opcional Ingress UDP 41641.
-4. **Verificación de Cierre:**
-   Intentar conectar por la IP pública directa:
-   ```bash
-   ssh -o ConnectTimeout=5 ubuntu@<IP_PUBLICA_ORACLE>
-   ```
-   *Criterio:* La conexión debe fallar por timeout (`Operation timed out`), mientras que `ssh santiago@jerico-oracle` responde inmediatamente vía Tailscale.
+**Qué hace `01_bootstrap.sh`:** paquetes base y parches automáticos; sustituye `iptables-persistent` de la imagen Oracle por **ufw** (son incompatibles); instala Tailscale y Docker CE con `"ip": "127.0.0.1"` en `daemon.json` (todo puerto publicado sin IP explícita queda en loopback); crea los 5 usuarios con sus llaves; endurece SSH; crea `/opt/jerico/{app,data,backups,logs,secrets}` y el alias `jc` (Compose base + `docker-compose.prod.yml`). Coolify queda fuera de Fase 0.
 
 ---
 
@@ -145,17 +59,11 @@ ssh santiago@jerico-oracle
 Conectado como usuario `santiago` vía Tailscale:
 
 ```bash
-cd /opt/jerico
-if [ ! -d "/opt/jerico/app" ]; then
-    git clone https://github.com/kaisen-ai-skynet/Proyecto_Jerico.git /opt/jerico/app
-fi
-
-cd /opt/jerico/app
-git fetch --tags
-git checkout tags/v0.2.0 || git checkout main
+# Desde la laptop del CTO, en el repo, con el commit/tag aprobado en HEAD:
+scripts/oci/sync_repo_to_vps.sh santiago@jerico-oracle
 ```
 
-**Verificación:** `git status` y `git rev-parse --short HEAD` confirman la revisión aprobada.
+**Verificación:** `cat /opt/jerico/app/.deployed_rev` coincide con `git rev-parse --short HEAD` de la laptop. (Se copia con `git archive`, sin `git push` y sin `.env`.)
 
 ### Paso 3.2: Configuración del Archivo `.env` en Producción
 Cargar el archivo de variables de entorno mediante el método seguro (ver Sección 4) en `/opt/jerico/app/.env`.
@@ -173,21 +81,22 @@ Validar la configuración de Compose sin ejecutar nada:
 
 ```bash
 cd /opt/jerico/app
-docker compose config --quiet
+jc config --quiet
 ```
 *Criterio:* Si no hay errores de sintaxis, no produce salida y retorna código 0.
 
 Levantar los servicios en modo desacoplado con reconstrucción:
 
 ```bash
-docker compose up -d --build
-docker compose ps
+jc up -d --build
+jc ps
 ```
 
 **Verificación:**
-`docker compose ps` debe listar los dos contenedores en estado `Up` o `healthy`:
+`jc ps` debe listar los tres contenedores en estado `Up` o `healthy`:
 - `jerico-redis`: `Up (healthy)`
 - `jerico-core`: `Up`
+- `jerico-postgres`: `Up (healthy)`
 
 ### Paso 3.4: Verificación Rigurosa de Salud (Health Checks)
 
@@ -198,11 +107,11 @@ Ejecutar la secuencia de pruebas en orden:
 
 ```bash
 # 1. Comprobación directa del motor Redis (demostrable)
-docker compose exec redis redis-cli ping
+jc exec redis redis-cli ping
 # Salida esperada: PONG
 
 # 2. Comprobación de persistencia y estadísticas de Redis
-docker compose exec redis redis-cli info stats | grep -E 'total_commands_processed|instantaneous_ops_per_sec'
+jc exec redis redis-cli info stats | grep -E 'total_commands_processed|instantaneous_ops_per_sec'
 
 # 3. Comprobación de salud HTTP de la API
 curl --fail --silent --show-error http://127.0.0.1:8000/health
@@ -232,13 +141,13 @@ bash scripts/test_e2e.sh
 1. Salida de consola: `✅ Prueba E2E (L0) exitosa: {"reply":"...","level":"L0",...}`.
 2. Confirmar que Redis almacenó la sesión generada por la prueba E2E:
    ```bash
-   docker compose exec redis redis-cli keys "*test_e2e*"
+   jc exec redis redis-cli keys "*test_e2e*"
    ```
    *Criterio:* Redis devuelve la clave de sesión creada, confirmando que la aplicación escribió en el backend de caché real y no en el fallback de RAM.
 
 3. Inspeccionar logs para validar que no existan advertencias de fallback:
    ```bash
-   docker compose logs --tail=100 jerico-core | grep -i "fallback" || true
+   jc logs --tail=100 jerico-core | grep -i "fallback" || true
    ```
    *Criterio:* Cero líneas que indiquen degradación a memoria en proceso.
 
@@ -273,7 +182,7 @@ A continuación se lista el inventario exhaustivo de las **30 variables** recono
 22. `JERICO_RATE_LIMIT_PER_MIN`
 23. `JERICO_ALLOWED_TELEGRAM_IDS`
 24. `JERICO_REDIS_URL`
-25. `JERICO_POSTGRES_URL`
+25. `JERICO_POSTGRES_URL` (valor generado por `02_postgres.sh` en `/opt/jerico/secrets/postgres_url`)
 26. `JERICO_MEMORY_TTL_HOURS`
 27. `JERICO_MEMORY_MAX_SESSIONS`
 28. `JERICO_VOICES_DIR`
@@ -310,11 +219,11 @@ scp -i ~/.ssh/id_ed25519_kaisen /path/seguro/jerico.env santiago@jerico-oracle:/
 
 | Fase del Fallo | Causa Probable / Escenario | Procedimiento de Rollback & Mitigación | Tiempo Máx. Recuperación |
 | :--- | :--- | :--- | :---: |
-| **Fase 1: Creación de Instancia OCI** | Error de cuota en OCI, indisponibilidad de shape A1.Flex ARM64 en el AD seleccionado. | 1. Cambiar de Availability Domain dentro de la misma región.<br>2. Si persiste, conmutar al shape de contingencia `VM.Standard.E2.1.Micro` (AMD64).<br>3. En caso extremo, destruir la instancia creada y reintentar. | 5 minutos |
+| **Fase 1: Creación de Instancia OCI** | Error de cuota en OCI, indisponibilidad de shape A1.Flex ARM64 en el AD seleccionado. | Plan B de la guía (Parte D): 1. Reintentar rotando fault domains y horarios.<br>2. `scripts/oci/00_retry_launch_a1.sh` en Cloud Shell.<br>3. Crear 1 OCPU / 6 GB y ampliar a 2/12 después.<br>Sin contingencia x86 ni cambio de región. | Variable |
 | **Fase 2: Red & Tailscale** | Pérdida de conectividad SSH tras cerrar el puerto 22 en OCI o falla del servicio `tailscaled`. | 1. Abrir **OCI Console** ➔ Compute ➔ Instance ➔ **Console Connection** (Cloud Shell o VNC Connection). Este canal Out-Of-Band (OOB) no depende de la red pública ni de Tailscale.<br>2. Iniciar sesión mediante consola serie con el usuario `ubuntu` o `santiago`.<br>3. Verificar estado del daemon: `systemctl restart tailscaled`.<br>4. Si es necesario, reabrir temporalmente la regla TCP 22 en OCI Security List. | 10 minutos |
 | **Fase 3: SSH Hardening** | Bloqueo por sintaxis inválida en `/etc/ssh/sshd_config.d/01-kaisen-security.conf`. | 1. Conectar por OCI Serial Console Connection.<br>2. Renombrar o eliminar el archivo conflictivo:<br>`sudo rm /etc/ssh/sshd_config.d/01-kaisen-security.conf`<br>3. Reiniciar SSH: `sudo systemctl restart ssh`. | 5 minutos |
-| **Fase 4: Docker Compose & Jericó** | Contenedor `jerico-core` entra en `CrashLoopBackOff`, error en build, incompatibilidad de variables `.env`. | 1. Detener el despliegue fallido: `docker compose down`.<br>2. Consultar logs de error: `docker compose logs jerico-core`.<br>3. Regresar a la última versión estable etiquetada:<br>`git checkout <tag-anterior-aprobado>`<br>`docker compose up -d --build`.<br>4. Repetir verificaciones de salud. | 5 minutos |
-| **Fase 5: Redis & Persistencia** | Corrupción del archivo AOF (`appendonly.aof`) o fallo al levantar el contenedor `jerico-redis`. | 1. Detener Compose: `docker compose stop redis`.<br>2. Intentar reparar AOF: `docker compose run --rm redis redis-check-aof --fix /data/appendonly.aof`.<br>3. Si el volumen es irrecuperable: eliminar el volumen temporal `docker volume rm jerico_redis_data` y recrearlo (las sesiones de memoria son volátiles de corto plazo).<br>4. Iniciar servicio: `docker compose up -d redis`. | 5 minutos |
+| **Fase 4: Docker Compose & Jericó** | Contenedor `jerico-core` entra en `CrashLoopBackOff`, error en build, incompatibilidad de variables `.env`. | 1. Detener el despliegue fallido: `jc down`.<br>2. Consultar logs de error: `jc logs jerico-core`.<br>3. Regresar a la última versión estable etiquetada (desde la laptop):<br>`git checkout <tag-anterior-aprobado>`<br>`scripts/oci/sync_repo_to_vps.sh`<br>y en la VM `jc up -d --build`.<br>4. Repetir verificaciones de salud. | 5 minutos |
+| **Fase 5: Redis & Persistencia** | Corrupción del archivo AOF (`appendonly.aof`) o fallo al levantar el contenedor `jerico-redis`. | 1. Detener Compose: `jc stop redis`.<br>2. Intentar reparar AOF: `jc run --rm redis redis-check-aof --fix /data/appendonly.aof`.<br>3. Si el volumen es irrecuperable: eliminar el volumen temporal `docker volume rm jerico_redis_data` y recrearlo (las sesiones de memoria son volátiles de corto plazo).<br>4. Iniciar servicio: `jc up -d redis`. | 5 minutos |
 
 ---
 
@@ -325,7 +234,7 @@ Para declarar la ventana formalmente **CERRADA Y EXITOSA**, se requiere verifica
 
 1. [ ] **Aislamiento Perimetral:** El puerto 22 y los puertos de aplicación (8000, 6379, 5432) están 100% cerrados a `0.0.0.0/0` en la Security List de OCI.
 2. [ ] **Acceso Tailscale Zero-Trust:** El nodo `jerico-oracle` responde en el Tailnet corporativo y los 5 ingenieros autorizados pueden autenticar por SSH mediante sus llaves públicas individuales.
-3. [ ] **Contenedores Activos:** `docker compose ps` reporta `jerico-core` y `jerico-redis` en estado `Up` y `healthy`.
+3. [ ] **Contenedores Activos:** `jc ps` reporta `jerico-core` y `jerico-redis` en estado `Up` y `healthy`.
 4. [ ] **Binds Seguros en Loopback:** `ss -tulpn` confirma que los servicios escuchan exclusivamente en `127.0.0.1:8000` y `127.0.0.1:6379`.
 5. [ ] **Salud de Aplicación:** `http://127.0.0.1:8000/health` responde con HTTP 200 y JSON `status: ok`.
 6. [ ] **Operatividad de Redis Demostrada:** `redis-cli ping` responde `PONG` en el contenedor de Redis y almacena claves en las pruebas.
@@ -346,15 +255,15 @@ Para declarar la ventana formalmente **CERRADA Y EXITOSA**, se requiere verifica
 ## 1. Identificación del Nodo
 - **Hostname en Tailscale:** jerico-oracle
 - **IP Privada Tailscale:** [100.x.y.z]
-- **Región / AD OCI:** [ej. sa-saopaulo-1 / AD-1]
-- **Shape Aprovisionado:** VM.Standard.A1.Flex (ARM64, 4 OCPU, 24 GB RAM)
+- **Región / AD OCI:** sa-bogota-1 / AD-1
+- **Shape Aprovisionado:** VM.Standard.A1.Flex (ARM64, 2 OCPU, 12 GB RAM)
 - **Versión de OS:** Ubuntu 24.04 LTS (Linux kernel aarch64)
 
 ## 2. Evidencias de Verificación
 - **OCI Security List:** Puerto 22 cerrado a internet público [VERIFICADO]
 - **SSH Individual:** 5 cuentas creadas con llaves ed25519 [VERIFICADO]
 - **Docker Compose:** Tag desplegado: [tag / commit hash]
-- **Redis Health:** docker compose exec redis redis-cli ping -> PONG [VERIFICADO]
+- **Redis Health:** jc exec redis redis-cli ping -> PONG [VERIFICADO]
 - **API Health:** curl http://127.0.0.1:8000/health -> {"status":"ok"} [VERIFICADO]
 - **Prueba E2E L0:** scripts/test_e2e.sh completado con código 0 [VERIFICADO]
 - **Binds de Red:** 127.0.0.1:8000 y 127.0.0.1:6379 estrictos [VERIFICADO]
@@ -365,3 +274,6 @@ Para declarar la ventana formalmente **CERRADA Y EXITOSA**, se requiere verifica
 ## 4. Dictamen Final
 La infraestructura del VPS Oracle se encuentra aprovisionada, endurecida y lista para recibir tráfico operativo de Jericó AI-OS bajo arquitectura Zero-Trust.
 ```
+
+---
+> 🕒 **Última modificación:** 11/10/2026 18:15 (Claude Code · Opus 5.5)

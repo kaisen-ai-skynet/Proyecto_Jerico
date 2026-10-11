@@ -44,7 +44,7 @@ Proyecto_Jerico/
 │       ├── ESPECIFICACIONES_TECNICAS.md       (UUIDs Notion, YouTrack, RBAC — ÚNICA fuente)
 │       ├── MAPA_RUTAS_INVENTARIO.md
 │       └── PLAN_CONEXION_VPS_ORACLE_EQUIPO.md
-├── scripts/bootstrap_vps_oracle.sh    # Fase 0 (canónico único)
+├── scripts/oci/01_bootstrap.sh    # Fase 0 (canónico único)
 └── README.md
 ```
 
@@ -59,10 +59,13 @@ Proyecto_Jerico/
 | Notion DBs + YouTrack + guardrails | `docs/spec/ESPECIFICACIONES_TECNICAS.md` |
 | Plan conexión VPS Oracle equipo | `docs/spec/PLAN_CONEXION_VPS_ORACLE_EQUIPO.md` |
 | Inventario rutas Jarvis/Jerico | `docs/spec/MAPA_RUTAS_INVENTARIO.md` |
-| Script bootstrap VPS Oracle | `scripts/bootstrap_vps_oracle.sh` |
+| Script bootstrap VPS Oracle | `scripts/oci/01_bootstrap.sh` |
 | Nota viva ejecutiva | `~/Kaisen_AI/02_Obsidian_Kaisen/01_Proyectos/Proyecto_Jerico.md` |
 | Reglas Copilot | `.github/muse-instructions.md` |
 | Prompt generar README | `.github/prompts/generar-readme.prompt.md` |
 | Hub de coordinación multi-agente | `~/Kaisen_AI/01_Proyectos/Boceto_jerico/` |
 
 `docs/ARQUITECTURA.md` y `docs/ESPECIFICACIONES_TECNICAS.md` son punteros, no copias.
+
+---
+> 🕒 **Última modificación:** 11/10/2026 18:25 (Claude Code · Opus 5.5)

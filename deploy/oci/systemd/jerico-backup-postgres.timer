@@ -1,0 +1,10 @@
+[Unit]
+Description=Jerico - backup nocturno de PostgreSQL (03:15 America/Bogota)
+
+[Timer]
+OnCalendar=*-*-* 03:15:00
+RandomizedDelaySec=10min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

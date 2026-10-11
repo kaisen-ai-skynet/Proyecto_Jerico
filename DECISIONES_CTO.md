@@ -58,6 +58,15 @@ Se implementará un respaldo automatizado nocturno vía `pg_dump`, el cual será
 - `scripts/backup_postgres.sh` (nuevo script de automatización y exportación remota)
 - `src/jerico/cron/jobs.py`
 
+### Addendum D2 — 11/10/2026 (revisión por cambio de límites de Oracle)
+- **Hecho nuevo:** Oracle redujo el Always Free Ampere A1 de 4 OCPU / 24 GB a **2 OCPU / 12 GB** (comunicado del 21/07/2026; verificado el 30/09/2026, ver Obsidian `Infraestructura/Decision_Arquitectura_Jerico_Oracle_2026-09-30.md`). La premisa "4/24" de esta decisión cayó.
+- **Decisión del CTO:** región **Bogotá (`sa-bogota-1`)** y cuenta **Always Free pura** (sin pago por uso).
+- **Ajuste de topología:** en lugar de un servidor de base de datos independiente, Fase 0 usa **una sola VM A1 de 2 OCPU / 12 GB** con PostgreSQL 16 en contenedor, publicado **solo en `127.0.0.1:5432`** y accesible para Jericó por la red interna `jerico_net`. Dos VMs de 1/6 consumirían todo el cupo A1 y dejarían cajas pequeñas; se reevalúa con carga real.
+- **Se mantienen sin cambios:** 5432 nunca expuesto, acceso solo por Tailscale/SSH, backup nocturno `pg_dump` cifrado y enviado fuera de la VM.
+- **Implementación:** `docker-compose.prod.yml`, `scripts/oci/` (bootstrap con ufw, Postgres, backups con age + rclone a OCI Object Storage, cierre perimetral, verificación) y `deploy/oci/` (timer systemd y plantillas). El script previsto como `scripts/backup_postgres.sh` vive en `scripts/oci/backup_postgres.sh`. Guía: `docs/guia-oci-principiantes.md`.
+- **Descartado en Fase 0:** contingencia x86 `E2.1.Micro` (rompe la regla ARM64) y Coolify (el puerto 8000 choca con la API; Compose basta).
+- **Pendiente de D1 (sin cambio aquí):** el código aún no usa PostgreSQL (`StateEngine` sigue en SQLite); la base queda lista para cuando se implemente D1.
+
 ---
 
 ## D3: Sandboxing de Herramientas — Subprocess Aislado y Prohibición de docker.sock
@@ -188,3 +197,6 @@ El protocolo implementará:
 - `src/jerico/gateway/platforms/telegram.py`: Interfaz de botones inline (Aprobar/Rechazar) y validación de `chat_id`.
 - `src/jerico/gateway/platforms/cli.py`: Interfaz interactiva de consola para aprobación local de respaldo.
 - `tests/test_approval_protocol.py`: Pruebas de integración del flujo de aprobación, rechazo y timeout de 10 min.
+
+---
+> 🕒 **Última modificación:** 11/10/2026 18:20 (Claude Code · Opus 5.5)

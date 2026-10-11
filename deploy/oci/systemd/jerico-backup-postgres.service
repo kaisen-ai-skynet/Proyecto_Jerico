@@ -1,0 +1,11 @@
+[Unit]
+Description=Jerico - backup cifrado de PostgreSQL fuera de la VM
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/jerico/app/scripts/oci/backup_postgres.sh
+Nice=10
+IOSchedulingClass=idle
