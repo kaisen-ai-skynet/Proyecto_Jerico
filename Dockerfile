@@ -11,6 +11,10 @@ COPY pyproject.toml ./
 # Keep dependency installation cached when only application source changes.
 RUN python -c 'import subprocess, tomllib; deps = tomllib.load(open("pyproject.toml", "rb"))["project"]["dependencies"]; subprocess.check_call(["pip", "install", "--no-cache-dir", *deps])'
 
+# Extras opcionales (p. ej. EXTRAS=crm); vacío = imagen de jerico-core intacta.
+ARG EXTRAS=""
+RUN if [ -n "$EXTRAS" ]; then python -c 'import os, subprocess, tomllib; opt = tomllib.load(open("pyproject.toml", "rb"))["project"]["optional-dependencies"]; deps = [d for e in os.environ["EXTRAS"].split(",") for d in opt[e]]; subprocess.check_call(["pip", "install", "--no-cache-dir", *deps])'; fi
+
 COPY README.md ./
 COPY src ./src
 
@@ -24,11 +28,16 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 COPY --from=base /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
 COPY --from=base /usr/local/bin/jerico /usr/local/bin/jerico
+COPY --from=base /usr/local/bin/jerico-crm /usr/local/bin/jerico-crm
 COPY --from=base /app /app
 
+# Herramientas de respaldo del CRM (age + rclone); solo con --build-arg CRM_TOOLS=1.
+ARG CRM_TOOLS=0
+RUN if [ "$CRM_TOOLS" = "1" ]; then apt-get update && apt-get install -y --no-install-recommends age rclone && rm -rf /var/lib/apt/lists/*; fi
+
 RUN useradd --create-home jerico \
-    && mkdir -p /app/data \
-    && chown jerico:jerico /app/data
+    && mkdir -p /app/data /app/crm-data \
+    && chown jerico:jerico /app/data /app/crm-data
 USER jerico
 
 EXPOSE 8000

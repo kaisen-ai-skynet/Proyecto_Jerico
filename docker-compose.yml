@@ -36,6 +36,31 @@ services:
       timeout: 3s
       retries: 5
 
+  jerico-crm:
+    build:
+      context: .
+      args:
+        EXTRAS: crm
+        CRM_TOOLS: "1"
+    image: jerico-crm:0.2.0
+    container_name: jerico-crm
+    command: ["jerico-crm"]
+    env_file: .env
+    environment:
+      JERICO_CRM_DATA_DIR: /app/crm-data
+    volumes:
+      - jerico_crm_data:/app/crm-data
+    restart: unless-stopped
+    mem_limit: 512m
+    cpus: 0.5
+    healthcheck:
+      test: ["CMD", "python", "-c", "import os,sys,time; sys.exit(0 if time.time()-os.path.getmtime('/app/crm-data/heartbeat') < 120 else 1)"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+    networks:
+      - jerico_net
+
 networks:
   jerico_net:
     name: jerico_net
@@ -45,6 +70,8 @@ volumes:
     name: jerico_redis_data
   jerico_state_data:
     name: jerico_state_data
+  jerico_crm_data:
+    name: jerico_crm_data
 # Red vieja del host en quarantine. No usar hasta salir de Fase 0:
 #   skynet_net:
 #     name: skynet_skynet_net
