@@ -71,7 +71,7 @@ PYTHONPATH=src .venv/bin/python -m pytest <TESTS> -q \
   - **Hecho cuando:** tests verdes y VERIF.
   - **Verificación:** VERIF con `<TESTS>` = `tests/test_crm_sendwindow.py`.
 
-- [ ] **F2-T06 — Cadencias puras (`cadence.py`)**
+- [x] **F2-T06 — Cadencias puras (`cadence.py`)**
   - **Delegable a Gemini:** SÍ.
   - Requisitos: VCRM-018, 022, 023, 026, 032, 034 (cálculo).
   - **Entregable exacto:** `src/jerico/crm/cadence.py` (matriz por defecto de plan-f2 §5.2, `row_for(reason)`, `first_action(now, interval)`, `after_step(...)`, `frequency_days("weekly"|"monthly")`), `tests/test_crm_cadence.py` (parte pura).
