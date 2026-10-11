@@ -1,6 +1,6 @@
 # Spec 001 — CRM operativo asistido por IA para ventas de Kaisen AI
 
-- **Estado:** **APROBADA** (Gate 1) por delegación del CTO el 04/10/2026, tras aplicar los ajustes finales A y las respuestas legales B de la ronda final (sección 8). Historial: auditoría QA de la fase 3 (H-01 a H-17), ronda 1 del CTO, correcciones QA ronda 2 (N-02, N-03, N-06, N-07, N-09, N-10), ronda 2 del CTO (P-02, P-06 de F1, P-11, P-12 en su tamaño, P-13, P-14, P-25 a P-27; N-01, N-04, N-05, N-11) y ronda final (A y B), todas del 04/10/2026. Todas las propuestas están ratificadas, las interpretaciones I-01 a I-07 confirmadas o reemplazadas, las preguntas al abogado J-01 a J-14 aceptadas por delegación y no queda ninguna pregunta abierta. La constitución del proyecto quedó **RATIFICADA** el 04/10/2026 con la enmienda de su punto 4 (excepción a D1 para el CRM). Siguiente paso: pasada final del reviewer sobre A y B y, después, plan de F1. **Cambio del 05/10/2026 (fase 6, delta spec-anchored):** decisiones K-1 a K-8 del CTO por delegación (sección 8); añade VCRM-163 a VCRM-168 (F1).
+- **Estado:** **APROBADA** (Gate 1) por delegación del CTO el 04/10/2026, tras aplicar los ajustes finales A y las respuestas legales B de la ronda final (sección 8). Historial: auditoría QA de la fase 3 (H-01 a H-17), ronda 1 del CTO, correcciones QA ronda 2 (N-02, N-03, N-06, N-07, N-09, N-10), ronda 2 del CTO (P-02, P-06 de F1, P-11, P-12 en su tamaño, P-13, P-14, P-25 a P-27; N-01, N-04, N-05, N-11) y ronda final (A y B), todas del 04/10/2026. Todas las propuestas están ratificadas, las interpretaciones I-01 a I-07 confirmadas o reemplazadas, las preguntas al abogado J-01 a J-14 aceptadas por delegación y no queda ninguna pregunta abierta. La constitución del proyecto quedó **RATIFICADA** el 04/10/2026 con la enmienda de su punto 4 (excepción a D1 para el CRM). Siguiente paso: pasada final del reviewer sobre A y B y, después, plan de F1. **Cambio del 11/10/2026 (planificación de F2, delta spec-anchored):** decisiones Q-1 a Q-5 por delegación (sección 8); añade VCRM-169 a VCRM-171 (F2). **Cambio del 05/10/2026 (fase 6, delta spec-anchored):** decisiones K-1 a K-8 del CTO por delegación (sección 8); añade VCRM-163 a VCRM-168 (F1).
 - **Tipo de cambio:** funcionalidad nueva (línea de trabajo bifurcada dentro de Jericó).
 - **Fuente:** idea original del CTO (Santiago Gonzalez) del 04/10/2026, transcrita en la petición de esta línea; sus respuestas a las rondas 1, 2 y final de clarificación, y las respuestas del abogado (Juan José) por delegación (secciones 8 y 9).
 - **Análisis de opciones técnicas:** documento de análisis de opciones que acompaña a esta spec.
@@ -306,6 +306,9 @@ Cada requisito se mapea 1:1 a al menos un caso de prueba. Etiqueta de fase entre
 - **VCRM-103 [F2]** SI llega por el canal de envío al cliente una respuesta del titular asociada a un lead (4.5) cuyo texto nuevo (4.5) no contiene la palabra clave «BAJA» y a la que no se aplica VCRM-119, ENTONCES EL SISTEMA la registra en el historial del lead y la reenvía al comercial del lead (4.5) para revisión humana según VCRM-153, sin cambiar su estado (PR-20 ratificada).
 - **VCRM-122 [F2]** SI llega por el canal de envío al cliente una respuesta no asociable a un lead (4.5), ENTONCES EL SISTEMA no cambia el estado de ningún lead, no registra autorización ni baja, conserva la respuesta y la presenta al CTO para revisión humana según VCRM-153 (PR-27 ratificada).
 - **VCRM-153 [F2]** CUANDO se presenta una respuesta del titular para revisión humana (VCRM-103 o VCRM-122), EL SISTEMA la registra como solicitud del titular «por clasificar», con fecha límite de 15 días hábiles desde su recepción (VCRM-150), y ofrece los botones «Aplicar baja», «Registrar consulta o reclamo» y «Sin solicitud»; con «Aplicar baja» aplica VCRM-070 con medio «respuesta al correo confirmada por un usuario»; con «Registrar consulta o reclamo» la reclasifica según VCRM-150; con «Sin solicitud» la cierra; cada decisión se registra con autor y fecha-hora (decisión P-31; J-05, J-06).
+- **VCRM-169 [F2]** EL SISTEMA obtiene las respuestas del titular y las solicitudes de baja de la cabecera (VCRM-123) consultando periódicamente el buzón del sistema mediante conexiones iniciadas por el propio sistema, sin exponer ninguna ruta pública de ingreso (decisiones P-10 y Q-2), y procesa cada mensaje recibido una sola vez aunque la consulta se repita o el servicio se reinicie.
+- **VCRM-170 [F2]** SI la consulta del buzón (VCRM-169) falla por conexión o credenciales, ENTONCES EL SISTEMA avisa al CTO una vez por episodio de fallo, reintenta en la siguiente consulta periódica y, al recuperarse, procesa todos los mensajes recibidos durante el fallo, sin perder ninguno (decisión Q-2).
+- **VCRM-171 [F2]** CUANDO se activa F2 sobre datos de F1, EL SISTEMA conserva sin pérdida ni cambio de significado los estados de leads, autorizaciones, notificaciones, solicitudes de titulares e historial, y mantiene operativos los botones emitidos antes de la activación (decisión Q-1).
 - **VCRM-071 [F1]** MIENTRAS la huella (4.5) de un contacto figura en la lista de supresión, EL SISTEMA no genera propuestas ni envíos comerciales dirigidos a ese contacto, cualquiera que sea el lead al que esté asociado.
 - **VCRM-095 [F1]** EL SISTEMA guarda en la lista de supresión únicamente la huella (4.5) del contacto normalizado, la fecha-hora y el medio de la solicitud; nunca el contacto en claro.
 - **VCRM-072 [F2]** EL SISTEMA envía mensajes comerciales y solicitudes de autorización al cliente final, sea persona natural o empresa, solo dentro de la franja permitida en hora de Colombia: lunes a viernes de 07:00 a 19:00 y sábados de 08:00 a 15:00, excluidos domingos y festivos de Colombia (franja configurable, 4.6) (J-11).
@@ -346,11 +349,13 @@ Cada requisito se mapea 1:1 a al menos un caso de prueba. Etiqueta de fase entre
 | Fase | Requisitos | Cantidad |
 | :--- | :--- | :---: |
 | F1 | 001–017, 046–052, 065, 066, 070, 071, 073–075, 077–098, 104, 105, 107, 109–118, 125–140, 144–147, 150–152, 154–156, 158, 159, 162–168 | 101 |
-| F2 | 018–039, 067–069, 072, 076, 099–103, 119–124, 141–143, 148, 149, 153, 160, 161 | 46 |
+| F2 | 018–039, 067–069, 072, 076, 099–103, 119–124, 141–143, 148, 149, 153, 160, 161, 169–171 | 49 |
 | F3 | 040–045, 053–056 | 10 |
 | F4 | 057–064, 157 | 9 |
-| **Total vigentes** | | **166** |
+| **Total vigentes** | | **169** |
 | Retirados | 106 y 108 (F1) | 2 |
+
+Variación por las decisiones Q del 11/10/2026 (166 → 169 vigentes): +3 nuevos, todos en F2 (VCRM-169 y VCRM-170 lectura del buzón sin ruta pública, Q-2; VCRM-171 continuidad de datos y botones al activar F2, Q-1); 0 retirados; ningún cambio de fase. F2: 46 + 3 = 49.
 
 Variación por las decisiones K del 05/10/2026 (160 → 166 vigentes): +6 nuevos, todos en F1 (VCRM-163 botón «Retractar» en la ficha, K-2; VCRM-164 y VCRM-165 conservación y huella mínima de la evidencia de autorización, K-4; VCRM-166 exportación en partes numeradas, K-5; VCRM-167 y VCRM-168 festivos extraordinarios configurables, K-6); 0 retirados; ningún cambio de fase. F1: 95 + 6 = 101.
 
@@ -529,6 +534,10 @@ Valores por defecto fijados por el CTO, por el abogado (por delegación) o por e
 | Referencia a la política de tratamiento y al aviso de privacidad (URL o texto, con versión) | Sin valor | — | VCRM-148, 149 | J-02 |
 | Encargados mencionados en la solicitud de autorización | Telegram y Google | — | VCRM-148 | J-10 |
 | Buzón remitente y credenciales | Sin valor | — | VCRM-105, 140 | Decisión P-27 |
+| Buzón de consulta de respuestas y su credencial | Sin valor | — | VCRM-169, 170 | Decisión Q-2 |
+| Período de consulta del buzón | 5 minutos | Mínimo 1 minuto | VCRM-169 | Decisión Q-2 |
+| Cadencia del motivo «momento no oportuno» | Un paso cada 30 días, 3 pasos (el CTO puede fijar 60 días) | — | VCRM-018, 023 | Decisión Q-3 |
+| Tipo de contenido por motivo | Precio: propuesta de valor; momento: recordatorio; proveedor y no interesado: contenido educativo; otro: genérico | — | VCRM-027, 161 | Decisión Q-3 |
 | Festivos extraordinarios (fechas decretadas adicionales a los festivos calculados por ley), en la configuración del sistema y/o en un archivo de fechas | Sin valor (solo festivos calculados) | Fechas con formato año-mes-día | VCRM-167, 168 | Decisión K-6 |
 
 ---
@@ -772,6 +781,21 @@ Decisiones del planificador no pedidas de forma explícita por el CTO. Tras la r
 
 **Riesgos tras las decisiones K:** (1) sin cierre transitivo, una supresión puede dejar leads del mismo titular que solo comparten un dato con otro lead coincidente; el CTO puede ordenar otra supresión sobre ellos; (2) la huella mínima no permite reconstruir la evidencia: si un tercero la exige, solo se puede comprobar un documento que se presente; (3) un festivo extraordinario mal escrito se ignora con aviso al CTO y, mientras no se corrija, ese día cuenta como hábil (los plazos vencen antes, no después).
 
+
+**Decisiones por delegación del CTO para F2 — 11/10/2026.** El humano reiteró la delegación total del 04/10/2026 para las preguntas abiertas de F2. Una verificación con búsqueda confirmó que P-15 a P-21 y PR-14 a PR-20 ya figuraban resueltas en las secciones 6 y 7; se registran aquí como **aceptado por delegación** junto con las decisiones nuevas Q-1 a Q-5.
+
+| Decisión | Opción aceptada por delegación | Porqué (una línea) |
+| :--- | :--- | :--- |
+| P-15 a P-21 | Aceptadas tal como constan en 6.2 (volumen bajo y gasto USD 0; aprueba el comercial del lead o el CTO; cadencia 30 días x 3 pasos con gate de 48 h; solo correo; empresa y persona natural con 1 contacto/semana; política y aviso del abogado; textos del CTO). | Ya fijadas por el CTO o por delegación; no hay información nueva que las cambie. |
+| PR-14 a PR-20 | Aceptadas tal como constan en 7 (reanudar desde la reanudación; frecuencia desde el último envío; «reactivado» detiene la cadencia; 3 intentos 0/1/5 min; diferir al inicio de la siguiente franja; semana lunes–domingo con diferimiento; «BAJA» por respuesta). | Son las alternativas conservadoras frente a Ley 2300 y no generan ráfagas de envíos. |
+| Q-1 | Los valores internos de estados, autorizaciones, notificaciones y solicitudes pasan de español a inglés mediante migración de la base antes de F2; lo que ve el usuario no cambia (VCRM-171). | Coherencia de identificadores (código en inglés) a bajo costo mientras no hay datos de producción. |
+| Q-2 | La lectura de respuestas es un sondeo saliente del buzón del sistema por IMAP cada 5 minutos, sin ruta pública (VCRM-169, 170). | Cumple P-10 (sin webhook ni puerto), sin costo y con latencia suficiente para honrar una baja el mismo día. |
+| Q-3 | Matriz de motivos: precio → propuesta de valor; momento no oportuno → recordatorio cada 30 días (60 configurable); ya tiene proveedor y no interesado → contenido educativo; otro → genérico; 3 pasos cada uno. | Respeta P-17 y el tope semanal, y adapta el tono al motivo sin automatizar redacción (textos del CTO, P-21). |
+| Q-4 | `MIENTRAS` no hay autorización vigente, la guarda de contacto comercial niega propuestas y envíos (cierra la observación de VCRM-067), salvo la solicitud de autorización (VCRM-068). | Una sola guarda para todos los envíos; evita contactar sin consentimiento. |
+| Q-5 | Tras una baja por respuesta o cabecera no se envía acuse al titular. | VCRM-036 exige gate para cualquier mensaje y la baja debe ser inmediata (P-31). |
+
+**Riesgos tras las decisiones Q:** (1) la migración Q-1 modifica datos existentes; se mitiga con copia previa y transacción única; (2) el sondeo IMAP depende de la disponibilidad del proveedor de correo y de una credencial adicional; (3) los rebotes y respuestas automáticas llegan al CTO como respuestas no asociables (VCRM-122).
+
 ---
 
 ## 9. Preguntas para el abogado (Juan José)
@@ -797,4 +821,4 @@ Consolida lo que estuvo marcado `[VERIFICAR CON ABOGADO]` en esta spec y en su a
 
 ---
 
-> Última modificación: 05/10/2026 12:18 (Planificador SDD)
+> Última modificación: 11/10/2026 17:53 (Planificador SDD)
