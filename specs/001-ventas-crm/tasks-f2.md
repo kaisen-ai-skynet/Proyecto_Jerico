@@ -168,7 +168,7 @@ PYTHONPATH=src .venv/bin/python -m pytest <TESTS> -q \
   - **Hecho cuando:** verde y VERIF.
   - **Verificación:** VERIF con `<TESTS>` = `tests/test_crm_gate.py tests/test_crm_sendwindow.py`.
 
-- [ ] **F2-T16 — Cabeceras de baja en el adaptador SMTP**
+- [x] **F2-T16 — Cabeceras de baja en el adaptador SMTP**
   - **Delegable a Gemini:** NO — arquitectura/seguridad: el archivo maneja credenciales SMTP.
   - Requisitos: VCRM-123, 069.
   - **Entregable exacto:** `src/jerico/crm/ports.py` (`EmailSender.send(..., headers=None)`), `src/jerico/crm/mail.py` (cabeceras opcionales; rechazo de CR/LF), `tests/crm_support.py` (`FakeEmailSender` captura cabeceras), `tests/test_crm_adapters.py` (adición).

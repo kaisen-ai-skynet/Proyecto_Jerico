@@ -5,7 +5,8 @@ Esqueleto: crece con cada tarea (FakeTelegram, FakeEmailSender, FakeClock, make_
 
 import sqlite3
 from collections import defaultdict
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -134,6 +135,7 @@ class SentEmail:
     to: str
     subject: str
     body: str
+    headers: dict[str, str] = field(default_factory=dict)
 
 
 class FakeEmailSender:
@@ -148,8 +150,10 @@ class FakeEmailSender:
     def fail_next(self, to: str, times: int = 1) -> None:
         self._failures[to] += times
 
-    async def send(self, to: str, subject: str, body: str) -> SendResult:
-        item = SentEmail(to, subject, body)
+    async def send(
+        self, to: str, subject: str, body: str, headers: Mapping[str, str] | None = None
+    ) -> SendResult:
+        item = SentEmail(to, subject, body, dict(headers or {}))
         if not self.configured:
             return SendResult(delivered=False, permanent=True, error="mailbox_not_configured")
         self.attempts.append(item)

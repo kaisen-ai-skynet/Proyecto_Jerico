@@ -599,3 +599,92 @@ async def test_fakes_satisfy_ports_and_script_failures(tmp_path: Path) -> None:
     clock.advance(minutes=5)
     assert (clock.now() - start).total_seconds() == 300
     assert clock.now().tzinfo is not None
+
+
+# --- Cabeceras de correo opcionales (F2-T16, VCRM-123, 069) ----------------------------------
+
+UNSUB = "<mailto:crm@kaisen.test?subject=BAJA%2042.abcdef>"
+
+
+@pytest.mark.asyncio
+async def test_vcrm123_cabecera_list_unsubscribe_mailto(fake_smtp: type[_FakeSMTP]) -> None:
+    result = await _sender("ssl").send(
+        "cliente@example.test", "Seguimiento", "Cuerpo", headers={"List-Unsubscribe": UNSUB}
+    )
+
+    assert result.delivered is True
+    (msg,) = fake_smtp.instances[0].sent
+    assert msg["List-Unsubscribe"] == UNSUB
+    assert msg["To"] == "cliente@example.test"
+    assert msg["Subject"] == "Seguimiento"
+
+
+@pytest.mark.parametrize(
+    ("to", "subject", "headers"),
+    [
+        ("cliente@example.test\r\nBcc: otro@example.test", "Asunto", None),
+        ("cliente@example.test", "Asunto\nBcc: otro@example.test", None),
+        ("cliente@example.test", "Asunto", {"List-Unsubscribe": f"{UNSUB}\r\nBcc: x@example.test"}),
+        ("cliente@example.test", "Asunto", {"List-Unsubscribe": f"{UNSUB}\nX: y"}),
+        ("cliente@example.test", "Asunto", {"X-Extra\nBcc": "valor"}),
+        ("cliente@example.test", "Asunto", {"List-Unsubscribe": "valor\x00nulo"}),
+        ("cliente@example.test", "Asunto", {"Bcc": "otro@example.test"}),  # nombre prohibido
+        ("cliente@example.test", "Asunto", {"subject": "Otro"}),  # sin importar mayúsculas
+        ("cliente@example.test", "Asunto", {"Message-ID": "<x@y>"}),
+        ("cliente@example.test", "Asunto", {"Nombre Con Espacio": "valor"}),
+        ("cliente@example.test", "Asunto", {"": "valor"}),
+    ],
+)
+@pytest.mark.asyncio
+async def test_vcrm123_rechaza_crlf_en_cabeceras(
+    fake_smtp: type[_FakeSMTP], to: str, subject: str, headers: dict[str, str] | None
+) -> None:
+    result = await _sender("ssl").send(to, subject, "Cuerpo", headers=headers)
+
+    assert result.delivered is False
+    assert result.permanent is True  # reintentar no lo arregla
+    assert result.error == "invalid_header"
+    assert fake_smtp.instances == []  # ni siquiera se conecta
+
+
+@pytest.mark.asyncio
+async def test_vcrm069_llamadas_f1_sin_cabeceras_siguen_igual(fake_smtp: type[_FakeSMTP]) -> None:
+    sender = _sender("ssl")
+    positional = await sender.send("cto@kaisen.test", "Lead aceptado", "Cuerpo")
+    explicit_none = await sender.send("cto@kaisen.test", "Lead aceptado", "Cuerpo", headers=None)
+    empty = await sender.send("cto@kaisen.test", "Lead aceptado", "Cuerpo", headers={})
+
+    assert positional.delivered and explicit_none.delivered and empty.delivered
+    for conn in fake_smtp.instances:
+        (msg,) = conn.sent
+        assert msg["List-Unsubscribe"] is None
+        assert set(msg.keys()) <= {
+            "From",
+            "To",
+            "Subject",
+            "Message-ID",
+            "Content-Type",
+            "Content-Transfer-Encoding",
+            "MIME-Version",
+        }
+
+
+@pytest.mark.asyncio
+async def test_vcrm069_sin_configurar_acepta_cabeceras_y_sigue_fallando() -> None:
+    result = await UnconfiguredEmailSender().send(
+        "a@b.test", "s", "b", headers={"List-Unsubscribe": UNSUB}
+    )
+    assert result.delivered is False and result.permanent is True
+    assert result.error == "mailbox_not_configured"
+
+
+@pytest.mark.asyncio
+async def test_vcrm123_doble_de_prueba_captura_cabeceras() -> None:
+    from crm_support import FakeEmailSender
+
+    fake = FakeEmailSender()
+    await fake.send("a@b.test", "s", "b")
+    await fake.send("a@b.test", "s", "b", headers={"List-Unsubscribe": UNSUB})
+
+    assert fake.sent[0].headers == {}
+    assert fake.sent[1].headers == {"List-Unsubscribe": UNSUB}

@@ -5,8 +5,10 @@ Solo destinatarios internos: el llamador resuelve la dirección desde `crm_users
 
 import asyncio
 import logging
+import re
 import smtplib
 import ssl
+from collections.abc import Mapping
 from email.message import EmailMessage
 from email.utils import make_msgid
 from typing import Literal
@@ -21,11 +23,47 @@ logger = logging.getLogger(__name__)
 SMTP_TIMEOUT_S = 30
 Security = Literal["starttls", "ssl"]
 
+# Cabeceras opcionales (VCRM-123): el llamador solo puede AÑADIR cabeceras de lista; las que
+# definen el sobre o el contenido las fija este adaptador y no se pueden pisar ni inyectar.
+_HEADER_NAME_RE = re.compile(r"[A-Za-z][A-Za-z0-9-]{0,63}")
+_RESERVED_HEADERS = frozenset(
+    {
+        "from",
+        "to",
+        "cc",
+        "bcc",
+        "subject",
+        "message-id",
+        "date",
+        "sender",
+        "return-path",
+        "content-type",
+        "content-transfer-encoding",
+        "mime-version",
+    }
+)
+_UNSAFE_CHARS = ("\r", "\n", "\x00")
+
+
+def _unsafe(value: str) -> bool:
+    return any(c in value for c in _UNSAFE_CHARS)
+
+
+def _headers_valid(headers: Mapping[str, str]) -> bool:
+    return all(
+        _HEADER_NAME_RE.fullmatch(name) is not None
+        and name.lower() not in _RESERVED_HEADERS
+        and not _unsafe(value)
+        for name, value in headers.items()
+    )
+
 
 class UnconfiguredEmailSender:
     """Buzón o credenciales sin configurar: fallo permanente sin conectar (VCRM-140)."""
 
-    async def send(self, to: str, subject: str, body: str) -> SendResult:
+    async def send(
+        self, to: str, subject: str, body: str, headers: Mapping[str, str] | None = None
+    ) -> SendResult:
         return SendResult(delivered=False, permanent=True, error="mailbox_not_configured")
 
 
@@ -48,13 +86,23 @@ class SmtpEmailSender:
     def __repr__(self) -> str:
         return f"SmtpEmailSender(host={self.host!r}, port={self.port}, security={self.security!r})"
 
-    async def send(self, to: str, subject: str, body: str) -> SendResult:
+    async def send(
+        self, to: str, subject: str, body: str, headers: Mapping[str, str] | None = None
+    ) -> SendResult:
+        extra = dict(headers or {})
+        if _unsafe(to) or _unsafe(subject) or not _headers_valid(extra):
+            return self._failed("invalid_header", permanent=True)
         msg = EmailMessage()
-        msg["From"] = self.sender
-        msg["To"] = to
-        msg["Subject"] = subject
-        msg["Message-ID"] = make_msgid(domain=self.sender.rpartition("@")[2] or None)
-        msg.set_content(body)
+        try:
+            msg["From"] = self.sender
+            msg["To"] = to
+            msg["Subject"] = subject
+            msg["Message-ID"] = make_msgid(domain=self.sender.rpartition("@")[2] or None)
+            for name, value in extra.items():
+                msg[name] = value
+            msg.set_content(body)
+        except ValueError:  # el módulo email rechaza lo que aún así sea ilegal
+            return self._failed("invalid_header", permanent=True)
         try:
             refused = await asyncio.to_thread(self._send_sync, msg)
         except smtplib.SMTPRecipientsRefused:
@@ -83,9 +131,9 @@ class SmtpEmailSender:
             return smtp.send_message(msg)
 
     @staticmethod
-    def _failed(error: str) -> SendResult:
+    def _failed(error: str, *, permanent: bool = False) -> SendResult:
         logger.warning("smtp send failed: %s", error)
-        return SendResult(delivered=False, error=error)
+        return SendResult(delivered=False, error=error, permanent=permanent)
 
 
 def build_email_sender(settings: CrmSettings) -> EmailSender:

@@ -1,5 +1,6 @@
 """Puertos (`Protocol`s) y tipos de intercambio de los adaptadores del CRM (plan §6)."""
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import BinaryIO, Literal, Protocol
@@ -72,7 +73,9 @@ class TelegramPort(Protocol):
 
 
 class EmailSender(Protocol):
-    async def send(self, to: str, subject: str, body: str) -> SendResult: ...
+    async def send(
+        self, to: str, subject: str, body: str, headers: Mapping[str, str] | None = None
+    ) -> SendResult: ...
 
 
 class CommandRunner(Protocol):
