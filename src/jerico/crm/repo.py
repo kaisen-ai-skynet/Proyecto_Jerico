@@ -192,6 +192,17 @@ def contact_matches(
     return [Lead(**dict(r)) for r in rows]
 
 
+def leads_by_email(conn: sqlite3.Connection, email: str) -> list[Lead]:
+    """Leads no suprimidos con ese correo (sin distinguir mayúsculas), en cualquier estado.
+
+    Incluye «perdido» y «baja»: quien pide la baja debe poder asociarse siempre (VCRM-102)."""
+    rows = conn.execute(
+        "SELECT * FROM crm_leads WHERE suppressed_at IS NULL AND lower(email) = ? ORDER BY id",
+        (email.strip().lower(),),
+    ).fetchall()
+    return [Lead(**dict(r)) for r in rows]
+
+
 def titular_leads(conn: sqlite3.Connection, lead: Lead) -> list[Lead]:
     """El lead y los no suprimidos con su mismo teléfono o correo, sin encadenar (K-3)."""
     rows = conn.execute(
@@ -459,25 +470,28 @@ def resolve_request_alerts(
 
 # --- Solicitudes de titulares (VCRM-150-152) ----------------------------------------------
 
-_REQUEST_UPDATE_FIELDS = frozenset({"status", "last_escalation_on", "attended_by", "attended_at"})
+_REQUEST_UPDATE_FIELDS = frozenset(
+    {"type", "due_on", "status", "last_escalation_on", "attended_by", "attended_at"}
+)
 
 
 def insert_titular_request(
     conn: sqlite3.Connection,
     *,
-    lead_id: int,
+    lead_id: int | None,
     kind: RequestType,
     medium: str,
     received_on: str,
     due_on: str,
     registered_by: int,
     now: datetime,
+    inbound_id: int | None = None,
 ) -> int:
     _require_enum(kind, RequestType, "kind")
     row = conn.execute(
         "INSERT INTO crm_titular_requests (lead_id, type, medium, received_on, due_on, "
-        "registered_by, registered_at) VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id",
-        (lead_id, kind.value, medium, received_on, due_on, registered_by, to_iso(now)),
+        "registered_by, registered_at, inbound_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
+        (lead_id, kind.value, medium, received_on, due_on, registered_by, to_iso(now), inbound_id),
     ).fetchone()
     return int(row["id"])
 
@@ -560,13 +574,27 @@ def insert_consent(
     at: datetime,
     actor_user_id: int,
     attachment_id: int | None = None,
+    notice_version: str | None = None,
+    purposes: str | None = None,
+    evidence_inbound_id: int | None = None,
 ) -> int:
     """Fila de autorización o revocatoria; nunca se modifica ni se borra (VCRM-164)."""
     _require_enum(status, AuthStatus, "status")
     row = conn.execute(
-        "INSERT INTO crm_consents (lead_id, status, medium, at, actor_user_id, attachment_id) "
-        "VALUES (?, ?, ?, ?, ?, ?) RETURNING id",
-        (lead_id, status.value, medium, to_iso(at), actor_user_id, attachment_id),
+        "INSERT INTO crm_consents (lead_id, status, medium, at, actor_user_id, attachment_id, "
+        "notice_version, purposes, evidence_inbound_id) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
+        (
+            lead_id,
+            status.value,
+            medium,
+            to_iso(at),
+            actor_user_id,
+            attachment_id,
+            notice_version,
+            purposes,
+            evidence_inbound_id,
+        ),
     ).fetchone()
     return int(row["id"])
 
@@ -1191,6 +1219,17 @@ def list_inbound(
 
     rows = conn.execute(query, params).fetchall()
     return [Inbound(**dict(r)) for r in rows]
+
+
+def cancel_open_proposals(conn: sqlite3.Connection, lead_id: int, now: datetime) -> int:
+    """Cancela TODAS las propuestas abiertas (pending/approved) del lead, de cualquier tipo."""
+    cursor = conn.execute(
+        """UPDATE crm_proposals
+        SET status = 'cancelled', resolved_at = ?
+        WHERE lead_id = ? AND status IN ('pending', 'approved')""",
+        (to_iso(now), lead_id),
+    )
+    return cursor.rowcount
 
 
 def cancel_open_followups(conn: sqlite3.Connection, lead_id: int, now: datetime) -> int:

@@ -66,7 +66,7 @@ _OUTBOX_V2 = """CREATE TABLE crm_outbox__v2 (
   last_error TEXT, provider_message_id TEXT, created_at TEXT NOT NULL
 )"""
 _REQUESTS_V2 = """CREATE TABLE crm_titular_requests__v2 (
-  id INTEGER PRIMARY KEY, lead_id INTEGER NOT NULL,
+  id INTEGER PRIMARY KEY, lead_id INTEGER,
   type TEXT NOT NULL CHECK (type IN ('inquiry','claim','unclassified')),
   medium TEXT NOT NULL, received_on TEXT NOT NULL, due_on TEXT NOT NULL,
   status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','overdue','attended')),
@@ -188,6 +188,9 @@ def _apply(conn: sqlite3.Connection) -> None:
             "WHERE kind = 'state'"
         )
     conn.execute(f"UPDATE crm_consents SET status = {_case('status', AUTH_MAP)}")  # noqa: S608
+    # Referencia al correo que sirvió de evidencia de la autorización (VCRM-141); va al final,
+    # igual que en una base nueva, para que ambos esquemas coincidan.
+    conn.execute("ALTER TABLE crm_consents ADD COLUMN evidence_inbound_id INTEGER")
     _rebuild(conn, "crm_outbox", _OUTBOX_V2, {"status": OUTBOX_MAP})
     _rebuild(
         conn,

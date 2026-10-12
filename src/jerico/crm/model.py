@@ -3,6 +3,9 @@
 from dataclasses import dataclass
 from enum import StrEnum
 
+# Actor de las acciones que aplica el propio sistema (bajas por correo, etc.): no es un usuario.
+SYSTEM_USER_ID = 0
+
 
 class Role(StrEnum):
     COMMERCIAL = "commercial"
@@ -253,7 +256,7 @@ class TitularRequest:
     """Solicitud de un titular; fechas de recepción y límite en Bogotá (`YYYY-MM-DD`)."""
 
     id: int
-    lead_id: int
+    lead_id: int | None  # None: respuesta «por clasificar» sin lead asociable (VCRM-122)
     type: str
     medium: str
     received_on: str

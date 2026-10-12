@@ -22,6 +22,7 @@ from jerico.crm.cadence import (
 from jerico.crm.db import CrmDatabase
 from jerico.crm.leads import REJECT_REASONS
 from jerico.crm.model import (
+    SYSTEM_USER_ID,
     AuditAction,
     AuditDetail,
     AuditOutcome,
@@ -294,6 +295,21 @@ def test_vcrm018_rechazo_con_autorizacion_crea_cadencia(tmp_path: Path) -> None:
         assert cad.interval_days == 30
         assert from_iso(cad.next_action_at or "") == T0 + timedelta(days=30)
         assert any("cadencia" in m.text.lower() or "nutrición" in m.text.lower() for m in out)
+    db.close()
+
+
+def test_el_cambio_automatico_a_nutricion_se_atribuye_al_sistema(tmp_path: Path) -> None:
+    """El paso a «en nutrición» lo hace el sistema: no se inventa un usuario como autor."""
+    db, _, com, _, _ = _setup_db(tmp_path, activate_f2=True)
+    lead_id = _create_lead(db, com.id, state=LeadState.CONTACTED, authorized=True)
+    with db.tx() as conn:
+        leads.transition(conn, com, lead_id, LeadState.REJECTED, now=T0, reason="precio")
+        events = conn.execute(
+            "SELECT actor_user_id FROM crm_lead_events WHERE lead_id = ? AND kind = 'state' "
+            "AND new_value = 'nurturing'",
+            (lead_id,),
+        ).fetchall()
+    assert [row["actor_user_id"] for row in events] == [SYSTEM_USER_ID]
     db.close()
 
 

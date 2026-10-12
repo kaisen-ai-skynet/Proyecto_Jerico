@@ -186,7 +186,7 @@ PYTHONPATH=src .venv/bin/python -m pytest <TESTS> -q \
   - **Hecho cuando:** verde y VERIF.
   - **Verificación:** VERIF con `<TESTS>` = `tests/test_crm_inbox.py`.
 
-- [ ] **F2-T18 — Procesamiento de respuestas entrantes**
+- [x] **F2-T18 — Procesamiento de respuestas entrantes**
   - **Delegable a Gemini:** NO — arquitectura/seguridad: aplica bajas y deriva autorizaciones.
   - Requisitos: VCRM-102, 103, 119, 120, 122, 124, 153, 169, 170.
   - **Entregable exacto:** `src/jerico/crm/inbound.py` (`associate`, `classify`, `poll_and_process`), `src/jerico/crm/compliance.py` (reuso de la baja de F1 con medios «respuesta al correo», «cabecera de baja del correo» y «respuesta al correo confirmada por un usuario»), `tests/test_crm_inbound.py` (parte de servicio).

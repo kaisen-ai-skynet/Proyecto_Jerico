@@ -496,6 +496,43 @@ def test_vcrm067_guarda_exige_autorizacion(db: CrmDatabase, users: dict[str, Use
         assert compliance.may_contact_commercially(conn, _lead_of(conn, no_evidence), keys) is False
 
 
+def test_vcrm141_consentimiento_guarda_version_finalidades_y_evidencia(
+    db: CrmDatabase, users: dict[str, User]
+) -> None:
+    lead_id = _lead(db, users["com"].id)
+    with db.tx() as tx:
+        repo.insert_consent(
+            tx,
+            lead_id=lead_id,
+            status=AuthStatus.AUTHORIZED,
+            medium="respuesta al correo confirmada por el comercial",
+            at=START,
+            actor_user_id=users["com"].id,
+            notice_version="1.0",
+            purposes="seguimiento comercial; contrato",
+            evidence_inbound_id=7,
+        )
+        repo.insert_consent(  # sin los campos nuevos (F1) siguen siendo nulos
+            tx,
+            lead_id=lead_id,
+            status=AuthStatus.REVOKED,
+            medium="llamada",
+            at=START,
+            actor_user_id=users["com"].id,
+        )
+        rows = repo.lead_consents(tx, lead_id)
+    assert (rows[0]["notice_version"], rows[0]["purposes"], rows[0]["evidence_inbound_id"]) == (
+        "1.0",
+        "seguimiento comercial; contrato",
+        7,
+    )
+    assert (rows[1]["notice_version"], rows[1]["purposes"], rows[1]["evidence_inbound_id"]) == (
+        None,
+        None,
+        None,
+    )
+
+
 def test_vcrm067_revocada_niega(db: CrmDatabase, users: dict[str, User]) -> None:
     # Revocada: el estado del lead y la última fila de consentimiento lo dicen.
     revoked = _authorized_lead(

@@ -64,12 +64,12 @@ _DDL: tuple[str, ...] = (
     """CREATE TABLE IF NOT EXISTS crm_consents (
   id INTEGER PRIMARY KEY, lead_id INTEGER NOT NULL, status TEXT NOT NULL, medium TEXT NOT NULL,
   at TEXT NOT NULL, actor_user_id INTEGER NOT NULL, notice_version TEXT, purposes TEXT,
-  attachment_id INTEGER
+  attachment_id INTEGER, evidence_inbound_id INTEGER
 )""",
     "CREATE TABLE IF NOT EXISTS crm_suppression "
     "(fingerprint TEXT PRIMARY KEY, at TEXT NOT NULL, medium TEXT NOT NULL)",
     """CREATE TABLE IF NOT EXISTS crm_titular_requests (
-  id INTEGER PRIMARY KEY, lead_id INTEGER NOT NULL,
+  id INTEGER PRIMARY KEY, lead_id INTEGER,
   type TEXT NOT NULL CHECK (type IN ('inquiry','claim','unclassified')),
   medium TEXT NOT NULL, received_on TEXT NOT NULL, due_on TEXT NOT NULL,
   status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','overdue','attended')),

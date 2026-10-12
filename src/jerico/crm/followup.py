@@ -22,6 +22,7 @@ from jerico.crm import (
 from jerico.crm.followup_text import FollowupTexts
 from jerico.crm.leads import deny_lead
 from jerico.crm.model import (
+    SYSTEM_USER_ID,
     Cadence,
     CadenceStatus,
     EventKind,
@@ -112,7 +113,7 @@ def start_cadence(
             conn,
             lead_id=lead.id,
             kind=EventKind.STATE,
-            actor_user_id=lead.assigned_user_id or 1,
+            actor_user_id=SYSTEM_USER_ID,
             at=now,
             old_value=src.value,
             new_value=LeadState.NURTURING.value,

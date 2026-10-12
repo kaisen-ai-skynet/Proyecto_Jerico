@@ -371,3 +371,50 @@ def test_daily_sweep_delivers_and_records_failed_notice(
             "SELECT recipient_user_id, body FROM crm_outbox WHERE status = 'failed'"
         ).fetchall()
     assert [(r["recipient_user_id"], r["body"]) for r in failed] == [(users["cto"].id, None)]
+
+
+# --- Solicitudes «por clasificar» sin lead asociado (VCRM-122, 153) ----------------------------
+
+
+def test_vcrm153_solicitud_por_clasificar_sin_lead(
+    db: CrmDatabase, tg: FakeTelegram, clock: FakeClock, users: dict[str, User]
+) -> None:
+    with db.tx() as tx:
+        request_id = repo.insert_titular_request(
+            tx,
+            lead_id=None,
+            kind=RequestType.UNCLASSIFIED,
+            medium="respuesta al correo",
+            received_on="2026-03-02",
+            due_on="2026-03-24",
+            registered_by=0,
+            now=START,
+        )
+    with db.read() as conn:
+        req = repo.get_titular_request(conn, request_id)
+    assert req is not None and req.lead_id is None and req.type == "unclassified"
+    assert "sin lead asociado" in compliance.request_summary(req)
+
+    # El barrido la vence y avisa al CTO aunque no haya lead (alerta sin lead).
+    notices = sweep(db, date(2026, 3, 25))
+    assert notices and all("sin lead asociado" in t for t in notices)
+    with db.read() as conn:
+        alerts = [
+            dict(r)
+            for r in conn.execute("SELECT * FROM crm_alerts WHERE request_id = ?", (request_id,))
+        ]
+    assert len(alerts) == 1 and alerts[0]["lead_id"] is None
+
+    # El CTO la marca atendida sin que falle la auditoría por falta de lead.
+    bot = make_bot(db, tg, clock)
+    send(bot, CTO_TG, "/atendida S-0001")
+    assert "sin lead asociado" in texts(tg, CTO_TG)[-1] and "atendida" in texts(tg, CTO_TG)[-1]
+    with db.read() as conn:
+        done = repo.get_titular_request(conn, request_id)
+        audit = [
+            a
+            for a in repo.audit_rows(conn)
+            if a["lead_id"] is None and a["action"] == "lead_updated"
+        ]
+    assert done is not None and done.status == "attended"
+    assert audit

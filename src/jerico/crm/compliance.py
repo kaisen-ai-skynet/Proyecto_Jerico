@@ -170,6 +170,78 @@ def answer_evidence(
 # --- Baja (VCRM-070, 095, 164) ------------------------------------------------------------
 
 
+def _cancel_f2_work(conn: sqlite3.Connection, lead_id: int, now: datetime) -> None:
+    """Cancela lo pendiente de F2 del lead: propuestas abiertas, envíos y cadencia (VCRM-070)."""
+    repo.cancel_scheduled_sends(conn, lead_id, now)
+    repo.cancel_open_proposals(conn, lead_id, now)
+    cadence = repo.get_cadence(conn, lead_id)
+    if cadence is not None and cadence.status in ("active", "paused"):
+        repo.update_cadence(
+            conn, lead_id, status="stopped", next_action_at=None, updated_at=to_iso(now)
+        )
+
+
+def apply_opt_out(
+    conn: sqlite3.Connection,
+    lead: Lead,
+    *,
+    medium: str,
+    now: datetime,
+    keys: Sequence[str],
+    actor_user_id: int,
+    audit_actor: str,
+) -> None:
+    """Efectos de la baja (VCRM-070): huellas en la lista de supresión, estado «baja», revocatoria
+    de la autorización y cancelación de lo pendiente. La usan el comando `/baja` (un usuario) y las
+    bajas por correo (el sistema, `SYSTEM_USER_ID`). El llamador valida que proceda."""
+    if not keys:
+        raise ValueError("fingerprint keys required to register an opt-out")
+    src = LeadState(lead.state)
+    for contact in (lead.phone_e164, lead.email):
+        if contact is not None:  # solo la huella, nunca el contacto (VCRM-095)
+            repo.add_suppression(conn, fingerprint(keys[0], contact), at=now, medium=medium)
+    repo.update_lead(
+        conn,
+        lead.id,
+        {
+            "state": LeadState.OPTED_OUT.value,
+            "final_state_at": to_iso(now),
+            "auth_status": AuthStatus.REVOKED.value,
+        },
+        now=now,
+    )
+    repo.cancel_pending_confirmations(conn, lead.id, now)
+    repo.clear_lead_pending_inputs(conn, lead.id)
+    _cancel_f2_work(conn, lead.id, now)
+    # Revocatoria como fila nueva: la evidencia previa queda intacta (VCRM-164).
+    repo.insert_consent(
+        conn,
+        lead_id=lead.id,
+        status=AuthStatus.REVOKED,
+        medium=medium,
+        at=now,
+        actor_user_id=actor_user_id,
+    )
+    repo.add_event(
+        conn,
+        lead_id=lead.id,
+        kind=EventKind.STATE,
+        actor_user_id=actor_user_id,
+        at=now,
+        old_value=src.value,
+        new_value=LeadState.OPTED_OUT.value,
+        reason_text=medium,
+    )
+    repo.audit(
+        conn,
+        actor=audit_actor,
+        action=AuditAction.LEAD_UPDATED,
+        outcome=AuditOutcome.OK,
+        at=now,
+        lead_id=lead.id,
+    )
+
+
 def opt_out_command(
     conn: sqlite3.Connection, actor: User, text: str, now: datetime, keys: Sequence[str]
 ) -> list[Outgoing]:
@@ -188,43 +260,15 @@ def opt_out_command(
         return [
             Outgoing(actor.telegram_id, _invalid_transition_text(src, LeadState.OPTED_OUT, check))
         ]
-    if not keys:
-        raise ValueError("fingerprint keys required to register an opt-out")
-    for contact in (found.phone_e164, found.email):
-        if contact is not None:  # solo la huella, nunca el contacto (VCRM-095)
-            repo.add_suppression(conn, fingerprint(keys[0], contact), at=now, medium=medium)
-    repo.update_lead(
+    apply_opt_out(
         conn,
-        found.id,
-        {
-            "state": LeadState.OPTED_OUT.value,
-            "final_state_at": to_iso(now),
-            "auth_status": AuthStatus.REVOKED.value,
-        },
-        now=now,
-    )
-    repo.cancel_pending_confirmations(conn, found.id, now)
-    repo.clear_lead_pending_inputs(conn, found.id)
-    # Revocatoria como fila nueva: la evidencia previa queda intacta (VCRM-164).
-    repo.insert_consent(
-        conn,
-        lead_id=found.id,
-        status=AuthStatus.REVOKED,
+        found,
         medium=medium,
-        at=now,
+        now=now,
+        keys=keys,
         actor_user_id=actor.id,
+        audit_actor=f"user:{actor.id}",
     )
-    repo.add_event(
-        conn,
-        lead_id=found.id,
-        kind=EventKind.STATE,
-        actor_user_id=actor.id,
-        at=now,
-        old_value=src.value,
-        new_value=LeadState.OPTED_OUT.value,
-        reason_text=medium,
-    )
-    _audit(conn, actor, found.id, now)
     text = (
         f"{short_id(found.id)}: estado «{src}» → «baja» (medio: {medium}). "
         "El contacto queda en la lista de supresión."
@@ -794,11 +838,18 @@ _REQUEST_TYPE_MAP: dict[str, RequestType] = {
 }
 
 
+NO_LEAD_LABEL = "sin lead asociado"
+
+
+def _lead_label(lead_id: int | None) -> str:
+    return NO_LEAD_LABEL if lead_id is None else short_id(lead_id)
+
+
 def request_summary(req: TitularRequest) -> str:
     type_str = _REQUEST_TYPE_LABELS.get(req.type, str(req.type))
     status_str = _REQUEST_STATUS_LABELS.get(req.status, str(req.status))
     return (
-        f"{request_short_id(req.id)} · {short_id(req.lead_id)} · {type_str} · "
+        f"{request_short_id(req.id)} · {_lead_label(req.lead_id)} · {type_str} · "
         f"medio: {req.medium} · "
         f"recibida {_date_text(req.received_on)} · fecha límite {_date_text(req.due_on)} · "
         f"{status_str}"
@@ -906,7 +957,7 @@ def attended_command(
     )
     repo.resolve_request_alerts(conn, req.id, resolved_by=actor.id, now=now)
     _audit(conn, actor, req.lead_id, now)
-    text = f"{request_short_id(req.id)} ({short_id(req.lead_id)}) marcada «atendida»."
+    text = f"{request_short_id(req.id)} ({_lead_label(req.lead_id)}) marcada «atendida»."
     return [Outgoing(actor.telegram_id, text)]
 
 
@@ -920,13 +971,13 @@ def request_notice(req: TitularRequest, today: date, params: Params) -> str:
     )
     type_str = _REQUEST_TYPE_LABELS.get(req.type, str(req.type))
     return (
-        f"{head}: {request_short_id(req.id)} · {short_id(req.lead_id)} · {type_str} · "
+        f"{head}: {request_short_id(req.id)} · {_lead_label(req.lead_id)} · {type_str} · "
         f"recibida {_date_text(req.received_on)} · días hábiles restantes: {remaining}. "
         f"Márquela con {EXAMPLE_ATTENDED.split()[0]} {request_short_id(req.id)}."
     )
 
 
-def _audit(conn: sqlite3.Connection, actor: User, lead_id: int, now: datetime) -> None:
+def _audit(conn: sqlite3.Connection, actor: User, lead_id: int | None, now: datetime) -> None:
     repo.audit(
         conn,
         actor=f"user:{actor.id}",
@@ -959,6 +1010,7 @@ __all__ = [
     "execute_suppression",
     "export_command",
     "export_lead",
+    "apply_opt_out",
     "may_contact_commercially",
     "may_request_authorization",
     "opt_out_command",
