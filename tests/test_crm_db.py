@@ -1,13 +1,16 @@
 """T03 — Base propia del CRM, esquema y bitácora sin datos personales."""
 
 import re
+import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 
+from crm_support import V1_LEAD_ROWS, build_v1_database
 from jerico.crm import repo
 from jerico.crm.db import SCHEMA_SQL, SCHEMA_VERSION, CrmDatabase
+from jerico.crm.migrate import STATE_MAP, MigrationError
 from jerico.crm.model import (
     AlertKind,
     AuditAction,
@@ -308,3 +311,74 @@ def test_vcrm078_ddl_only_uses_named_tables(tmp_path: Path) -> None:
     assert all(re.fullmatch(r"crm_[a-z_]+", n) for n in names)
     assert {"crm_meta", "crm_users", "crm_leads", "crm_lead_events", "crm_alerts"} <= names
     db.close()
+
+
+# --- Migración v1 → v2 al abrir (F2-T04, VCRM-171) -------------------------------------------
+
+
+def _raw(path: Path, sql: str) -> list[tuple]:
+    conn = sqlite3.connect(path)
+    try:
+        return [tuple(r) for r in conn.execute(sql).fetchall()]
+    finally:
+        conn.close()
+
+
+def test_vcrm171_abrir_base_v1_migra_y_conserva_datos(tmp_path: Path) -> None:
+    path = tmp_path / "crm.db"
+    build_v1_database(path)
+
+    db = CrmDatabase(path)
+    with db.read() as conn:
+        assert repo.get_meta(conn, "schema_version") == "2"
+        states = dict(conn.execute("SELECT id, state FROM crm_leads").fetchall())
+    db.close()
+
+    assert states == {i: STATE_MAP[state] for i, state, _ in V1_LEAD_ROWS}
+    assert path.with_name(path.name + ".pre-v2.bak").exists()
+    # Una segunda apertura ya es v2: no migra ni vuelve a copiar.
+    CrmDatabase(path).close()
+
+
+def test_vcrm171_falla_migracion_deja_v1_y_no_arranca(tmp_path: Path) -> None:
+    path = tmp_path / "crm.db"
+    build_v1_database(path)
+    conn = sqlite3.connect(path)
+    conn.execute("UPDATE crm_leads SET state = 'zombi' WHERE id = 3")
+    conn.commit()
+    conn.close()
+
+    with pytest.raises(MigrationError, match="zombi"):
+        CrmDatabase(path)
+
+    assert _raw(path, "SELECT value FROM crm_meta WHERE key = 'schema_version'") == [("1",)]
+    assert _raw(path, "SELECT state FROM crm_leads WHERE id = 3") == [("zombi",)]
+
+
+def _schema(path: Path) -> dict[str, object]:
+    check = re.compile(r"CHECK\s*\((?:[^()]|\([^()]*\))*\)")
+    out: dict[str, object] = {}
+    for (table,) in _raw(
+        path, "SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'crm_%'"
+    ):
+        columns = [r[1:] for r in _raw(path, f"PRAGMA table_info({table})")]  # noqa: S608
+        sql = _raw(path, f"SELECT sql FROM sqlite_master WHERE name = '{table}'")[0][0]  # noqa: S608
+        checks = sorted(" ".join(c.split()) for c in check.findall(sql))
+        out[table] = (columns, checks)
+    indexes = {}
+    for (name,) in _raw(
+        path, "SELECT name FROM sqlite_master WHERE type = 'index' AND name LIKE '%ix_%'"
+    ):
+        indexes[name] = [r[2] for r in _raw(path, f"PRAGMA index_info({name})")]  # noqa: S608
+    out["__indexes__"] = indexes
+    return out
+
+
+def test_vcrm171_esquema_migrado_igual_al_de_una_base_nueva(tmp_path: Path) -> None:
+    fresh = tmp_path / "fresh.db"
+    CrmDatabase(fresh).close()
+    migrated = tmp_path / "migrated.db"
+    build_v1_database(migrated)
+    CrmDatabase(migrated).close()
+
+    assert _schema(migrated) == _schema(fresh)

@@ -2,14 +2,31 @@
 
 import hashlib
 import sqlite3
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
+from loguru import logger
 
-from crm_support import V1_LEAD_ROWS, build_v1_database
-from jerico.crm import leads, migrate
+from crm_support import (
+    V1_LEAD_ROWS,
+    FakeClock,
+    FakeEmailSender,
+    FakeRunner,
+    FakeTelegram,
+    build_v1_database,
+    make_settings,
+)
+from jerico.crm import app as app_mod
+from jerico.crm import leads, migrate, repo
+from jerico.crm.app import CrmApp
 from jerico.crm.backup import _snapshot
-from jerico.crm.migrate import MigrationError, migrate_v1_to_v2
+from jerico.crm.migrate import (
+    MigrationError,
+    current_version,
+    migrate_if_needed,
+    migrate_v1_to_v2,
+)
 from jerico.crm.parsing import parse_callback
 
 STATE_MAP = {
@@ -327,3 +344,110 @@ def test_vcrm171_error_no_sqlite_tambien_deshace_y_se_propaga(
 
     assert _dump(path) == original
     assert _version(path) == "1"
+
+
+def _crm_settings(data_dir: Path):  # noqa: ANN202 - helper de prueba
+    return make_settings(
+        telegram_bot_token="123:token-ficticio",
+        fingerprint_key="clave-ficticia",
+        seed_cto_telegram_id="1000",
+        seed_cto_email="cto@example.invalid",
+        data_dir=data_dir,
+    )
+
+
+def test_vcrm171_main_migra_la_base_v1_antes_de_arrancar(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    data_dir = tmp_path / "crm-data"
+    data_dir.mkdir()
+    build_v1_database(data_dir / "crm.db")
+    started: list[object] = []
+
+    async def fake_service(settings: object) -> None:
+        # Al llegar aquí la base ya debe estar en v2.
+        started.append(_version(data_dir / "crm.db"))
+
+    monkeypatch.setattr(app_mod, "run_service", fake_service)
+    app_mod.main(_crm_settings(data_dir))
+
+    assert started == ["2"]
+
+
+def test_vcrm171_main_sale_con_codigo_3_si_falla_la_migracion(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    data_dir = tmp_path / "crm-data"
+    data_dir.mkdir()
+    path = data_dir / "crm.db"
+    build_v1_database(path)
+    conn = sqlite3.connect(path)
+    conn.execute("UPDATE crm_leads SET state = 'zombi' WHERE id = 3")
+    conn.commit()
+    conn.close()
+    called: list[object] = []
+
+    async def fake_service(settings: object) -> None:
+        called.append(settings)
+
+    monkeypatch.setattr(app_mod, "run_service", fake_service)
+    lines: list[str] = []
+    sink = logger.add(lines.append, level="DEBUG")
+    try:
+        with pytest.raises(SystemExit) as exc:
+            app_mod.main(_crm_settings(data_dir))
+    finally:
+        logger.remove(sink)
+
+    assert exc.value.code == app_mod.EXIT_MIGRATION == 3
+    assert called == []
+    assert _version(path) == "1"  # la base queda en v1 intacta
+    log = "".join(lines)
+    assert "zombi" in log and "Cliente" not in log and "123:token-ficticio" not in log
+
+
+def test_vcrm171_la_app_abre_una_base_v1_y_opera(tmp_path: Path) -> None:
+    """`CrmApp` por sí sola (sin pasar por `main`) también migra y puede consultar los leads."""
+
+    data_dir = tmp_path / "crm-data"
+    data_dir.mkdir()
+    build_v1_database(data_dir / "crm.db")
+    app = CrmApp(
+        _crm_settings(data_dir),
+        telegram=FakeTelegram(),
+        email=FakeEmailSender(),
+        runner=FakeRunner(),
+        clock=FakeClock(datetime(2026, 10, 12, 15, 0, tzinfo=UTC)).now,
+    )
+    try:
+        with app.db.read() as conn:
+            assert repo.get_meta(conn, "schema_version") == "2"
+            assert (
+                conn.execute("SELECT state FROM crm_leads WHERE id = 3").fetchone()[0] == "accepted"
+            )
+    finally:
+        app.db.close()
+
+
+def test_vcrm171_version_actual_y_migrar_solo_si_hace_falta(tmp_path: Path) -> None:
+    assert current_version(tmp_path / "no-existe.db") is None
+    assert migrate_if_needed(tmp_path / "no-existe.db") is False
+
+    vacia = tmp_path / "vacia.db"
+    vacia.write_bytes(b"")
+    assert current_version(vacia) is None  # archivo de 0 bytes: una base nueva
+
+    ajena = tmp_path / "ajena.db"
+    conn = sqlite3.connect(ajena)
+    conn.execute("CREATE TABLE otra (x INTEGER)")
+    conn.commit()
+    conn.close()
+    assert current_version(ajena) is None
+    assert migrate_if_needed(ajena) is False
+
+    (tmp_path / "v1").mkdir()
+    v1 = _v1_db(tmp_path / "v1")
+    assert current_version(v1) == "1"
+    assert migrate_if_needed(v1) is True
+    assert current_version(v1) == "2"
+    assert migrate_if_needed(v1) is False  # ya migrada

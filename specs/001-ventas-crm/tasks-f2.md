@@ -51,7 +51,7 @@ PYTHONPATH=src .venv/bin/python -m pytest <TESTS> -q \
   - **Hecho cuando:** `grep -rnE "RECHAZADO|AUTORIZADA|VENCIDA|EN_NUTRICION|SIN_AUTORIZACION|ENTREGADA|FALLIDA|ABIERTA|ATENDIDA" src tests` sin resultados; suite completa verde (1207 tests + los nuevos) y VERIF.
   - **Verificación:** VERIF con `<TESTS>` = `tests/` (suite completa de CRM: `tests/test_crm_*.py`).
 
-- [ ] **F2-T04 — Conectar la migración al arranque**
+- [x] **F2-T04 — Conectar la migración al arranque**
   - **Delegable a Gemini:** NO — arquitectura/seguridad: abre la base de datos real y decide el comportamiento ante fallo.
   - Requisitos: VCRM-171.
   - **Entregable exacto:** `src/jerico/crm/db.py` (si `schema_version = 1` → `migrate_v1_to_v2`; si es otra, error actual), `tests/test_crm_db.py` (adición), `tests/test_crm_migration.py` (arranque de `app` con base v1).

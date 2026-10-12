@@ -228,3 +228,26 @@ def migrate_v1_to_v2(path: Path) -> None:
             raise
     finally:
         conn.close()
+
+
+def current_version(path: Path) -> str | None:
+    """`schema_version` de la base en `path`; `None` si no existe, está vacía o no es del CRM."""
+    path = Path(path)
+    if not path.exists():
+        return None
+    conn = sqlite3.connect(f"{path.as_uri()}?mode=ro", uri=True)
+    try:
+        row = conn.execute("SELECT value FROM crm_meta WHERE key = 'schema_version'").fetchone()
+    except sqlite3.Error:
+        return None
+    finally:
+        conn.close()
+    return None if row is None else str(row[0])
+
+
+def migrate_if_needed(path: Path) -> bool:
+    """Migra a v2 solo si la base existe y está en v1; devuelve si migró (o `MigrationError`)."""
+    if current_version(path) != "1":
+        return False
+    migrate_v1_to_v2(path)
+    return True

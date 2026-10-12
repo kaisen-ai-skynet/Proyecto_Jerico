@@ -22,6 +22,7 @@ from jerico.crm.db import CrmDatabase
 from jerico.crm.files import LocalFileStore
 from jerico.crm.jobs import register_jobs
 from jerico.crm.mail import build_email_sender
+from jerico.crm.migrate import MigrationError, migrate_if_needed
 from jerico.crm.model import Role
 from jerico.crm.outbox import OutboxWorker, escalate
 from jerico.crm.ports import CommandRunner, EmailSender, TelegramPort
@@ -31,6 +32,7 @@ from jerico.crm.telegram import HttpxTelegramClient
 from jerico.cron.scheduler import CronScheduler
 
 EXIT_CONFIG = 2
+EXIT_MIGRATION = 3  # la migración v1 -> v2 falló: la base queda en v1 (VCRM-171)
 STARTUP_NOTICE_KIND = "aviso_arranque"
 EXECUTION_TIMEOUT_S = 1800
 POLL_INTERVAL_S = 20
@@ -233,11 +235,17 @@ def main(settings: CrmSettings | None = None) -> None:
     if missing:
         logger.error("jerico-crm no arranca: falta la variable {}", ", ".join(missing))
         raise SystemExit(EXIT_CONFIG)
+    try:
+        migrate_if_needed(Path(settings.data_dir) / "crm.db")
+    except MigrationError as exc:
+        logger.error("jerico-crm no arranca: la migración de la base falló: {}", exc)
+        raise SystemExit(EXIT_MIGRATION) from exc
     asyncio.run(run_service(settings))
 
 
 __all__ = [
     "EXIT_CONFIG",
+    "EXIT_MIGRATION",
     "STARTUP_NOTICE_KIND",
     "CrmApp",
     "fingerprint_keys",

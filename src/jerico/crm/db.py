@@ -10,6 +10,8 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
+from jerico.crm.migrate import migrate_if_needed
+
 BUSY_TIMEOUT_MS = 60_000
 SCHEMA_VERSION = 2
 
@@ -119,6 +121,7 @@ class CrmDatabase:
     def __init__(self, path: Path) -> None:
         self.path = Path(path).expanduser().resolve()
         self.path.parent.mkdir(parents=True, exist_ok=True)
+        migrate_if_needed(self.path)  # VCRM-171: una base v1 se migra antes de cualquier consulta
         self._lock = threading.RLock()
         conn = sqlite3.connect(
             str(self.path),
