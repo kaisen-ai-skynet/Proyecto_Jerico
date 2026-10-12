@@ -278,7 +278,8 @@ def set_frequency(
         next_action_at=to_iso(next_action),
         updated_at=to_iso(now),
     )
-    return [Outgoing(actor.telegram_id, f"{short_id(lead.id)}: frecuencia ajustada a {frequency}.")]
+    label = {"weekly": "semanal", "monthly": "mensual"}[frequency]
+    return [Outgoing(actor.telegram_id, f"{short_id(lead.id)}: frecuencia ajustada a {label}.")]
 
 
 def reactivate(

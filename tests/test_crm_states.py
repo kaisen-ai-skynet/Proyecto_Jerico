@@ -2,6 +2,7 @@
 
 import pytest
 
+from jerico.crm import CURRENT_PHASE
 from jerico.crm.model import LeadState as S
 from jerico.crm.states import TRANSITIONS, TransitionCheck, check_transition, valid_targets
 
@@ -61,7 +62,9 @@ def test_vcrm013_table_contains_only_section_4_2_rows() -> None:
 
 
 def test_vcrm013_default_phase_is_current_phase() -> None:
-    assert not check_transition(S.REJECTED, S.NURTURING).ok
+    assert CURRENT_PHASE == 2
+    assert check_transition(S.REJECTED, S.NURTURING).ok  # fila de F2, habilitada por defecto
+    assert not check_transition(S.REJECTED, S.NURTURING, phase=1).ok
     assert check_transition(S.NEW, S.CONTACTED).ok
 
 

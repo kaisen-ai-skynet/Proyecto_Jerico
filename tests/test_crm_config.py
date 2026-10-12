@@ -30,8 +30,8 @@ def _hermetic_env(monkeypatch: pytest.MonkeyPatch) -> None:
             monkeypatch.delenv(name)
 
 
-def test_vcrm162_package_declares_phase_one() -> None:
-    assert CURRENT_PHASE == 1
+def test_vcrm162_package_declares_phase_two() -> None:
+    assert CURRENT_PHASE == 2
 
 
 def test_vcrm162_defaults_match_spec_4_6() -> None:
