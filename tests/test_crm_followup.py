@@ -709,3 +709,41 @@ def test_followup_generate_due_edge_cases(tmp_path: Path) -> None:
         assert followup.generate_due(tx, NOW, KEYS, SAMPLE_TEXTS, "Kaisen AI") == []
     db_no_user.close()
     db.close()
+
+
+def test_vcrm022_reanudar_tras_pausar_permite_una_propuesta_nueva_del_mismo_paso(
+    tmp_path: Path,
+) -> None:
+    """Pausar cancela la propuesta abierta SIN avanzar el paso; al reanudar debe poder generarse
+    otra para ese mismo paso (la cancelada no puede dejar la cadencia atascada)."""
+    db, _cto, com = _setup_f2_db(tmp_path)
+    lead_id = make_lead(db, com, state=LeadState.NURTURING, email="ana@cliente.test")
+    cad = Cadence(
+        lead_id=lead_id,
+        reason="precio",
+        interval_days=30,
+        total_steps=3,
+        next_action_at=to_iso(NOW),
+        status="active",
+        started_at=to_iso(NOW),
+        updated_at=to_iso(NOW),
+    )
+    with db.tx() as tx:
+        repo.upsert_cadence(tx, cad)
+        assert followup.generate_due(tx, NOW, KEYS, SAMPLE_TEXTS, "Kaisen AI")
+        followup.pause(tx, com, lead_id, NOW + timedelta(hours=1))
+        followup.resume(tx, com, lead_id, NOW + timedelta(hours=2))
+        later = NOW + timedelta(days=31)
+
+        again = followup.generate_due(tx, later, KEYS, SAMPLE_TEXTS, "Kaisen AI")
+
+        rows = tx.execute(
+            "SELECT step, status FROM crm_proposals WHERE lead_id = ? ORDER BY id", (lead_id,)
+        ).fetchall()
+    assert again, "la cadencia reanudada quedó atascada: no generó la propuesta del paso"
+    assert [(r["step"], r["status"]) for r in rows] == [(1, "cancelled"), (1, "pending")]
+    # Y sigue siendo idempotente: un nuevo barrido no crea una tercera.
+    with db.tx() as tx:
+        assert followup.generate_due(tx, later, KEYS, SAMPLE_TEXTS, "Kaisen AI") == []
+        assert tx.execute("SELECT COUNT(*) FROM crm_proposals").fetchone()[0] == 2
+    db.close()

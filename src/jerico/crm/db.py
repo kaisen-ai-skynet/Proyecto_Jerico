@@ -137,8 +137,11 @@ _DDL: tuple[str, ...] = (
   resolved_at TEXT,
   resolved_by INTEGER
 )""",
+    # Una propuesta VIVA por lead y paso (VCRM-028). Las canceladas (p. ej. al pausar, que no
+    # avanza el paso) y las bloqueadas ya no cuentan: si no, reanudar dejaría la cadencia atascada.
     "CREATE UNIQUE INDEX IF NOT EXISTS ux_proposals_followup_step "
-    "ON crm_proposals (lead_id, step) WHERE kind = 'followup'",
+    "ON crm_proposals (lead_id, step) "
+    "WHERE kind = 'followup' AND status NOT IN ('cancelled', 'blocked')",
     "CREATE UNIQUE INDEX IF NOT EXISTS ux_proposals_open_auth_request "
     "ON crm_proposals (lead_id) WHERE kind = 'auth_request' AND status IN ('pending','approved')",
     """CREATE TABLE IF NOT EXISTS crm_proposal_versions (

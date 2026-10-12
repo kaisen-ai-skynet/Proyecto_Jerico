@@ -579,3 +579,39 @@ def test_f2_tablas_ida_y_vuelta_y_foreign_keys(tmp_path: Path) -> None:
         fk_errors = conn.execute("PRAGMA foreign_key_check").fetchall()
         assert fk_errors == []
     db.close()
+
+
+def test_vcrm028_solo_las_propuestas_vivas_ocupan_el_paso(tmp_path: Path) -> None:
+    db = CrmDatabase(tmp_path / "crm.db")
+    with db.tx() as tx:
+        user = repo.insert_user(tx, telegram_id=1, role=Role.COMMERCIAL, email="m@k.co", now=NOW)
+        lead_id = repo.insert_lead(
+            tx, assigned_user_id=user.id, state=LeadState.NURTURING, now=NOW, fields={"name": "A"}
+        )
+
+        def new(step: int = 1) -> int | None:
+            return repo.insert_proposal(
+                tx,
+                lead_id=lead_id,
+                kind="followup",
+                step=step,
+                approver_user_id=user.id,
+                expires_at=NOW,
+                created_at=NOW,
+            )
+
+        first = new()
+        assert first is not None and new() is None  # pendiente: ocupa el paso
+        for dead in ("cancelled", "blocked"):  # canceladas y bloqueadas liberan el paso
+            repo.update_proposal(tx, first, status=dead)
+            replacement = new()
+            assert replacement is not None and replacement != first
+            repo.update_proposal(tx, replacement, status=dead)
+            first = replacement
+        alive = new()
+        assert alive is not None
+        for living in ("approved", "sent", "failed", "expired"):  # el resto sigue ocupándolo
+            repo.update_proposal(tx, alive, status=living)
+            assert new() is None, living
+        assert new(step=2) is not None  # otro paso es independiente
+    db.close()
