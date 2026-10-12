@@ -4,7 +4,7 @@
 # Estructura: una tabla por motivo de rechazo (precio, momento, proveedor, no_interesado, otro).
 # Cada tabla tiene `subject` y tres pasos ("1", "2", "3"). Cada texto pasa por el gate ✅/❌ del
 # comercial antes de salir; nada se envía solo.
-# Marcadores permitidos: {nombre} (contacto) y {comercial} (quien firma). El pie con el remitente y
+# Marcadores permitidos: {nombre} (contacto) y {comercial} (quien firma; opcional, hoy no se usa). El pie con el remitente y
 # la opción de baja lo añade el sistema (VCRM-069): NO lo escriba aquí. Sin enlaces.
 # Voz: cercana, profesional y sin presión. No prometa descuentos ni precios en estos textos.
 
@@ -14,7 +14,7 @@ version = "v1"
 subject = "Retomo nuestra conversación"
 "1" = """Hola {nombre},
 
-Soy {comercial}, de Kaisen AI. Retomo nuestra conversación porque entiendo que el presupuesto es una decisión importante y quiero que cualquier paso que dé tenga sentido para usted.
+Le escribo desde Kaisen AI. Retomo nuestra conversación porque entiendo que el presupuesto es una decisión importante y quiero que cualquier paso que dé tenga sentido para usted.
 
 Si le sirve, podemos revisar el alcance y plantear una primera etapa más acotada, centrada en lo que más valor le aporta hoy, y dejar el resto para más adelante. ¿Le parece si le envío una versión de la propuesta por fases?
 
@@ -36,7 +36,7 @@ Gracias por su tiempo y mucho éxito con su negocio."""
 subject = "Un recordatorio amable"
 "1" = """Hola {nombre},
 
-Soy {comercial}, de Kaisen AI. Me comentó que no era el mejor momento, y quise escribirle para ver cómo van las cosas por su lado. No hay ninguna prisa.
+Le escribo desde Kaisen AI. Me comentó que no era el mejor momento, y quise escribirle para ver cómo van las cosas por su lado. No hay ninguna prisa.
 
 Si ya es un buen momento para retomar, cuénteme y vemos cómo avanzar. Si todavía no, lo entiendo perfectamente.
 
@@ -58,7 +58,7 @@ Gracias por su tiempo y que le vaya muy bien."""
 subject = "Una idea para complementar lo que ya tiene"
 "1" = """Hola {nombre},
 
-Soy {comercial}, de Kaisen AI. Entiendo que ya trabaja con un proveedor y no quiero que eso se sienta como un problema: muchas veces lo más útil es entender qué cubre bien hoy y qué podría mejorar.
+Le escribo desde Kaisen AI. Entiendo que ya trabaja con un proveedor y no quiero que eso se sienta como un problema: muchas veces lo más útil es entender qué cubre bien hoy y qué podría mejorar.
 
 Si le interesa, puedo compartirle cómo suelen abordar este tema las empresas que están evaluando automatizar procesos con inteligencia artificial, para que tenga un punto de comparación.
 
@@ -80,7 +80,7 @@ Gracias por su tiempo."""
 subject = "Gracias por su tiempo"
 "1" = """Hola {nombre},
 
-Soy {comercial}, de Kaisen AI. Gracias por haberme atendido. Respeto su decisión, y no le escribo para insistir, sino para dejarle algo que puede serle útil más adelante.
+Le escribo desde Kaisen AI. Gracias por haberme atendido. Respeto su decisión, y no le escribo para insistir, sino para dejarle algo que puede serle útil más adelante.
 
 Si algún día quiere saber cómo otras empresas están usando la inteligencia artificial para ahorrar tiempo en tareas repetitivas, con gusto le comparto información, sin compromiso.
 
@@ -102,7 +102,7 @@ Le deseo muchos éxitos."""
 subject = "Seguimiento de nuestra conversación"
 "1" = """Hola {nombre},
 
-Soy {comercial}, de Kaisen AI. Quería retomar nuestra conversación y saber si sigue habiendo algo en lo que podamos ayudarle.
+Le escribo desde Kaisen AI. Quería retomar nuestra conversación y saber si sigue habiendo algo en lo que podamos ayudarle.
 
 Si le queda alguna duda sobre lo que hablamos, cuénteme y se la resuelvo con gusto.
 
