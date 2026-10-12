@@ -159,7 +159,7 @@ PYTHONPATH=src .venv/bin/python -m pytest <TESTS> -q \
   - **Hecho cuando:** verde y VERIF.
   - **Verificación:** VERIF con `<TESTS>` = `tests/test_crm_gate.py`.
 
-- [ ] **F2-T15 — Programación y entrega con guardas y reintentos**
+- [x] **F2-T15 — Programación y entrega con guardas y reintentos**
   - **Delegable a Gemini:** NO — arquitectura/seguridad: último control antes de contactar al titular (Ley 2300, supresión).
   - Requisitos: VCRM-029, 036, 037, 038, 072, 076, 100, 101.
   - **Entregable exacto:** `src/jerico/crm/followup.py` (`guard`, `schedule_send`, `deliver_due`), `tests/test_crm_gate.py` (adición).
