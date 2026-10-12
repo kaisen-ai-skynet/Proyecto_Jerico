@@ -15,6 +15,8 @@ check() { if eval "$2" &>/dev/null; then pass "$1"; else fail "$1"; fi; }
 
 [ "$EUID" -eq 0 ] || { echo "Ejecútalo con sudo."; exit 2; }
 
+# SC2016: las comprobaciones van entre comillas simples a propósito; check() las evalúa en su momento.
+# shellcheck disable=SC2016
 check "Arquitectura ARM64 (aarch64)" '[ "$(uname -m)" = aarch64 ]'
 check "ufw activo" 'ufw status | grep -q "Status: active"'
 check "ufw deniega entrante por defecto" 'ufw status verbose | grep -q "deny (incoming)"'
@@ -51,6 +53,7 @@ else
 fi
 
 if docker inspect jerico-postgres &>/dev/null; then
+    # shellcheck disable=SC2016
     check "Postgres healthy" '[ "$(docker inspect -f "{{.State.Health.Status}}" jerico-postgres)" = healthy ]'
 fi
 

@@ -1,0 +1,93 @@
+---
+tipo: checklist-operativa
+proyecto: Jericó — Kaisen AI
+estado: lista-para-ejecutar (nada ejecutado contra OCI)
+creado: "11/10/2026 20:20"
+modificado: "11/10/2026 20:20"
+---
+
+# Día 1 — Oracle Cloud + laptop en una sola sesión
+
+**Duración:** 3–4 h con pausas. **Dónde:** en casa, con la laptop que tiene este repo (los commits no están en GitHub hasta que alguien haga push; `sync_repo_to_vps.sh` copia desde la laptop).
+**Detalle de cada paso:** `docs/guia-oci-principiantes.md` (las letras A–J remiten a sus partes).
+Si un bloque falla, **detente ahí**: todo lo anterior queda bien hecho y se retoma otro día.
+
+## Antes de sentarte (5 min)
+
+- [ ] Tarjeta de crédito física a mano (solo verifica; Oracle no cobra en Always Free).
+- [ ] Celular con app de autenticación (Google Authenticator, 1Password...) para MFA.
+- [ ] Acceso al correo `kaisen.ai.santiago.cto@gmail.com`.
+- [ ] Gestor de contraseñas abierto (vas a guardar la llave age y el *secret key* de Oracle).
+- [ ] Opcional: llaves SSH públicas de Nicolás, Juan Pablo, Esteban y Santiago Jr.
+
+## Bloque 1 · Laptop (20–30 min) — guía, Parte A
+
+```bash
+cd ~/Kaisen_AI/01_Proyectos/Proyecto_Jerico
+scripts/oci/dia1_laptop.sh
+```
+Instala age y **Docker**, crea la llave SSH y la llave age, comprueba Tailscale y hace la **prueba de humo del contenedor CRM de la fase 1**: construye la imagen `jerico-crm:0.2.0` y verifica que se niega a arrancar sin secretos (código 2, como pide la spec).
+
+- [ ] El script termina imprimiendo tu llave SSH pública y tu llave age pública.
+- [ ] Guardaste `~/.config/kaisen/jerico-backup.agekey` en el gestor de contraseñas.
+- [ ] Copiaste las dos llaves **públicas** a un bloc de notas para los pasos siguientes.
+
+## Bloque 2 · Cuenta Oracle (30 min + espera) — Parte B
+
+- [ ] Registro en oracle.com/cloud/free con el correo de empresa y **home region Bogotá** (irreversible: revisa dos veces).
+- [ ] Correo "fully provisioned" recibido. *Si tarda, salta al bloque 6 (CRM) y vuelve después.*
+- [ ] MFA activado · alerta de presupuesto de **1 USD** · compartment `kaisen-jerico` (OCID anotado).
+
+## Bloque 3 · Red y VM (30 min) — Partes C y D
+
+- [ ] VCN `jerico-vcn` con el wizard; regla 22 solo desde tu IP `/32`; UDP 41641; nada en 5432/6379/8000.
+- [ ] VM `jerico-core-oracle-01`: Ubuntu 24.04 aarch64, A1.Flex **2 OCPU / 12 GB**, 100 GB, llave SSH pública pegada.
+- [ ] `RUNNING` e IP pública anotada. *Si sale "Out of host capacity": Plan B de la Parte D (Cloud Shell + `00_retry_launch_a1.sh`) y sigue con el bloque 6 mientras reintenta.*
+
+## Bloque 4 · VM segura (40 min) — Partes E, F y G
+
+```bash
+IP=<IP_PUBLICA>
+scp -i ~/.ssh/id_ed25519_kaisen scripts/oci/01_bootstrap.sh ubuntu@$IP:~
+ssh -i ~/.ssh/id_ed25519_kaisen ubuntu@$IP
+#   en la VM:  chmod +x 01_bootstrap.sh && sudo ./01_bootstrap.sh
+#   en la VM:  sudo tailscale up --hostname=jerico-oracle    (aprueba el enlace)
+# en OTRA terminal de la laptop (sin cerrar la anterior):
+ssh -i ~/.ssh/id_ed25519_kaisen santiago@jerico-oracle
+scripts/oci/sync_repo_to_vps.sh santiago@jerico-oracle
+#   en la VM como santiago:  /opt/jerico/app/scripts/oci/02_postgres.sh
+```
+- [ ] `BOOTSTRAP COMPLETADO` · `ssh santiago@jerico-oracle` entra por Tailscale · *key expiry* desactivado en Tailscale.
+- [ ] `02_postgres.sh` termina con `5432 solo en 127.0.0.1`.
+
+## Bloque 5 · Backups y cierre (40 min) — Partes H, I y J
+
+- [ ] Bucket privado `jerico-backups` · Namespace anotado · *Customer secret key* generada y guardada en el gestor.
+- [ ] `/etc/jerico/backup.env` (llave age **pública**) y `/etc/jerico/rclone.conf` completados desde `deploy/oci/*.example`.
+- [ ] `sudo /opt/jerico/app/scripts/oci/03_backups.sh` → backup de prueba visible en el bucket.
+- [ ] Restauración probada en la laptop: `age -d -i ~/.config/kaisen/jerico-backup.agekey <archivo> > prueba.dump` (y `pg_restore --list prueba.dump` si tienes `postgresql-client`).
+- [ ] Desde la sesión por Tailscale: `sudo /opt/jerico/app/scripts/oci/04_lockdown.sh`, y después borrar la regla TCP 22 en la Security List.
+- [ ] `sudo /opt/jerico/app/scripts/oci/verify_vps.sh` → `RESULTADO: OK`.
+
+## Bloque 6 · Prueba completa del CRM en la laptop (20 min, opcional)
+
+La prueba de humo del bloque 1 no usa secretos. Para ver el bot funcionando de verdad en tu laptop:
+
+1. En la raíz del repo, crea o actualiza `.env` (nunca se commitea) con, como mínimo, `JERICO_CRM_TELEGRAM_BOT_TOKEN`, `JERICO_CRM_FINGERPRINT_KEY` (p. ej. `openssl rand -hex 32`), `JERICO_CRM_SEED_CTO_TELEGRAM_ID` y `JERICO_CRM_SEED_CTO_EMAIL` (plantilla: `.env.example`).
+2. `docker compose up -d --build jerico-crm`
+3. `docker compose ps jerico-crm` → `healthy` al cabo de 1–2 min; `docker compose logs --tail=25 jerico-crm` sin errores.
+4. Escríbele al bot desde tu Telegram y comprueba que responde.
+5. `docker compose down` al terminar.
+
+> Un mismo token de bot no puede hacer *polling* en dos sitios a la vez (Telegram responde 409). Si el bot ya corre en otro lado, usa un bot de pruebas.
+
+- [ ] Contenedor `jerico-crm` healthy y el bot responde.
+
+## Cierre del día
+
+- [ ] Checklist de la guía (Parte J) completo.
+- [ ] Avisar al equipo: acceso solo por `ssh <usuario>@jerico-oracle` vía Tailscale.
+- [ ] **No dejar la VM ociosa muchos días:** el siguiente paso es desplegar Jericó (runbook §3). Oracle puede recuperar VMs gratis que pasan 7 días casi sin uso.
+
+---
+> 🕒 **Última modificación:** 11/10/2026 20:20 (Claude Code · Opus 5.5)

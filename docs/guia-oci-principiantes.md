@@ -3,7 +3,7 @@ tipo: guia-operativa
 proyecto: Jericó — Kaisen AI
 estado: lista-para-ejecutar (nada ejecutado contra OCI)
 creado: "11/10/2026 17:50"
-modificado: "11/10/2026 18:05"
+modificado: "11/10/2026 20:25"
 ---
 
 # Guía OCI para principiantes — preparar Oracle Cloud para Jericó
@@ -12,6 +12,8 @@ modificado: "11/10/2026 18:05"
 **Decisiones ya cerradas (11/10/2026):** región **Bogotá (`sa-bogota-1`)** y cuenta **Always Free pura** (sin pasar a pago).
 **Tiempo estimado:** 2–3 horas repartidas (la activación de la cuenta puede tardar horas; puedes parar entre partes).
 **Resultado final:** una VM ARM gratis, sin puertos abiertos a internet, a la que entras solo por Tailscale, con PostgreSQL 16 listo en `127.0.0.1` y backup nocturno cifrado fuera de la máquina.
+
+> **¿Quieres hacerlo todo en una sesión?** Sigue `docs/dia-1-oci.md`, que ordena estas partes en bloques y empieza con `scripts/oci/dia1_laptop.sh`.
 
 > Esta guía reemplaza los pasos de creación del runbook (`docs/runbook-aprovisionamiento-vps.md` §1–§2). El despliegue de Jericó en sí (`.env`, `docker compose up`) sigue en el runbook §3 y es la fase siguiente.
 
@@ -49,6 +51,8 @@ modificado: "11/10/2026 18:05"
 | `scripts/oci/03_backups.sh` | VM (sudo) | Backup nocturno cifrado fuera de la VM |
 | `scripts/oci/04_lockdown.sh` | VM (sudo, por Tailscale) | Cerrar SSH público |
 | `scripts/oci/verify_vps.sh` | VM (sudo) | Verificación final PASS/FAIL |
+| `scripts/oci/dia1_laptop.sh` | Tu laptop | Día 1: llaves, Docker y prueba de humo del CRM |
+| `scripts/oci/lint.sh` | Tu laptop | `bash -n` + ShellCheck de todos los scripts (sin sudo) |
 | `docker-compose.prod.yml` | VM | Servicio Postgres |
 | `deploy/oci/*` | VM | Timer systemd y plantillas de configuración |
 
@@ -300,5 +304,10 @@ Oracle puede **recuperar** VMs Always Free que en 7 días tengan a la vez CPU, r
 - Comprobar que el último backup del bucket se abre con la llave age.
 - `sudo /opt/jerico/app/scripts/oci/verify_vps.sh`.
 
+## Cómo se revisaron los scripts
+
+- `scripts/oci/lint.sh` instala ShellCheck (`shellcheck-py`) en un venv temporal fuera del proyecto y pasa `bash -n` y ShellCheck **en todas las severidades** sobre `scripts/oci/*.sh`. Resultado al 11/10/2026: ShellCheck 0.11.0, 0 hallazgos (las 4 notas informativas intencionales están anotadas con `# shellcheck disable=` y su motivo).
+- **No probado todavía:** ninguna ejecución real en una VM ni en Cloud Shell, ni `docker compose config` del override de producción (no había Docker en la laptop de revisión). El primer uso real es el Día 1.
+
 ---
-> 🕒 **Última modificación:** 11/10/2026 18:05 (Claude Code · Opus 5.5)
+> 🕒 **Última modificación:** 11/10/2026 20:25 (Claude Code · Opus 5.5)

@@ -18,7 +18,10 @@ if ! git diff --quiet HEAD -- . ; then
 fi
 
 echo "[INFO] Enviando HEAD $rev a $TARGET:$REMOTE_DIR ..."
+# SC2029: REMOTE_DIR y rev se expanden en la laptop a propósito (valores locales, entre comillas simples en el remoto).
+# shellcheck disable=SC2029
 git archive --format=tar HEAD \
     | ssh "$TARGET" "mkdir -p '$REMOTE_DIR' && tar -x -C '$REMOTE_DIR' && echo '$rev' > '$REMOTE_DIR/.deployed_rev'"
+# shellcheck disable=SC2029
 ssh "$TARGET" "chmod +x '$REMOTE_DIR'/scripts/oci/*.sh && cat '$REMOTE_DIR/.deployed_rev'"
 echo "[OK] Repo en $TARGET:$REMOTE_DIR (rev $rev)."
