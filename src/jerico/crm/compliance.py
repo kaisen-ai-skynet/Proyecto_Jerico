@@ -224,16 +224,37 @@ def opt_out_command(
     return [Outgoing(actor.telegram_id, text)]
 
 
-# --- Guarda de contacto comercial (VCRM-071) ------------------------------------------------
+# --- Guardas de contacto comercial (VCRM-067, 071) ------------------------------------------
+
+
+def _contact_blocked(conn: sqlite3.Connection, lead: Lead, keys: Sequence[str]) -> bool:
+    """Baja, bloqueo, supresión o huella en la lista de supresión (VCRM-071)."""
+    if lead.state == LeadState.OPTED_OUT or lead.commercial_block or lead.suppressed_at is not None:
+        return True
+    contacts = [c for c in (lead.phone_e164, lead.email) if c is not None]
+    fps = [fingerprint(key, contact) for contact in contacts for key in keys]
+    return repo.any_suppressed(conn, fps)
+
+
+def _authorization_current(conn: sqlite3.Connection, lead: Lead) -> bool:
+    """Autorización vigente: el lead consta «autorizada» y lo último registrado la respalda."""
+    if lead.auth_status != AuthStatus.AUTHORIZED:
+        return False
+    consents = repo.lead_consents(conn, lead.id)
+    return bool(consents) and consents[-1]["status"] == AuthStatus.AUTHORIZED.value
+
+
+def may_request_authorization(conn: sqlite3.Connection, lead: Lead, keys: Sequence[str]) -> bool:
+    """¿Se puede pedir autorización? No si está bloqueado (VCRM-071) ni si ya la revocó."""
+    if _contact_blocked(conn, lead, keys) or lead.auth_status == AuthStatus.REVOKED:
+        return False
+    consents = repo.lead_consents(conn, lead.id)
+    return not (consents and consents[-1]["status"] == AuthStatus.REVOKED.value)
 
 
 def may_contact_commercially(conn: sqlite3.Connection, lead: Lead, keys: Sequence[str]) -> bool:
-    """Falso si el lead está en baja, bloqueado, suprimido o con huella en la lista (VCRM-071)."""
-    if lead.state == LeadState.OPTED_OUT or lead.commercial_block or lead.suppressed_at is not None:
-        return False
-    contacts = [c for c in (lead.phone_e164, lead.email) if c is not None]
-    fps = [fingerprint(key, contact) for contact in contacts for key in keys]
-    return not repo.any_suppressed(conn, fps)
+    """Contacto comercial solo con autorización vigente y sin bloqueos (VCRM-067, 071; Q-4)."""
+    return not _contact_blocked(conn, lead, keys) and _authorization_current(conn, lead)
 
 
 # --- Supresión ordenada por el CTO (VCRM-073, 094, 154, 165) -------------------------------
@@ -931,6 +952,7 @@ __all__ = [
     "export_command",
     "export_lead",
     "may_contact_commercially",
+    "may_request_authorization",
     "opt_out_command",
     "plan_export_parts",
     "plan_suppression",

@@ -455,6 +455,7 @@ def test_vcrm094_keeps_only_listed_fields_on_won_lead_and_suppresses_the_rest(
         lead = repo.get_lead(conn, won)
         assert lead is not None
         assert not compliance.may_contact_commercially(conn, lead, (KEY,))
+        assert not compliance.may_request_authorization(conn, lead, (KEY,))
 
 
 def test_vcrm094_exception_rejected_when_no_lead_is_accepted_or_won(

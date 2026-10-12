@@ -120,7 +120,7 @@ PYTHONPATH=src .venv/bin/python -m pytest <TESTS> -q \
   - **Hecho cuando:** verde, migración (`test_crm_migration.py`) sigue verde y VERIF.
   - **Verificación:** VERIF con `<TESTS>` = `tests/test_crm_db.py tests/test_crm_migration.py`.
 
-- [ ] **F2-T11 — Guarda de contacto exige autorización (Q-4)**
+- [x] **F2-T11 — Guarda de contacto exige autorización (Q-4)**
   - **Delegable a Gemini:** NO — arquitectura/seguridad: consentimiento (Ley 1581).
   - Requisitos: VCRM-067, 071.
   - **Entregable exacto:** `src/jerico/crm/compliance.py` (`may_contact_commercially` exige `auth_status == authorized`; `may_request_authorization`), `tests/test_crm_consent.py` y `tests/test_crm_suppression.py` (ajustes), `tests/test_crm_followup.py` (adición).

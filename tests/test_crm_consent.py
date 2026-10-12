@@ -124,6 +124,29 @@ def _lead(
         return repo.insert_lead(tx, assigned_user_id=user_id, state=state, now=START, fields=base)
 
 
+def _authorized_lead(
+    db: CrmDatabase,
+    user_id: int | None,
+    *,
+    consent_status: AuthStatus = AuthStatus.AUTHORIZED,
+    auth_status: AuthStatus = AuthStatus.AUTHORIZED,
+    **fields: Any,
+) -> int:
+    """Lead con `auth_status` y su evidencia de consentimiento (configurables)."""
+    lead_id = _lead(db, user_id, **fields)
+    with db.tx() as tx:
+        repo.update_lead(tx, lead_id, {"auth_status": auth_status.value}, now=START)
+        repo.insert_consent(
+            tx,
+            lead_id=lead_id,
+            status=consent_status,
+            medium="correo",
+            at=START,
+            actor_user_id=user_id or 1,
+        )
+    return lead_id
+
+
 def _rows(db: CrmDatabase, sql: str) -> list[dict[str, Any]]:
     with db.read() as conn:
         return [dict(r) for r in conn.execute(sql).fetchall()]
@@ -451,36 +474,91 @@ def test_opt_out_blocks_new_registration_of_same_contact(
 # --- Guarda de contacto comercial (VCRM-071) ----------------------------------------------
 
 
-def test_vcrm071_may_contact_true_for_clean_lead(db: CrmDatabase, users: dict[str, User]) -> None:
+def _lead_of(conn: Any, lead_id: int) -> Any:
+    lead = repo.get_lead(conn, lead_id)
+    assert lead is not None
+    return lead
+
+
+def test_vcrm067_guarda_exige_autorizacion(db: CrmDatabase, users: dict[str, User]) -> None:
+    authorized = _authorized_lead(db, users["com"].id)
+    unauthorized = _lead(db, users["com"].id, phone_e164="+573009990000", email="otro@x.co")
+    # «autorizada» sin evidencia de consentimiento tampoco vale (VCRM-067: autorización vigente).
+    no_evidence = _lead(db, users["com"].id, phone_e164="+573008880000", email="sin@x.co")
+    with db.tx() as tx:
+        repo.update_lead(tx, no_evidence, {"auth_status": AuthStatus.AUTHORIZED.value}, now=START)
+    with db.read() as conn:
+        keys = (KEY, OLD_KEY)
+        assert compliance.may_contact_commercially(conn, _lead_of(conn, authorized), keys) is True
+        assert (
+            compliance.may_contact_commercially(conn, _lead_of(conn, unauthorized), keys) is False
+        )
+        assert compliance.may_contact_commercially(conn, _lead_of(conn, no_evidence), keys) is False
+
+
+def test_vcrm067_revocada_niega(db: CrmDatabase, users: dict[str, User]) -> None:
+    # Revocada: el estado del lead y la última fila de consentimiento lo dicen.
+    revoked = _authorized_lead(
+        db, users["com"].id, auth_status=AuthStatus.REVOKED, consent_status=AuthStatus.REVOKED
+    )
+    # Estado inconsistente: el lead sigue «autorizada» pero lo último registrado es una revocatoria.
+    stale = _authorized_lead(
+        db,
+        users["com"].id,
+        consent_status=AuthStatus.REVOKED,
+        phone_e164="+573007770000",
+        email="rev@x.co",
+    )
+    with db.read() as conn:
+        for lead_id in (revoked, stale):
+            lead = _lead_of(conn, lead_id)
+            assert compliance.may_contact_commercially(conn, lead, (KEY,)) is False
+            # Quien revocó no recibe una nueva solicitud de autorización.
+            assert compliance.may_request_authorization(conn, lead, (KEY,)) is False
+
+
+def test_vcrm067_solicitud_no_exige_autorizacion(db: CrmDatabase, users: dict[str, User]) -> None:
     lead_id = _lead(db, users["com"].id)
     with db.read() as conn:
-        lead = repo.get_lead(conn, lead_id)
-        assert lead is not None
+        lead = _lead_of(conn, lead_id)
+        assert compliance.may_contact_commercially(conn, lead, (KEY,)) is False
+        assert compliance.may_request_authorization(conn, lead, (KEY,)) is True
+
+
+def test_vcrm071_may_contact_true_for_clean_authorized_lead(
+    db: CrmDatabase, users: dict[str, User]
+) -> None:
+    lead_id = _authorized_lead(db, users["com"].id)
+    with db.read() as conn:
+        lead = _lead_of(conn, lead_id)
         assert compliance.may_contact_commercially(conn, lead, (KEY, OLD_KEY)) is True
+        assert compliance.may_request_authorization(conn, lead, (KEY, OLD_KEY)) is True
 
 
 def test_vcrm071_suppressed_fingerprint_blocks_other_lead(
     bot: CrmBot, tg: FakeTelegram, db: CrmDatabase, users: dict[str, User]
 ) -> None:
     _lead(db, users["com"].id)
-    other = _lead(db, users["com2"].id, phone_e164=None)  # mismo correo, otro lead
+    other = _authorized_lead(db, users["com2"].id, phone_e164=None)  # mismo correo, otro lead
     run(bot, _msg(COM_TG, "/baja L-0001; llamada"))
     with db.read() as conn:
         lead = repo.get_lead(conn, other)
         assert lead is not None and lead.state == LeadState.NEW
         assert compliance.may_contact_commercially(conn, lead, (KEY, OLD_KEY)) is False
+        assert compliance.may_request_authorization(conn, lead, (KEY, OLD_KEY)) is False
 
 
 def test_vcrm071_fingerprint_with_previous_key_still_blocks(
     db: CrmDatabase, users: dict[str, User]
 ) -> None:
-    lead_id = _lead(db, users["com"].id, email=None)
+    lead_id = _authorized_lead(db, users["com"].id, email=None)
     with db.tx() as tx:
         repo.add_suppression(tx, fingerprint(OLD_KEY, PHONE), at=START, medium="llamada")
     with db.read() as conn:
         lead = repo.get_lead(conn, lead_id)
         assert lead is not None
         assert compliance.may_contact_commercially(conn, lead, (KEY, OLD_KEY)) is False
+        assert compliance.may_request_authorization(conn, lead, (KEY, OLD_KEY)) is False
 
 
 @pytest.mark.parametrize(
@@ -494,13 +572,14 @@ def test_vcrm071_fingerprint_with_previous_key_still_blocks(
 def test_vcrm071_baja_block_or_suppressed_lead_cannot_be_contacted(
     db: CrmDatabase, users: dict[str, User], changes: dict[str, Any]
 ) -> None:
-    lead_id = _lead(db, users["com"].id, phone_e164=None, email=None)
+    lead_id = _authorized_lead(db, users["com"].id, phone_e164=None, email=None)
     with db.tx() as tx:
         repo.update_lead(tx, lead_id, changes, now=START)
     with db.read() as conn:
         lead = repo.get_lead(conn, lead_id)
         assert lead is not None
         assert compliance.may_contact_commercially(conn, lead, (KEY,)) is False
+        assert compliance.may_request_authorization(conn, lead, (KEY,)) is False
 
 
 # --- Correos solo a usuarios autorizados ---------------------------------------------------
