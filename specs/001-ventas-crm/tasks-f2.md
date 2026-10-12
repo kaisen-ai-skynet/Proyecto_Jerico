@@ -195,7 +195,7 @@ PYTHONPATH=src .venv/bin/python -m pytest <TESTS> -q \
   - **Hecho cuando:** verde y VERIF.
   - **Verificación:** VERIF con `<TESTS>` = `tests/test_crm_inbound.py tests/test_crm_suppression.py`.
 
-- [ ] **F2-T19 — Solicitud de autorización (`authreq.py`)**
+- [x] **F2-T19 — Solicitud de autorización (`authreq.py`)**
   - **Delegable a Gemini:** NO — arquitectura/seguridad: consentimiento y texto legal.
   - Requisitos: VCRM-068, 148, 149.
   - **Entregable exacto:** `src/jerico/crm/authreq.py` (`request_authorization`), `tests/test_crm_authreq.py`.
@@ -204,7 +204,7 @@ PYTHONPATH=src .venv/bin/python -m pytest <TESTS> -q \
   - **Hecho cuando:** verde y VERIF.
   - **Verificación:** VERIF con `<TESTS>` = `tests/test_crm_authreq.py`.
 
-- [ ] **F2-T20 — Confirmación ✅/❌ de la respuesta como autorización**
+- [x] **F2-T20 — Confirmación ✅/❌ de la respuesta como autorización**
   - **Delegable a Gemini:** NO — arquitectura/seguridad: registra autorización (decisión N-04).
   - Requisitos: VCRM-119, 141, 142, 143, 121.
   - **Entregable exacto:** `src/jerico/crm/authreq.py` (`propose_authorization`, `confirm`, `decline`), `src/jerico/crm/compliance.py` (registro con medio «respuesta al correo confirmada por el comercial», versión del aviso, finalidades y referencia al mensaje), `tests/test_crm_authreq.py` (adición).
