@@ -62,7 +62,7 @@ PYTHONPATH=src .venv/bin/python -m pytest <TESTS> -q \
 
 ## B. Dominio puro
 
-- [ ] **F2-T05 — Franja, festivos y cupo semanal (`sendwindow.py`)**
+- [x] **F2-T05 — Franja, festivos y cupo semanal (`sendwindow.py`)**
   - **Delegable a Gemini:** NO — arquitectura/seguridad: implementa la Ley 2300 (J-11) y sus topes legales.
   - Requisitos: VCRM-072, 076, 100, 101.
   - **Entregable exacto:** `src/jerico/crm/sendwindow.py`, `tests/test_crm_sendwindow.py`.
