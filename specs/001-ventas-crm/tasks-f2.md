@@ -215,7 +215,7 @@ PYTHONPATH=src .venv/bin/python -m pytest <TESTS> -q \
 
 ## E. Bot, vista y barrido
 
-- [ ] **F2-T21 — Callbacks del gate y de autorización en el bot**
+- [x] **F2-T21 — Callbacks del gate y de autorización en el bot**
   - **Delegable a Gemini:** NO — arquitectura/seguridad: cablea el gate a la interfaz.
   - Requisitos: VCRM-027, 029, 030, 031, 032, 033, 099, 141, 142, 143.
   - **Entregable exacto:** `src/jerico/crm/bot.py` (callbacks `v1:pok|pno|pcancel|prewrite|pretry|pabort|aok|ano:<id>[:<ver>]`, registro de `pending` `rewrite`; ≤ 64 bytes), `src/jerico/crm/render.py` (textos), `tests/test_crm_f2_bot.py`.
@@ -243,7 +243,7 @@ PYTHONPATH=src .venv/bin/python -m pytest <TESTS> -q \
   - **Hecho cuando:** verde y VERIF.
   - **Verificación:** VERIF con `<TESTS>` = `tests/test_crm_f2_bot.py tests/test_crm_views.py`.
 
-- [ ] **F2-T24 — Comando `/autorizacion`**
+- [x] **F2-T24 — Comando `/autorizacion`**
   - **Delegable a Gemini:** NO — arquitectura/seguridad: dispara contacto legal al titular.
   - Requisitos: VCRM-068, 149.
   - **Entregable exacto:** `src/jerico/crm/bot.py` (comando `/autorizacion L-NNNN`), `tests/test_crm_f2_bot.py` (adición).

@@ -452,3 +452,38 @@ def test_rechazar_versiones_viejas_o_propuestas_vencidas_o_cerradas(
         )
     assert "expiró" in texts(out) and hook.calls == [(lead_id, "expired")]
     assert "expiró" in texts(gate_reject(db, users["com"], proposal_id, version=2))
+
+
+def test_vcrm033_si_el_bot_ya_consumio_la_entrada_un_texto_invalido_la_repone(
+    db: CrmDatabase, users: dict[str, User]
+) -> None:
+    """El bot borra la entrada pendiente antes de llamar al gate y se la pasa explícita."""
+    lead_id = make_lead(db, users["com"])
+    proposal_id = make_proposal(db, lead_id, users["com"])
+    with db.tx() as tx:
+        gate.start_rewrite(tx, users["com"], proposal_id, NOW)
+        pending = repo.get_pending_input(tx, users["com"].id, NOW)
+        assert pending is not None
+        repo.clear_pending_input(tx, users["com"].id)  # lo que hace CrmBot._route
+
+        out = gate.submit_rewrite(
+            tx, users["com"], "  ", NOW, sender_name="Kaisen AI", pending=pending
+        )
+
+        assert "no válido" in texts(out).lower()
+        assert repo.get_pending_input(tx, users["com"].id, NOW) is not None  # puede reintentar
+        ok = gate.submit_rewrite(
+            tx, users["com"], "Texto bueno", NOW, sender_name="Kaisen AI", pending=pending
+        )
+    assert labels(ok) == ["✅", "❌"] and proposal_of(db, proposal_id).current_version == 2
+
+
+def test_may_decide_es_publica_y_coherente_con_las_reglas(
+    db: CrmDatabase, users: dict[str, User]
+) -> None:
+    lead_id = make_lead(db, users["com"])
+    proposal = proposal_of(db, make_proposal(db, lead_id, users["com"]))
+    assert gate.may_decide(users["com"], proposal) is True  # su aprobador
+    assert gate.may_decide(users["cto"], proposal) is True  # el CTO siempre
+    assert gate.may_decide(users["other"], proposal) is False
+    assert gate.may_decide(users["law"], proposal) is False

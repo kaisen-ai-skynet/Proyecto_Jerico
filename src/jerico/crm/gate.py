@@ -21,6 +21,7 @@ from jerico.crm.model import (
     AuditOutcome,
     Lead,
     Outgoing,
+    PendingInput,
     Proposal,
     ProposalKind,
     ProposalStatus,
@@ -72,7 +73,8 @@ def _audit(
     )
 
 
-def _may_decide(actor: User, proposal: Proposal) -> bool:
+def may_decide(actor: User, proposal: Proposal) -> bool:
+    """¿Puede esta persona decidir sobre la propuesta? Su aprobador y, siempre, el CTO."""
     if not actor.active or actor.role == Role.LAWYER:
         return False
     return actor.role == Role.CTO or actor.id == proposal.approver_user_id
@@ -85,7 +87,7 @@ def _load(
     proposal = repo.get_proposal(conn, proposal_id)
     if proposal is None:
         return _text(actor, f"La propuesta {proposal_id} no existe.")
-    if not _may_decide(actor, proposal):
+    if not may_decide(actor, proposal):
         _audit(conn, actor, proposal, now, AuditAction.PERMISSION_DENIED)
         return _text(actor, NO_PERMISSION)
     lead = repo.get_lead(conn, proposal.lead_id)
@@ -318,12 +320,14 @@ def submit_rewrite(
     *,
     sender_name: str,
     on_step_consumed: delivery.StepHook | None = None,
+    pending: PendingInput | None = None,
 ) -> list[Outgoing]:
     """Texto recibido tras «Reescribir»: nueva versión, plazo reiniciado y a ✅/❌ otra vez.
 
-    Devuelve `[]` si el actor no tenía una reescritura pendiente (el texto no es para el gate).
+    `pending` es la entrada que el bot ya consumió; si no se pasa se busca en la base. Devuelve
+    `[]` si el actor no tenía una reescritura pendiente (el texto no es para el gate).
     """
-    pending = repo.get_pending_input(conn, actor.id, now)
+    pending = pending or repo.get_pending_input(conn, actor.id, now)
     if pending is None or pending.kind != REWRITE_KIND or pending.data is None:
         return []
     loaded = _load(conn, actor, int(pending.data), now)
@@ -341,6 +345,14 @@ def submit_rewrite(
         return _text(actor, "La propuesta expiró y no se envió.")
     cleaned = _clean(text)
     if not cleaned or len(cleaned) > MAX_REWRITE_CHARS:
+        repo.set_pending_input(  # sigue esperando el texto (el bot ya había borrado la entrada)
+            conn,
+            user_id=actor.id,
+            kind=REWRITE_KIND,
+            now=now,
+            lead_id=pending.lead_id,
+            data=pending.data,
+        )
         return _text(
             actor,
             f"Texto no válido: debe tener entre 1 y {MAX_REWRITE_CHARS} caracteres. "
@@ -392,6 +404,7 @@ __all__ = [
     "GateOutcome",
     "approve",
     "cancel",
+    "may_decide",
     "expire_due",
     "present",
     "reject",

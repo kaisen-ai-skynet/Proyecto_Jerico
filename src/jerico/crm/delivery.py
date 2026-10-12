@@ -22,6 +22,7 @@ from typing import Literal
 from urllib.parse import quote
 
 from jerico.crm import compliance, repo
+from jerico.crm.cadence import StepOutcome
 from jerico.crm.config import Params
 from jerico.crm.db import CrmDatabase
 from jerico.crm.inbound import make_unsub_token
@@ -49,7 +50,9 @@ RETRY_CALLBACK = "freint"
 CANCEL_CALLBACK = "fcancel"
 _WEEKDAYS = ("lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo")
 
-StepHook = Callable[[sqlite3.Connection, int, str, datetime, datetime | None], list[Outgoing]]
+StepHook = Callable[
+    [sqlite3.Connection, int, StepOutcome, datetime, datetime | None], list[Outgoing]
+]
 Deferral = Literal["window", "weekly"]
 
 
