@@ -290,7 +290,7 @@ PYTHONPATH=src .venv/bin/python -m pytest <TESTS> -q \
   - **Hecho cuando:** conteo igual y VERIF; el diff solo contiene renombres.
   - **Verificación:** VERIF con `<TESTS>` = `tests/test_crm_escalation.py`.
 
-- [ ] **F2-T29 — Prueba de aceptación F2 de punta a punta**
+- [x] **F2-T29 — Prueba de aceptación F2 de punta a punta**
   - **Delegable a Gemini:** SÍ (solo tests; el coordinador revisa que no contradigan el gate).
   - Requisitos: VCRM-018, 027, 029, 038, 102, 119, 141, 160 (flujo integrado).
   - **Entregable exacto:** `tests/test_crm_f2_acceptance.py`.
