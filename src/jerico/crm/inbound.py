@@ -30,6 +30,7 @@ _HEADER_DATE_RE = re.compile(r"\s*(?:Enviado(?: el)?|Sent|Fecha|Date)\s*:", re.I
 _FOOTER_PHRASE = "responda baja"  # pie fijo de nuestros mensajes (VCRM-069)
 _WRAPPED_HEADER_LINES = 3  # «On … wrote:» puede venir partido en hasta 3 líneas
 _OUTLOOK_LOOKAHEAD = 4
+_MIN_ORIGINAL_LINE = 12  # líneas más cortas podrían ser la propia respuesta del cliente
 
 
 def _fold(text: str) -> str:
@@ -57,9 +58,23 @@ def _starts_reply_header(lines: list[str], i: int) -> bool:
     return False
 
 
-def extract_new_text(body: str) -> str:
+def _normalized(line: str) -> str:
+    return " ".join(_fold(line).split())
+
+
+def _original_lines(original: str | None) -> frozenset[str]:
+    """Líneas de nuestro mensaje lo bastante largas para no confundirse con texto del cliente."""
+    if not original:
+        return frozenset()
+    normalized = (_normalized(line) for line in original.splitlines())
+    return frozenset(line for line in normalized if len(line) >= _MIN_ORIGINAL_LINE)
+
+
+def extract_new_text(body: str, original: str | None = None) -> str:
     """Texto redactado por el remitente: sin citas `>`, sin lo que sigue a «El … escribió:» /
-    «On … wrote:» / «Original Message» / cabeceras de Outlook, y sin el pie de nuestro mensaje."""
+    «On … wrote:» / «Original Message» / cabeceras de Outlook, sin el pie de nuestro mensaje y,
+    si se conoce el `original` que le enviamos, sin las líneas que reprodujo tal cual."""
+    ours = _original_lines(original)
     lines = body.replace("\r\n", "\n").replace("\r", "\n").split("\n")
     kept: list[str] = []
     for i, line in enumerate(lines):
@@ -67,7 +82,7 @@ def extract_new_text(body: str) -> str:
             break
         if line.lstrip().startswith(">"):
             continue
-        if _FOOTER_PHRASE in _fold(line):
+        if _FOOTER_PHRASE in _fold(line) or _normalized(line) in ours:
             continue
         kept.append(line.rstrip())
     return "\n".join(kept).strip()

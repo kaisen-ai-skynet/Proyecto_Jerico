@@ -213,3 +213,42 @@ def test_vcrm102_extracto_texto_plano_truncado_sin_control() -> None:
 def test_vcrm124_make_token_rechaza_id_invalido(bad: object) -> None:
     with pytest.raises(ValueError, match="send_id"):
         make_unsub_token(bad, KEY)  # type: ignore[arg-type]
+
+
+# --- Líneas reproducidas del mensaje original que enviamos (VCRM-102) --------------------------
+
+ORIGINAL = (
+    "Hola Ana,\n"
+    "Para no recibir más comunicaciones escriba la palabra BAJA en su respuesta.\n"
+    "Aviso de privacidad: usamos sus datos para el seguimiento comercial.\n"
+    "Saludos,\n"
+)
+
+
+def test_vcrm102_lineas_del_original_reproducidas_sin_cita_no_cuentan() -> None:
+    body = (
+        "Gracias, lo reviso esta semana.\n"
+        "para no recibir más comunicaciones escriba la palabra  baja  en su respuesta.\n"
+        "Aviso de privacidad: usamos sus datos para el seguimiento comercial.\n"
+    )
+    assert extract_new_text(body, original=ORIGINAL) == "Gracias, lo reviso esta semana."
+    assert has_stop_keyword(extract_new_text(body, original=ORIGINAL)) is False
+    # Sin el original no hay forma de saber que esa frase era nuestra.
+    assert has_stop_keyword(extract_new_text(body)) is True
+
+
+def test_vcrm102_el_original_no_oculta_una_baja_real() -> None:
+    # Líneas cortas o con texto añadido por el cliente NO se descartan.
+    for body in ("baja", "Baja por favor", "Hola Ana, baja", "quiero la BAJA ya.\nSaludos,\n"):
+        assert has_stop_keyword(extract_new_text(body, original=ORIGINAL)) is True, body
+    original_con_baja_corta = "baja\nOtra línea suficientemente larga del original"
+    assert has_stop_keyword(extract_new_text("baja", original=original_con_baja_corta)) is True
+
+
+def test_vcrm102_original_vacio_o_ausente_no_cambia_el_resultado() -> None:
+    body = "Me interesa.\n> cita\n"
+    assert (
+        extract_new_text(body, original=None)
+        == extract_new_text(body, original="")
+        == "Me interesa."
+    )
