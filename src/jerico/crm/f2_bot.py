@@ -14,7 +14,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 
-from jerico.crm import authreq, delivery, followup, gate, leads, replies, repo
+from jerico.crm import authreq, delivery, followup, followup_view, gate, leads, replies, repo
 from jerico.crm.bot import CallbackHandler, CommandHandler, CrmBot
 from jerico.crm.config import CrmSettings, Params
 from jerico.crm.model import (
@@ -280,6 +280,7 @@ def register_f2(bot: CrmBot, ctx: F2Context) -> None:
         bot.register_callback(action_name, handler)
     command: CommandHandler = request_auth
     bot.register_command(REQUEST_AUTH_COMMAND, command)
+    bot.register_command("seguimiento", followup_view.following_command)
     bot.register_pending(gate.REWRITE_KIND, rewrite_text)
 
 

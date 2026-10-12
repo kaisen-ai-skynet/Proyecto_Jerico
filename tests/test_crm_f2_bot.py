@@ -483,3 +483,209 @@ def test_vcrm026_boton_marcar_perdido(env: Env) -> None:
     out = env.press("com", f"v1:cperdido:{lead_id}")
 
     assert state_of(env, lead_id) == "lost" and out
+
+
+# --- Vista /seguimiento (F2-T22, VCRM-025) -----------------------------------------------------
+
+
+def test_vcrm025_vista_seguimiento_visibilidad(env: Env) -> None:
+    lead_com = nurturing_with_cadence(env)
+    lead_other = make_lead(env.db, env.users["other"], state=LeadState.NURTURING)
+    with env.db.tx() as tx:
+        repo.upsert_cadence(
+            tx,
+            Cadence(
+                lead_other,
+                "momento",
+                7,
+                3,
+                next_action_at=to_iso(NOW + timedelta(days=7)),
+                started_at=to_iso(NOW),
+                updated_at=to_iso(NOW),
+            ),
+        )
+
+    # Abogado no tiene acceso (plan-f2 §5.9; spec §4.4)
+    out_law = env.say("law", "/seguimiento")
+    assert "permiso" in joined(out_law).lower() or "denegad" in joined(out_law).lower()
+
+    # Comercial solo ve el suyo
+    out_com = env.say("com", "/seguimiento")
+    text_com = joined(out_com)
+    assert f"L-{lead_com:04d}" in text_com
+    assert f"L-{lead_other:04d}" not in text_com
+
+    # CTO ve ambos
+    out_cto = env.say("cto", "/seguimiento")
+    text_cto = joined(out_cto)
+    assert f"L-{lead_com:04d}" in text_cto
+    assert f"L-{lead_other:04d}" in text_cto
+
+
+def test_vcrm025_incluye_motivo_frecuencia_proxima_y_envios(env: Env) -> None:
+    lead_id = nurturing_with_cadence(env)
+    out = env.say("com", "/seguimiento")
+    text = joined(out)
+    assert f"L-{lead_id:04d}" in text
+    assert "Precio o presupuesto" in text
+    assert "mensual" in text
+    assert "0 envíos" in text
+
+    # Cambiar a pausada
+    with env.db.tx() as tx:
+        repo.update_lead(tx, lead_id, {"state": LeadState.PAUSED.value}, now=NOW)
+        repo.upsert_cadence(
+            tx,
+            Cadence(
+                lead_id,
+                "precio",
+                30,
+                3,
+                status="paused",
+                next_action_at=None,
+                started_at=to_iso(NOW),
+                updated_at=to_iso(NOW),
+            ),
+        )
+    out_paused = env.say("com", "/seguimiento")
+    assert "pausada" in joined(out_paused)
+
+
+def test_vcrm025_vista_vacia(env: Env) -> None:
+    out = env.say("com", "/seguimiento")
+    assert "No hay leads en seguimiento." in joined(out)
+
+
+def test_vcrm025_no_muestra_suprimidos_ni_otros_estados(env: Env) -> None:
+    make_lead(env.db, env.users["com"], state=LeadState.NEW)
+    make_lead(env.db, env.users["com"], state=LeadState.CONTACTED)
+    make_lead(env.db, env.users["com"], state=LeadState.ACCEPTED)
+    make_lead(env.db, env.users["com"], state=LeadState.LOST)
+    make_lead(env.db, env.users["com"], state=LeadState.OPTED_OUT)
+    sup_id = nurturing_with_cadence(env)
+    with env.db.tx() as tx:
+        repo.update_lead(tx, sup_id, {"suppressed_at": to_iso(NOW)}, now=NOW)
+
+    out = env.say("com", "/seguimiento")
+    assert "No hay leads en seguimiento." in joined(out)
+
+
+def test_vcrm025_sin_datos_personales(env: Env) -> None:
+    lead_id = nurturing_with_cadence(env)
+    out = env.say("com", "/seguimiento")
+    text = joined(out)
+    assert f"L-{lead_id:04d}" in text
+    assert "Ana Pérez" not in text
+    assert "+573001112233" not in text
+    assert EMAIL not in text
+
+
+# --- Botones de cadencia en la ficha (F2-T23, VCRM-020, 022..024) -----------------------------
+
+
+def test_vcrm020_ficha_muestra_botones_pausar_y_frecuencia(env: Env) -> None:
+    lead_id = nurturing_with_cadence(env)
+    env.say("com", f"/ver L-{lead_id:04d}")
+    labels = env.labels_of_last()
+    assert "Pausar" in labels
+    assert "Reactivar" in labels
+    assert "Frecuencia semanal" in labels
+    assert "Frecuencia mensual" in labels
+    assert "Perdido" in labels
+
+
+def test_vcrm022_ficha_muestra_boton_reanudar(env: Env) -> None:
+    lead_id = nurturing_with_cadence(env)
+    with env.db.tx() as tx:
+        repo.update_lead(tx, lead_id, {"state": LeadState.PAUSED.value}, now=NOW)
+    env.say("com", f"/ver L-{lead_id:04d}")
+    labels = env.labels_of_last()
+    assert "Reanudar" in labels
+    assert "Reactivar" in labels
+    assert "Pausar" not in labels
+    assert "Frecuencia semanal" not in labels
+
+
+def test_vcrm024_ficha_rechazado_muestra_reactivar(env: Env) -> None:
+    lead_id = make_lead(env.db, env.users["com"], state=LeadState.REJECTED)
+    env.say("com", f"/ver L-{lead_id:04d}")
+    labels = env.labels_of_last()
+    assert "Reactivar" in labels
+    assert "Pausar" not in labels
+    assert "Reanudar" not in labels
+
+
+def test_vcrm020_ficha_f2_inactiva_sin_botones_cadencia(env: Env) -> None:
+    lead_id = nurturing_with_cadence(env)
+    with env.db.tx() as tx:
+        tx.execute("DELETE FROM crm_meta WHERE key = 'f2_activated_at'")
+    env.say("com", f"/ver L-{lead_id:04d}")
+    labels = env.labels_of_last()
+    assert "Pausar" not in labels
+    assert "Reactivar" not in labels
+    assert "Frecuencia semanal" not in labels
+
+
+def test_vcrm025_casos_cadencia_seguimiento(env: Env) -> None:
+    # 1. Lead sin cadencia
+    lead_nocad = make_lead(env.db, env.users["com"], state=LeadState.NURTURING)
+    # 2. Cadencia con intervalo distinto (14 días) y completada
+    lead_comp = make_lead(env.db, env.users["com"], state=LeadState.NURTURING)
+    # 3. Cadencia a la espera de decisión (next_action_at is None)
+    lead_wait = make_lead(env.db, env.users["com"], state=LeadState.NURTURING)
+
+    with env.db.tx() as tx:
+        repo.upsert_cadence(
+            tx,
+            Cadence(
+                lead_comp,
+                "precio",
+                14,
+                3,
+                status="completed",
+                next_action_at=None,
+                started_at=to_iso(NOW),
+                updated_at=to_iso(NOW),
+            ),
+        )
+        repo.upsert_cadence(
+            tx,
+            Cadence(
+                lead_wait,
+                "precio",
+                7,
+                3,
+                status="active",
+                next_action_at=None,
+                started_at=to_iso(NOW),
+                updated_at=to_iso(NOW),
+            ),
+        )
+
+    out = env.say("com", "/seguimiento")
+    text = joined(out)
+    assert f"L-{lead_nocad:04d} · sin cadencia" in text
+    assert f"L-{lead_comp:04d}" in text and "cada 14 días" in text and "completada" in text
+    assert f"L-{lead_wait:04d}" in text and "a la espera de decisión" in text
+
+    # Ficha del lead sin cadencia no tiene botones de pausar
+    env.say("com", f"/ver L-{lead_nocad:04d}")
+    assert "Pausar" not in env.labels_of_last()
+
+
+def test_vcrm020_cadence_buttons_estados_y_permisos(env: Env) -> None:
+    from jerico.crm import followup_view
+
+    with env.db.read() as conn:
+        lead_com = repo.get_lead(conn, nurturing_with_cadence(env))
+        assert lead_com is not None
+
+        # Comercial ajeno denegado
+        other_user = env.users["other"]
+        assert followup_view.cadence_buttons(conn, other_user, lead_com) == ()
+
+        # Lead en NEW no tiene botones de cadencia
+        lead_new_id = make_lead(env.db, env.users["com"], state=LeadState.NEW)
+        lead_new = repo.get_lead(conn, lead_new_id)
+        assert lead_new is not None
+        assert followup_view.cadence_buttons(conn, env.users["com"], lead_new) == ()

@@ -606,6 +606,9 @@ def view_lead(conn: sqlite3.Connection, actor: User, text: str, now: datetime) -
         alert_details=_suppression_alert_details(conn, alerts),
     )
     buttons = state_buttons(actor, lead)
+    from jerico.crm import followup_view
+
+    buttons += followup_view.cadence_buttons(conn, actor, lead)
     if actor.role == Role.CTO:  # VCRM-087: «Atendida por otro medio», solo CTO
         buttons += tuple(
             ((f"{ATTENDED_LABEL} ({n})", build_callback("atendida", str(a.id))),)

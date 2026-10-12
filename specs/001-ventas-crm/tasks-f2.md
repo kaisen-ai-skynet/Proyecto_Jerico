@@ -224,7 +224,7 @@ PYTHONPATH=src .venv/bin/python -m pytest <TESTS> -q \
   - **Hecho cuando:** verde y VERIF.
   - **Verificación:** VERIF con `<TESTS>` = `tests/test_crm_f2_bot.py tests/test_crm_bot.py`.
 
-- [ ] **F2-T22 — Vista `/seguimiento`**
+- [x] **F2-T22 — Vista `/seguimiento`**
   - **Delegable a Gemini:** SÍ.
   - Requisitos: VCRM-025.
   - **Entregable exacto:** `src/jerico/crm/bot.py` (comando), `src/jerico/crm/render.py`, `tests/test_crm_f2_bot.py` (adición).
@@ -234,7 +234,7 @@ PYTHONPATH=src .venv/bin/python -m pytest <TESTS> -q \
   - **Hecho cuando:** verde y VERIF.
   - **Verificación:** VERIF con `<TESTS>` = `tests/test_crm_f2_bot.py`.
 
-- [ ] **F2-T23 — Botones de cadencia en la ficha (pausar, reanudar, frecuencia, reactivar, perdido)**
+- [x] **F2-T23 — Botones de cadencia en la ficha (pausar, reanudar, frecuencia, reactivar, perdido)**
   - **Delegable a Gemini:** SÍ.
   - Requisitos: VCRM-020, 022, 023, 024, 026.
   - **Entregable exacto:** `src/jerico/crm/bot.py`, `src/jerico/crm/render.py`, `tests/test_crm_f2_bot.py` (adición).
