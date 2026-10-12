@@ -22,7 +22,7 @@ PYTHONPATH=src .venv/bin/python -m pytest <TESTS> -q \
 
 ## A. Migración a valores en inglés (Q-1, VCRM-171; plan-f2 §2)
 
-- [ ] **F2-T01 — Tests rojos de migración v1→v2**
+- [x] **F2-T01 — Tests rojos de migración v1→v2**
   - **Delegable a Gemini:** NO — arquitectura/seguridad: define la migración de datos persistidos y su criterio de aborto.
   - Requisitos: VCRM-171.
   - **Entregable exacto:** `tests/test_crm_migration.py`; adición a `tests/crm_support.py` (`build_v1_database(path)`: DDL v1 literal + filas de ejemplo en todos los estados); inventario de valores de `crm_confirmations.status` anotado en un comentario del test.
@@ -31,7 +31,7 @@ PYTHONPATH=src .venv/bin/python -m pytest <TESTS> -q \
   - **Hecho cuando:** los tests existen y fallan por ausencia de `migrate.py` (no por error de sintaxis).
   - **Verificación:** `PYTHONPATH=src .venv/bin/python -m pytest tests/test_crm_migration.py -q` (rojo esperado).
 
-- [ ] **F2-T02 — `migrate.py` independiente (aún sin conectar)**
+- [x] **F2-T02 — `migrate.py` independiente (aún sin conectar)**
   - **Delegable a Gemini:** NO — arquitectura/seguridad: transforma datos persistidos y alberga el rollback.
   - Requisitos: VCRM-171.
   - **Entregable exacto:** `src/jerico/crm/migrate.py` (`migrate_v1_to_v2(path) -> None`, mapa de valores de plan-f2 §2, copia `.pre-v2.bak` con `integrity_check`, transacción única, reconstrucción de `crm_outbox`, `crm_titular_requests` y `CHECK` v2).

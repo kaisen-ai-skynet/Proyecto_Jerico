@@ -3,6 +3,7 @@
 Esqueleto: crece con cada tarea (FakeTelegram, FakeEmailSender, FakeClock, make_harness).
 """
 
+import sqlite3
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -201,3 +202,208 @@ class FakeRunner:
             Path(argv[argv.index("--output") + 1]).write_bytes(b"cifrado")
         stdout = "\n".join(self.listing) + "\n" if argv[:2] == ["rclone", "lsf"] else ""
         return CommandResult(returncode=0, stderr_tail="", stdout=stdout)
+
+
+# --- Esquema v1 congelado (VCRM-171): copia literal del DDL de F1; NO se actualiza con db.py ---
+V1_DDL: tuple[str, ...] = (
+    "CREATE TABLE IF NOT EXISTS crm_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)",
+    """CREATE TABLE IF NOT EXISTS crm_users (
+  id INTEGER PRIMARY KEY,
+  telegram_id BIGINT NOT NULL,
+  role TEXT NOT NULL CHECK (role IN ('commercial','cto','lawyer')),
+  email TEXT NOT NULL,
+  active SMALLINT NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL, deactivated_at TEXT
+)""",
+    "CREATE UNIQUE INDEX IF NOT EXISTS ux_users_active_tg ON crm_users (telegram_id) WHERE active = 1",  # noqa: E501
+    """CREATE TABLE IF NOT EXISTS crm_leads (
+  id INTEGER PRIMARY KEY,
+  assigned_user_id INTEGER REFERENCES crm_users(id),
+  state TEXT NOT NULL,
+  name TEXT, phone_e164 TEXT, email TEXT, company TEXT,
+  client_type TEXT, doc_type TEXT, doc_number TEXT, legal_rep TEXT,
+  service TEXT, agreed_value TEXT, start_term TEXT,
+  reject_reason TEXT, reject_text TEXT, rejection_is_retraction SMALLINT NOT NULL DEFAULT 0,
+  auth_status TEXT NOT NULL DEFAULT 'sin_autorizacion',
+  ever_accepted SMALLINT NOT NULL DEFAULT 0,
+  registered_at TEXT NOT NULL, last_interaction_at TEXT NOT NULL,
+  accepted_exit_at TEXT,
+  won_at TEXT, final_state_at TEXT,
+  legal_hold_basis TEXT, commercial_block SMALLINT NOT NULL DEFAULT 0,
+  suppressed_at TEXT, suppression_cause TEXT
+)""",
+    "CREATE INDEX IF NOT EXISTS ix_leads_phone ON crm_leads (phone_e164)",
+    "CREATE INDEX IF NOT EXISTS ix_leads_email ON crm_leads (email)",
+    "CREATE INDEX IF NOT EXISTS ix_leads_assigned ON crm_leads (assigned_user_id, last_interaction_at)",  # noqa: E501
+    """CREATE TABLE IF NOT EXISTS crm_lead_events (
+  id INTEGER PRIMARY KEY, lead_id INTEGER NOT NULL REFERENCES crm_leads(id),
+  kind TEXT NOT NULL CHECK (kind IN ('state','field','reassign','titular_request')),
+  field TEXT, old_value TEXT, new_value TEXT, reason TEXT, reason_text TEXT,
+  actor_user_id INTEGER NOT NULL, at TEXT NOT NULL
+)""",
+    "CREATE TABLE IF NOT EXISTS crm_notes (id INTEGER PRIMARY KEY, lead_id INTEGER NOT NULL, author_user_id INTEGER NOT NULL, body TEXT NOT NULL, at TEXT NOT NULL)",  # noqa: E501
+    """CREATE TABLE IF NOT EXISTS crm_attachments (
+  id INTEGER PRIMARY KEY, lead_id INTEGER NOT NULL,
+  kind TEXT NOT NULL CHECK (kind IN ('photo','document','voice','authorization')),
+  author_user_id INTEGER NOT NULL, at TEXT NOT NULL,
+  storage_key TEXT NOT NULL, size_bytes INTEGER NOT NULL, sha256 TEXT NOT NULL, deleted_at TEXT
+)""",
+    """CREATE TABLE IF NOT EXISTS crm_consents (
+  id INTEGER PRIMARY KEY, lead_id INTEGER NOT NULL, status TEXT NOT NULL, medium TEXT NOT NULL,
+  at TEXT NOT NULL, actor_user_id INTEGER NOT NULL, notice_version TEXT, purposes TEXT,
+  attachment_id INTEGER
+)""",
+    "CREATE TABLE IF NOT EXISTS crm_suppression (fingerprint TEXT PRIMARY KEY, at TEXT NOT NULL, medium TEXT NOT NULL)",  # noqa: E501
+    """CREATE TABLE IF NOT EXISTS crm_titular_requests (
+  id INTEGER PRIMARY KEY, lead_id INTEGER NOT NULL,
+  type TEXT NOT NULL CHECK (type IN ('consulta','reclamo')),
+  medium TEXT NOT NULL, received_on TEXT NOT NULL, due_on TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'abierta' CHECK (status IN ('abierta','vencida','atendida')),
+  registered_by INTEGER NOT NULL, registered_at TEXT NOT NULL,
+  last_escalation_on TEXT, attended_by INTEGER, attended_at TEXT
+)""",
+    """CREATE TABLE IF NOT EXISTS crm_outbox (
+  id INTEGER PRIMARY KEY, idempotency_key TEXT NOT NULL UNIQUE,
+  kind TEXT NOT NULL, critical SMALLINT NOT NULL,
+  channel TEXT NOT NULL CHECK (channel IN ('telegram','email')),
+  recipient_user_id INTEGER NOT NULL, lead_id INTEGER, origin_outbox_id INTEGER,
+  subject TEXT, body TEXT,
+  status TEXT NOT NULL CHECK (status IN ('pendiente','entregada','fallida')),
+  attempts SMALLINT NOT NULL DEFAULT 0, first_attempt_at TEXT, next_attempt_at TEXT,
+  last_error TEXT, provider_message_id TEXT, created_at TEXT NOT NULL
+)""",
+    "CREATE INDEX IF NOT EXISTS ix_outbox_due ON crm_outbox (status, next_attempt_at)",
+    """CREATE TABLE IF NOT EXISTS crm_alerts (
+  id INTEGER PRIMARY KEY, lead_id INTEGER, kind TEXT NOT NULL, outbox_id INTEGER,
+  request_id INTEGER, created_at TEXT NOT NULL, resolved_by INTEGER, resolved_at TEXT
+)""",
+    """CREATE TABLE IF NOT EXISTS crm_audit (
+  id INTEGER PRIMARY KEY, at TEXT NOT NULL, actor TEXT NOT NULL,
+  action TEXT NOT NULL, lead_id INTEGER, outcome TEXT NOT NULL, detail_code TEXT
+)""",
+    "CREATE TABLE IF NOT EXISTS crm_processed_updates (update_id BIGINT PRIMARY KEY, processed_at TEXT NOT NULL)",  # noqa: E501
+    "CREATE TABLE IF NOT EXISTS crm_pending_inputs (user_id INTEGER PRIMARY KEY, kind TEXT NOT NULL, lead_id INTEGER, data TEXT, expires_at TEXT NOT NULL)",  # noqa: E501
+    """CREATE TABLE IF NOT EXISTS crm_confirmations (
+  id INTEGER PRIMARY KEY,
+  kind TEXT NOT NULL CHECK (kind IN ('accept','retract','authorization_question')),
+  lead_id INTEGER NOT NULL, user_id INTEGER NOT NULL, reason TEXT, reason_text TEXT,
+  status TEXT NOT NULL DEFAULT 'pendiente', created_at TEXT NOT NULL, resolved_at TEXT
+)""",
+    """CREATE TABLE IF NOT EXISTS crm_retention_notices (
+  lead_id INTEGER NOT NULL, clock_start TEXT NOT NULL, kind TEXT NOT NULL,
+  sent_at TEXT NOT NULL, PRIMARY KEY (lead_id, clock_start, kind)
+)""",
+    "INSERT INTO crm_meta (key, value) VALUES ('schema_version', '1') ON CONFLICT (key) DO NOTHING",
+)
+
+
+# (id, state, auth_status) de los 10 leads de ejemplo: un lead por estado v1.
+V1_LEAD_ROWS: tuple[tuple[int, str, str], ...] = (
+    (1, "nuevo", "sin_autorizacion"),
+    (2, "contactado", "autorizada"),
+    (3, "aceptado", "autorizada"),
+    (4, "rechazado", "revocada"),
+    (5, "en_nutricion", "autorizada"),
+    (6, "pausado", "sin_autorizacion"),
+    (7, "reactivado", "autorizada"),
+    (8, "ganado", "autorizada"),
+    (9, "perdido", "revocada"),
+    (10, "baja", "revocada"),
+)
+V1_TS = "2026-10-01T12:00:00+00:00"
+
+
+def build_v1_database(path: Path) -> None:
+    """Crea una base con el esquema v1 literal y filas en todos los estados de F1.
+
+    Inventario de `crm_confirmations.status` en F1 (repo.resolve_confirmation, bot.py):
+    `pendiente`, `confirmada`, `cancelada`.
+    """
+    conn = sqlite3.connect(str(path), isolation_level=None)
+    try:
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA foreign_keys=ON")
+        for statement in V1_DDL:
+            conn.execute(statement)
+        conn.execute("BEGIN")
+        conn.execute(
+            "INSERT INTO crm_users (id, telegram_id, role, email, active, created_at) "
+            "VALUES (1, 1001, 'cto', 'cto@example.invalid', 1, ?), "
+            "(2, 1002, 'commercial', 'com@example.invalid', 1, ?)",
+            (V1_TS, V1_TS),
+        )
+        for lead_id, state, auth in V1_LEAD_ROWS:
+            conn.execute(
+                "INSERT INTO crm_leads (id, assigned_user_id, state, name, phone_e164, email, "
+                "reject_reason, auth_status, registered_at, last_interaction_at) "
+                "VALUES (?, 2, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    lead_id,
+                    state,
+                    f"Cliente {lead_id}",
+                    f"+57300000{lead_id:04d}",
+                    f"c{lead_id}@example.invalid",
+                    "precio" if state == "rechazado" else None,
+                    auth,
+                    V1_TS,
+                    V1_TS,
+                ),
+            )
+            conn.execute(
+                "INSERT INTO crm_lead_events (lead_id, kind, old_value, new_value, "
+                "actor_user_id, at) VALUES (?, 'state', 'nuevo', ?, 2, ?)",
+                (lead_id, state, V1_TS),
+            )
+        # Un evento de campo cuyo texto coincide con un estado: NO debe migrarse.
+        conn.execute(
+            "INSERT INTO crm_lead_events (lead_id, kind, field, old_value, new_value, "
+            "actor_user_id, at) VALUES (2, 'field', 'company', 'contactado', 'aceptado', 2, ?)",
+            (V1_TS,),
+        )
+        conn.execute(
+            "INSERT INTO crm_consents (lead_id, status, medium, at, actor_user_id) "
+            "VALUES (2, 'autorizada', 'email', ?, 2), (4, 'revocada', 'telegram', ?, 2)",
+            (V1_TS, V1_TS),
+        )
+        for key, status in (("k1", "pendiente"), ("k2", "entregada"), ("k3", "fallida")):
+            conn.execute(
+                "INSERT INTO crm_outbox (idempotency_key, kind, critical, channel, "
+                "recipient_user_id, status, created_at) VALUES (?, 'handoff', 1, 'email', 1, ?, ?)",
+                (key, status, V1_TS),
+            )
+        for req_type, status in (
+            ("consulta", "abierta"),
+            ("reclamo", "vencida"),
+            ("consulta", "atendida"),
+        ):
+            conn.execute(
+                "INSERT INTO crm_titular_requests (lead_id, type, medium, received_on, due_on, "
+                "status, registered_by, registered_at) VALUES (2, ?, 'email', '2026-10-01', "
+                "'2026-10-15', ?, 1, ?)",
+                (req_type, status, V1_TS),
+            )
+        for kind, status in (
+            ("accept", "pendiente"),
+            ("retract", "confirmada"),
+            ("authorization_question", "cancelada"),
+        ):
+            conn.execute(
+                "INSERT INTO crm_confirmations (kind, lead_id, user_id, status, created_at) "
+                "VALUES (?, 2, 2, ?, ?)",
+                (kind, status, V1_TS),
+            )
+        conn.execute(
+            "INSERT INTO crm_notes (lead_id, author_user_id, body, at) VALUES (2, 2, 'nota', ?)",
+            (V1_TS,),
+        )
+        conn.execute(
+            "INSERT INTO crm_suppression (fingerprint, at, medium) VALUES ('fp', ?, 'email')",
+            (V1_TS,),
+        )
+        conn.execute(
+            "INSERT INTO crm_audit (at, actor, action, outcome) VALUES (?, 'u2', 'lead_created', 'ok')",  # noqa: E501
+            (V1_TS,),
+        )
+        conn.execute("COMMIT")
+    finally:
+        conn.close()
