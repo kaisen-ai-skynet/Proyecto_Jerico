@@ -245,4 +245,24 @@ Además: `test_crm_f2_acceptance.py` recorre rechazo → cadencia → propuesta 
 ## 9. Riesgos
 (1) Falsos positivos de «BAJA» (aceptado, P-31). (2) Dependencia del proveedor IMAP; mitigada por VCRM-170 y D-9. (3) Rebotes llegan al CTO como no asociables (D-10). (4) La migración Q-1 toca datos; mitigada por copia, transacción única y tests. (5) Tolerancia de ±60 s en reintentos (D-3). (6) Rechazos por retractación (`rejection_is_retraction`) entran también en cadencia (VCRM-018 no los excluye); si el CTO no lo quiere, es un cambio de spec.
 
+## 10. Implementación: desviaciones respecto al diseño y pendientes de despliegue (11/10/2026)
+
+Lo construido difiere del diseño original en lo siguiente; cada punto tiene su test.
+
+**Módulos.** En vez de concentrar todo en `followup.py`: `followup.py` (cadencias y generación de propuestas), `gate.py` (decisiones del aprobador), `delivery.py` (franja, cupo, reintentos y entrega), `replies.py` (respuestas del titular y sondeo), `authreq.py` (solicitud y confirmación de la autorización), `f2_bot.py` (botones y comando), `followup_view.py` (vista y botones de la ficha) y `sweep.py` (el barrido). Los botones se registran por los puntos de extensión de `CrmBot`; su núcleo no cambió.
+
+**Esquema (v2, aún sin desplegar).** `crm_inbound.classification` (no `class`, palabra reservada). `crm_titular_requests.lead_id` admite nulo (respuesta sin lead asociable, VCRM-122) y gana `inbound_id`. `crm_consents.evidence_inbound_id` guarda la referencia al correo que sirvió de evidencia (VCRM-141). El índice único de propuestas de seguimiento ignora las **canceladas y bloqueadas**: pausar cancela la propuesta sin avanzar el paso y, con el índice original, reanudar dejaba la cadencia atascada para siempre.
+
+**Seguridad.** La huella del contenido aprobado antepone la longitud del asunto (con `asunto + "\n" + cuerpo` dos pares distintos colisionaban). Un token de baja inválido no recurre al hilo ni al remitente. `extract_new_text` descarta además las líneas que el cliente reproduce tal cual de nuestro mensaje y el pie «Responda BAJA…»; el aviso de privacidad tiene una única instrucción de baja y ninguna otra frase con esa palabra. Las acciones automáticas se atribuyen a `SYSTEM_USER_ID` (0), no a un usuario.
+
+**Producto.** El comando de F2 es `/pedirautorizacion L-n` (el `/autorizacion` de F1 sigue registrando la evidencia). «Reescribir» no se ofrece para una solicitud de autorización (texto legal). Una respuesta sin lead solo ofrece «Sin solicitud». Aviso de privacidad y textos de cadencias viajan como **recursos del paquete** (`resources/`), sustituibles por archivo (`JERICO_CRM_PRIVACY_NOTICE_FILE`, `JERICO_CRM_CADENCE_FILE`); un archivo configurado que no se puede leer deja F2 deshabilitada, no recurre al del paquete. `start_cadence` desde los ganchos no recibe las claves de huella: la guarda definitiva con huellas se aplica al generar y en cada intento de envío. Los usuarios no guardan nombre, así que los textos no usan `{comercial}`.
+
+**Comportamiento de F1 que cambia.** `CURRENT_PHASE = 2` habilita las filas de F2 de la máquina de estados. El arranque, sin configuración de F2, avisa **una vez** al CTO de que F2 está deshabilitada y por qué (antes no enviaba nada). `/lista` oculta los leads suprimidos.
+
+**Pendiente antes de activar F2 en producción (nada de esto se puede hacer sin credenciales reales).**
+1. Variables en `.env`: `JERICO_CRM_IMAP_HOST/USERNAME/PASSWORD` (buzón dedicado con contraseña de aplicación), el SMTP de salida y `JERICO_CRM_SENDER_NAME` si no es «Kaisen AI». Salida a 993/TCP si hay filtro.
+2. Datos registrales del responsable en el aviso de privacidad (razón social, NIT, domicilio), hoy marcados `[PENDIENTE]` en `resources/aviso-privacidad.md`.
+3. Prueba con Telegram y correo reales en la instancia, y verificar la entrega de las bajas desde un cliente de correo real (cabecera `List-Unsubscribe`).
+4. Migrar con el servicio detenido; queda una copia `crm.db.pre-v2.bak` junto a la base.
+
 > Última modificación: 11/10/2026 17:53 (Planificador SDD)
