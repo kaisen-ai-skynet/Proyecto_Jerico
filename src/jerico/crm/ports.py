@@ -2,6 +2,7 @@
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import BinaryIO, Literal, Protocol
 
@@ -76,6 +77,41 @@ class EmailSender(Protocol):
     async def send(
         self, to: str, subject: str, body: str, headers: Mapping[str, str] | None = None
     ) -> SendResult: ...
+
+
+class InboxError(Exception):
+    """Fallo de conexión o credenciales del buzón (VCRM-170).
+
+    El texto lleva solo el tipo de error: nunca el mensaje del servidor ni credenciales.
+    """
+
+
+@dataclass(frozen=True)
+class InboundMessage:
+    """Correo entrante ya normalizado; el contenido es NO confiable (viene de terceros)."""
+
+    uid: int
+    rfc_message_id: str
+    in_reply_to: str | None
+    references: tuple[str, ...]
+    from_addr: str  # minúsculas; vacío si no hay un remitente fiable
+    subject: str
+    body_text: str  # texto plano, acotado; el HTML ya viene reducido a texto
+    date: datetime | None  # con zona; None si la cabecera falta o es ilegible
+    truncated: bool  # el mensaje superó el tope de bytes y se leyó solo el principio
+
+
+@dataclass(frozen=True)
+class InboxBatch:
+    uidvalidity: int
+    messages: tuple[InboundMessage, ...]
+    has_more: bool  # quedan mensajes nuevos para el siguiente sondeo
+
+
+class InboxPort(Protocol):
+    async def fetch_new(self, uidvalidity: int | None, last_uid: int) -> InboxBatch:
+        """Mensajes con UID > `last_uid` (o todos si `uidvalidity` cambió). Solo lectura."""
+        ...
 
 
 class CommandRunner(Protocol):

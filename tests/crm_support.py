@@ -5,7 +5,7 @@ Esqueleto: crece con cada tarea (FakeTelegram, FakeEmailSender, FakeClock, make_
 
 import sqlite3
 from collections import defaultdict
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -13,7 +13,15 @@ from typing import Any
 
 from jerico.crm.config import CrmSettings
 from jerico.crm.model import Lead
-from jerico.crm.ports import CommandResult, DownloadResult, InlineButton, SendResult, Update
+from jerico.crm.ports import (
+    CommandResult,
+    DownloadResult,
+    InboundMessage,
+    InboxBatch,
+    InlineButton,
+    SendResult,
+    Update,
+)
 
 
 def make_settings(**overrides: Any) -> CrmSettings:
@@ -411,3 +419,27 @@ def build_v1_database(path: Path) -> None:
         conn.execute("COMMIT")
     finally:
         conn.close()
+
+
+class FakeInbox:
+    """Doble de `InboxPort`: lotes de hasta 50, `UIDVALIDITY` y fallos programables."""
+
+    def __init__(self, messages: Sequence[InboundMessage] = (), uidvalidity: int = 1) -> None:
+        self.messages = list(messages)
+        self.uidvalidity = uidvalidity
+        self.fetches: list[tuple[int | None, int]] = []
+        self._failures: list[Exception] = []
+
+    def add(self, *messages: InboundMessage) -> None:
+        self.messages.extend(messages)
+
+    def fail_next(self, error: Exception) -> None:
+        self._failures.append(error)
+
+    async def fetch_new(self, uidvalidity: int | None, last_uid: int) -> InboxBatch:
+        self.fetches.append((uidvalidity, last_uid))
+        if self._failures:
+            raise self._failures.pop(0)
+        start = last_uid if uidvalidity == self.uidvalidity else 0
+        pending = sorted((m for m in self.messages if m.uid > start), key=lambda m: m.uid)
+        return InboxBatch(self.uidvalidity, tuple(pending[:50]), has_more=len(pending) > 50)

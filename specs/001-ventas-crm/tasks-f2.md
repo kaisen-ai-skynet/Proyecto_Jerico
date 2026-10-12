@@ -177,7 +177,7 @@ PYTHONPATH=src .venv/bin/python -m pytest <TESTS> -q \
   - **Hecho cuando:** verde, `tests/test_crm_outbox.py` sigue verde y VERIF.
   - **Verificación:** VERIF con `<TESTS>` = `tests/test_crm_adapters.py tests/test_crm_outbox.py`.
 
-- [ ] **F2-T17 — Adaptador IMAP de solo lectura (`inbox.py`)**
+- [x] **F2-T17 — Adaptador IMAP de solo lectura (`inbox.py`)**
   - **Delegable a Gemini:** NO — arquitectura/seguridad: credenciales, ingreso de contenido no confiable.
   - Requisitos: VCRM-169, 170.
   - **Entregable exacto:** `src/jerico/crm/ports.py` (`InboxPort`, `InboundMessage`), `src/jerico/crm/inbox.py` (`ImapInbox`, `UnconfiguredInbox`, `build_inbox`), `tests/crm_support.py` (`FakeInbox`), `tests/test_crm_inbox.py`.
