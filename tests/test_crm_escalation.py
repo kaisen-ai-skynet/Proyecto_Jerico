@@ -169,7 +169,7 @@ def run(bot: CrmBot, u: Update) -> None:
 # --- VCRM-128: nunca en paralelo a los intentos -------------------------------------------
 
 
-def test_vcrm128_no_backup_while_attempts_remain(
+def test_vcrm151_vcrm128_no_backup_while_attempts_remain(
     db: CrmDatabase,
     tg: FakeTelegram,
     mail: FakeEmailSender,
@@ -193,7 +193,7 @@ def test_vcrm128_no_backup_while_attempts_remain(
     assert {m.to for m in mail.sent} == {"cto@k.co", "com@k.co"}
 
 
-def test_vcrm128_delivered_on_retry_never_escalates(
+def test_vcrm151_vcrm128_delivered_on_retry_never_escalates(
     db: CrmDatabase,
     tg: FakeTelegram,
     mail: FakeEmailSender,
@@ -213,7 +213,7 @@ def test_vcrm128_delivered_on_retry_never_escalates(
 # --- VCRM-050 / 107: correo de respaldo --------------------------------------------------
 
 
-def test_vcrm050_lawyer_telegram_failure_backup_to_cto_and_commercial(
+def test_vcrm151_vcrm050_lawyer_telegram_failure_backup_to_cto_and_commercial(
     db: CrmDatabase,
     tg: FakeTelegram,
     mail: FakeEmailSender,
@@ -234,7 +234,7 @@ def test_vcrm050_lawyer_telegram_failure_backup_to_cto_and_commercial(
         assert CONTENT not in sent.body  # contenido completo solo si falló el Telegram del CTO
 
 
-def test_vcrm050_lawyer_email_failure_triggers_backup(
+def test_vcrm151_vcrm050_lawyer_email_failure_triggers_backup(
     db: CrmDatabase,
     tg: FakeTelegram,
     mail: FakeEmailSender,
@@ -252,7 +252,7 @@ def test_vcrm050_lawyer_email_failure_triggers_backup(
 
 
 @pytest.mark.parametrize("kind", sorted(ESCALATED_KINDS))
-def test_vcrm050_single_backup_when_commercial_is_cto(
+def test_vcrm151_vcrm050_single_backup_when_commercial_is_cto(
     db: CrmDatabase,
     tg: FakeTelegram,
     mail: FakeEmailSender,
@@ -268,14 +268,14 @@ def test_vcrm050_single_backup_when_commercial_is_cto(
     assert [m.to for m in mail.sent] == ["cto@k.co"]
 
 
-def test_vcrm050_kinds_match_critical_notifications() -> None:
+def test_vcrm151_vcrm050_kinds_match_critical_notifications() -> None:
     assert (
         frozenset({leads.ACCEPT_NOTICE_KIND, leads.RETRACT_NOTICE_KIND, leads.HANDOFF_NOTICE_KIND})
         == ESCALATED_KINDS
     )
 
 
-def test_vcrm050_other_kinds_are_not_escalated(
+def test_vcrm151_vcrm050_other_kinds_are_not_escalated(
     db: CrmDatabase,
     tg: FakeTelegram,
     mail: FakeEmailSender,
@@ -290,7 +290,7 @@ def test_vcrm050_other_kinds_are_not_escalated(
     assert len(_rows(db)) == 1 and mail.attempts == []
 
 
-def test_vcrm107_cto_telegram_failure_backup_includes_full_content(
+def test_vcrm151_vcrm107_cto_telegram_failure_backup_includes_full_content(
     db: CrmDatabase,
     tg: FakeTelegram,
     mail: FakeEmailSender,
@@ -308,7 +308,7 @@ def test_vcrm107_cto_telegram_failure_backup_includes_full_content(
     assert CONTENT not in to_com.body
 
 
-def test_vcrm050_backup_without_lead_goes_to_cto(
+def test_vcrm151_vcrm050_backup_without_lead_goes_to_cto(
     db: CrmDatabase,
     tg: FakeTelegram,
     mail: FakeEmailSender,
@@ -325,7 +325,7 @@ def test_vcrm050_backup_without_lead_goes_to_cto(
 # --- VCRM-129 / 130: aviso de fallo del respaldo ----------------------------------------
 
 
-def test_vcrm129_backup_failure_warns_by_telegram_and_email(
+def test_vcrm151_vcrm129_backup_failure_warns_by_telegram_and_email(
     db: CrmDatabase,
     tg: FakeTelegram,
     mail: FakeEmailSender,
@@ -354,7 +354,7 @@ def test_vcrm129_backup_failure_warns_by_telegram_and_email(
     assert len(_mails_to(mail, "com@k.co")) == 2  # respaldo + aviso
 
 
-def test_vcrm130_failed_warning_on_both_channels_stops(
+def test_vcrm151_vcrm130_failed_warning_on_both_channels_stops(
     db: CrmDatabase,
     tg: FakeTelegram,
     clock: FakeClock,
@@ -380,7 +380,7 @@ def test_vcrm130_failed_warning_on_both_channels_stops(
 # --- VCRM-140: buzón sin configurar --------------------------------------------------------
 
 
-def test_vcrm140_unconfigured_mailbox_fails_without_attempts_and_escalates(
+def test_vcrm151_vcrm140_unconfigured_mailbox_fails_without_attempts_and_escalates(
     db: CrmDatabase,
     tg: FakeTelegram,
     clock: FakeClock,
@@ -418,7 +418,7 @@ def _failed_lead(
     return lead_id
 
 
-def test_vcrm087_alert_in_card_and_cto_list_until_attended(
+def test_vcrm151_vcrm087_alert_in_card_and_cto_list_until_attended(
     db: CrmDatabase,
     tg: FakeTelegram,
     clock: FakeClock,
@@ -470,7 +470,7 @@ def test_vcrm087_alert_in_card_and_cto_list_until_attended(
 # --- Rama del bot: tipo de confirmación sin handler registrado ---------------------------
 
 
-def test_vcrm046_unregistered_confirmation_kind_is_inert(
+def test_vcrm151_vcrm046_unregistered_confirmation_kind_is_inert(
     db: CrmDatabase,
     tg: FakeTelegram,
     clock: FakeClock,

@@ -281,7 +281,7 @@ PYTHONPATH=src .venv/bin/python -m pytest <TESTS> -q \
   - **Hecho cuando:** verde y VERIF.
   - **Verificación:** VERIF con `<TESTS>` = `tests/test_crm_views.py tests/test_crm_suppression.py`.
 
-- [ ] **F2-T28 — Prefijo `vcrm151` en tests de escalado (observación c)**
+- [x] **F2-T28 — Prefijo `vcrm151` en tests de escalado (observación c)**
   - **Delegable a Gemini:** SÍ.
   - Requisitos: VCRM-151 (trazabilidad).
   - **Entregable exacto:** `tests/test_crm_escalation.py` (solo renombrar funciones de test a `test_vcrm151_...`).
