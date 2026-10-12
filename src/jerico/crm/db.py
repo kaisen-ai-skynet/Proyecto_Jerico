@@ -74,7 +74,8 @@ _DDL: tuple[str, ...] = (
   medium TEXT NOT NULL, received_on TEXT NOT NULL, due_on TEXT NOT NULL,
   status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','overdue','attended')),
   registered_by INTEGER NOT NULL, registered_at TEXT NOT NULL,
-  last_escalation_on TEXT, attended_by INTEGER, attended_at TEXT
+  last_escalation_on TEXT, attended_by INTEGER, attended_at TEXT,
+  inbound_id INTEGER
 )""",
     """CREATE TABLE IF NOT EXISTS crm_outbox (
   id INTEGER PRIMARY KEY, idempotency_key TEXT NOT NULL UNIQUE,
@@ -108,6 +109,85 @@ _DDL: tuple[str, ...] = (
     """CREATE TABLE IF NOT EXISTS crm_retention_notices (
   lead_id INTEGER NOT NULL, clock_start TEXT NOT NULL, kind TEXT NOT NULL,
   sent_at TEXT NOT NULL, PRIMARY KEY (lead_id, clock_start, kind)
+)""",
+    """CREATE TABLE IF NOT EXISTS crm_cadences (
+  lead_id INTEGER PRIMARY KEY REFERENCES crm_leads(id),
+  reason TEXT NOT NULL,
+  interval_days INTEGER NOT NULL,
+  total_steps INTEGER NOT NULL,
+  steps_done INTEGER NOT NULL DEFAULT 0,
+  sent_count INTEGER NOT NULL DEFAULT 0,
+  next_action_at TEXT,
+  last_sent_at TEXT,
+  status TEXT NOT NULL CHECK (status IN ('active','paused','completed','stopped')),
+  started_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+)""",
+    """CREATE TABLE IF NOT EXISTS crm_proposals (
+  id INTEGER PRIMARY KEY,
+  lead_id INTEGER NOT NULL REFERENCES crm_leads(id),
+  kind TEXT NOT NULL CHECK (kind IN ('followup','auth_request')),
+  step INTEGER,
+  status TEXT NOT NULL DEFAULT 'pending'
+    CHECK (status IN ('pending','approved','sent','failed','cancelled','expired','blocked')),
+  current_version INTEGER NOT NULL DEFAULT 1,
+  approver_user_id INTEGER NOT NULL,
+  expires_at TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  resolved_at TEXT,
+  resolved_by INTEGER
+)""",
+    "CREATE UNIQUE INDEX IF NOT EXISTS ux_proposals_followup_step "
+    "ON crm_proposals (lead_id, step) WHERE kind = 'followup'",
+    "CREATE UNIQUE INDEX IF NOT EXISTS ux_proposals_open_auth_request "
+    "ON crm_proposals (lead_id) WHERE kind = 'auth_request' AND status IN ('pending','approved')",
+    """CREATE TABLE IF NOT EXISTS crm_proposal_versions (
+  proposal_id INTEGER NOT NULL REFERENCES crm_proposals(id),
+  version INTEGER NOT NULL,
+  subject TEXT NOT NULL,
+  body TEXT NOT NULL,
+  content_hash TEXT NOT NULL,
+  author_user_id INTEGER NOT NULL,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (proposal_id, version)
+)""",
+    """CREATE TABLE IF NOT EXISTS crm_sends (
+  id INTEGER PRIMARY KEY,
+  proposal_id INTEGER NOT NULL UNIQUE REFERENCES crm_proposals(id),
+  version INTEGER NOT NULL,
+  approved_hash TEXT NOT NULL,
+  approved_by INTEGER NOT NULL,
+  approved_at TEXT NOT NULL,
+  scheduled_at TEXT NOT NULL,
+  status TEXT NOT NULL CHECK (status IN ('scheduled','sent','failed','cancelled')),
+  attempts INTEGER NOT NULL DEFAULT 0,
+  first_attempt_at TEXT,
+  next_attempt_at TEXT,
+  rfc_message_id TEXT,
+  last_error TEXT,
+  sent_at TEXT,
+  lead_id INTEGER NOT NULL REFERENCES crm_leads(id),
+  week_start TEXT NOT NULL
+)""",
+    "CREATE INDEX IF NOT EXISTS ix_sends_lead_week_status "
+    "ON crm_sends (lead_id, week_start, status)",
+    """CREATE TABLE IF NOT EXISTS crm_inbound (
+  id INTEGER PRIMARY KEY,
+  rfc_message_id TEXT NOT NULL UNIQUE,
+  uid INTEGER,
+  received_at TEXT NOT NULL,
+  sender_fp TEXT NOT NULL,
+  lead_id INTEGER REFERENCES crm_leads(id),
+  association TEXT NOT NULL CHECK (association IN ('thread','sender','token','none')),
+  classification TEXT NOT NULL
+    CHECK (classification IN (
+      'stop_keyword','stop_header','auth_candidate','review','unassociated'
+    )),
+  new_text TEXT,
+  decision TEXT NOT NULL DEFAULT 'pending'
+    CHECK (decision IN ('pending','confirmed','rejected','n/a')),
+  decided_by INTEGER,
+  decided_at TEXT
 )""",
     "INSERT INTO crm_meta (key, value) VALUES ('schema_version', '2') ON CONFLICT (key) DO NOTHING",
 )

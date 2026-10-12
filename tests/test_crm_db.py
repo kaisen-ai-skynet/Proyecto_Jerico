@@ -382,3 +382,200 @@ def test_vcrm171_esquema_migrado_igual_al_de_una_base_nueva(tmp_path: Path) -> N
     CrmDatabase(migrated).close()
 
     assert _schema(migrated) == _schema(fresh)
+
+
+# --- Restricciones y persistencia F2 (F2-T10, VCRM-028, VCRM-169) ---------------------------
+
+
+def test_vcrm028_unica_propuesta_por_lead_y_paso(tmp_path: Path) -> None:
+    db = _open(tmp_path)
+    user_id, lead_id = _seed(db)
+    with db.tx() as conn:
+        conn.execute(
+            """INSERT INTO crm_proposals (
+                lead_id, kind, step, status, approver_user_id, expires_at, created_at
+            ) VALUES (?, 'followup', 1, 'pending', ?,
+                      '2026-10-10T00:00:00Z', '2026-10-08T00:00:00Z')""",
+            (lead_id, user_id),
+        )
+        with pytest.raises(sqlite3.IntegrityError):
+            conn.execute(
+                """INSERT INTO crm_proposals (
+                    lead_id, kind, step, status, approver_user_id, expires_at, created_at
+                ) VALUES (?, 'followup', 1, 'pending', ?,
+                          '2026-10-10T00:00:00Z', '2026-10-08T00:00:00Z')""",
+                (lead_id, user_id),
+            )
+        # Paso distinto en el mismo lead sí se admite
+        conn.execute(
+            """INSERT INTO crm_proposals (
+                lead_id, kind, step, status, approver_user_id, expires_at, created_at
+            ) VALUES (?, 'followup', 2, 'pending', ?,
+                      '2026-10-10T00:00:00Z', '2026-10-08T00:00:00Z')""",
+            (lead_id, user_id),
+        )
+    db.close()
+
+
+def test_vcrm169_unico_message_id(tmp_path: Path) -> None:
+    db = _open(tmp_path)
+    with db.tx() as conn:
+        conn.execute(
+            """INSERT INTO crm_inbound (
+                rfc_message_id, uid, received_at, sender_fp, lead_id,
+                association, classification, new_text, decision
+            ) VALUES (?, 1, '2026-10-08T00:00:00Z', 'fp1', NULL,
+                      'none', 'review', 'hola', 'pending')""",
+            ("<unique-123@domain.com>",),
+        )
+        with pytest.raises(sqlite3.IntegrityError):
+            conn.execute(
+                """INSERT INTO crm_inbound (
+                    rfc_message_id, uid, received_at, sender_fp, lead_id,
+                    association, classification, new_text, decision
+                ) VALUES (?, 2, '2026-10-08T01:00:00Z', 'fp2', NULL,
+                          'none', 'review', 'hola 2', 'pending')""",
+                ("<unique-123@domain.com>",),
+            )
+    db.close()
+
+
+def test_vcrm028_una_solicitud_de_autorizacion_abierta(tmp_path: Path) -> None:
+    db = _open(tmp_path)
+    user_id, lead_id = _seed(db)
+    with db.tx() as conn:
+        # Primera solicitud abierta (pending)
+        cur = conn.execute(
+            """INSERT INTO crm_proposals (
+                lead_id, kind, step, status, approver_user_id, expires_at, created_at
+            ) VALUES (?, 'auth_request', NULL, 'pending', ?,
+                      '2026-10-10T00:00:00Z', '2026-10-08T00:00:00Z')""",
+            (lead_id, user_id),
+        )
+        p1_id = cur.lastrowid
+        # Segunda solicitud abierta (pending) falla por el índice único parcial
+        with pytest.raises(sqlite3.IntegrityError):
+            conn.execute(
+                """INSERT INTO crm_proposals (
+                    lead_id, kind, step, status, approver_user_id, expires_at, created_at
+                ) VALUES (?, 'auth_request', NULL, 'pending', ?,
+                          '2026-10-10T00:00:00Z', '2026-10-08T00:00:00Z')""",
+                (lead_id, user_id),
+            )
+        # Segunda solicitud abierta (approved) también falla
+        with pytest.raises(sqlite3.IntegrityError):
+            conn.execute(
+                """INSERT INTO crm_proposals (
+                    lead_id, kind, step, status, approver_user_id, expires_at, created_at
+                ) VALUES (?, 'auth_request', NULL, 'approved', ?,
+                          '2026-10-10T00:00:00Z', '2026-10-08T00:00:00Z')""",
+                (lead_id, user_id),
+            )
+        # Al resolver la primera (sent), ya se admite una nueva solicitud
+        conn.execute("UPDATE crm_proposals SET status = 'sent' WHERE id = ?", (p1_id,))
+        conn.execute(
+            """INSERT INTO crm_proposals (
+                lead_id, kind, step, status, approver_user_id, expires_at, created_at
+            ) VALUES (?, 'auth_request', NULL, 'pending', ?,
+                      '2026-10-11T00:00:00Z', '2026-10-09T00:00:00Z')""",
+            (lead_id, user_id),
+        )
+    db.close()
+
+
+def test_f2_tablas_ida_y_vuelta_y_foreign_keys(tmp_path: Path) -> None:
+    db = _open(tmp_path)
+    user_id, lead_id = _seed(db)
+    with db.tx() as conn:
+        # 1. crm_cadences
+        conn.execute(
+            """INSERT INTO crm_cadences (
+                lead_id, reason, interval_days, total_steps, steps_done, sent_count,
+                next_action_at, last_sent_at, status, started_at, updated_at
+            ) VALUES (?, 'precio', 30, 3, 0, 0, '2026-11-05T15:00:00Z', NULL,
+                      'active', '2026-10-05T15:00:00Z', '2026-10-05T15:00:00Z')""",
+            (lead_id,),
+        )
+        cad_row = conn.execute(
+            "SELECT * FROM crm_cadences WHERE lead_id = ?", (lead_id,)
+        ).fetchone()
+        assert cad_row["reason"] == "precio"
+        assert cad_row["status"] == "active"
+
+        # 2. crm_inbound
+        cur = conn.execute(
+            """INSERT INTO crm_inbound (
+                rfc_message_id, uid, received_at, sender_fp, lead_id,
+                association, classification, new_text, decision, decided_by, decided_at
+            ) VALUES ('<inbound@msg>', 42, '2026-10-05T15:30:00Z', 'fp_abc', ?,
+                      'thread', 'auth_candidate', 'ok', 'pending', NULL, NULL)""",
+            (lead_id,),
+        )
+        inbound_id = cur.lastrowid
+        inb_row = conn.execute("SELECT * FROM crm_inbound WHERE id = ?", (inbound_id,)).fetchone()
+        assert inb_row["rfc_message_id"] == "<inbound@msg>"
+        assert inb_row["uid"] == 42
+
+        # 3. crm_titular_requests con inbound_id
+        cur = conn.execute(
+            """INSERT INTO crm_titular_requests (
+                lead_id, type, medium, received_on, due_on, status,
+                registered_by, registered_at, inbound_id
+            ) VALUES (?, 'inquiry', 'email', '2026-10-05', '2026-10-20', 'open', ?,
+                      '2026-10-05T15:00:00Z', ?)""",
+            (lead_id, user_id, inbound_id),
+        )
+        req_row = conn.execute(
+            "SELECT inbound_id FROM crm_titular_requests WHERE id = ?", (cur.lastrowid,)
+        ).fetchone()
+        assert req_row["inbound_id"] == inbound_id
+
+        # 4. crm_proposals
+        cur = conn.execute(
+            """INSERT INTO crm_proposals (
+                lead_id, kind, step, status, current_version, approver_user_id,
+                expires_at, created_at, resolved_at, resolved_by
+            ) VALUES (?, 'followup', 1, 'pending', 1, ?, '2026-10-07T15:00:00Z',
+                      '2026-10-05T15:00:00Z', NULL, NULL)""",
+            (lead_id, user_id),
+        )
+        proposal_id = cur.lastrowid
+        prop_row = conn.execute(
+            "SELECT * FROM crm_proposals WHERE id = ?", (proposal_id,)
+        ).fetchone()
+        assert prop_row["kind"] == "followup"
+        assert prop_row["step"] == 1
+
+        # 5. crm_proposal_versions
+        conn.execute(
+            """INSERT INTO crm_proposal_versions (
+                proposal_id, version, subject, body, content_hash, author_user_id, created_at
+            ) VALUES (?, 1, 'Asunto test', 'Cuerpo test', 'sha256_hash', ?,
+                      '2026-10-05T15:00:00Z')""",
+            (proposal_id, user_id),
+        )
+        ver_row = conn.execute(
+            "SELECT * FROM crm_proposal_versions WHERE proposal_id = ? AND version = 1",
+            (proposal_id,),
+        ).fetchone()
+        assert ver_row["content_hash"] == "sha256_hash"
+
+        # 6. crm_sends
+        cur = conn.execute(
+            """INSERT INTO crm_sends (
+                proposal_id, version, approved_hash, approved_by, approved_at,
+                scheduled_at, status, attempts, first_attempt_at, next_attempt_at,
+                rfc_message_id, last_error, sent_at, lead_id, week_start
+            ) VALUES (?, 1, 'sha256_hash', ?, '2026-10-05T16:00:00Z', '2026-10-06T09:00:00Z',
+                      'scheduled', 0, NULL, '2026-10-06T09:00:00Z', NULL, NULL, NULL, ?,
+                      '2026-10-05T00:00:00Z')""",
+            (proposal_id, user_id, lead_id),
+        )
+        send_row = conn.execute("SELECT * FROM crm_sends WHERE id = ?", (cur.lastrowid,)).fetchone()
+        assert send_row["proposal_id"] == proposal_id
+        assert send_row["status"] == "scheduled"
+
+        # Verificación estricta de claves foráneas
+        fk_errors = conn.execute("PRAGMA foreign_key_check").fetchall()
+        assert fk_errors == []
+    db.close()

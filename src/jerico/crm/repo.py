@@ -18,8 +18,13 @@ from jerico.crm.model import (
     AuditDetail,
     AuditOutcome,
     AuthStatus,
+    Cadence,
     Confirmation,
     EventKind,
+    Inbound,
+    InboundAssociation,
+    InboundClassification,
+    InboundDecision,
     Lead,
     LeadEvent,
     LeadState,
@@ -27,9 +32,13 @@ from jerico.crm.model import (
     OutboxItem,
     OutboxStatus,
     PendingInput,
+    Proposal,
+    ProposalKind,
+    ProposalVersion,
     RequestStatus,
     RequestType,
     Role,
+    Send,
     TitularRequest,
     User,
 )
@@ -760,3 +769,425 @@ def cancel_pending_confirmations(conn: sqlite3.Connection, lead_id: int, now: da
         (to_iso(now), lead_id),
     )
     return cursor.rowcount
+
+
+# --- F2: Cadencias (plan-f2 §5.2) -----------------------------------------------------
+
+_CADENCE_UPDATE_FIELDS = frozenset(
+    {
+        "reason",
+        "interval_days",
+        "total_steps",
+        "steps_done",
+        "sent_count",
+        "next_action_at",
+        "last_sent_at",
+        "status",
+        "started_at",
+        "updated_at",
+    }
+)
+
+
+def get_cadence(conn: sqlite3.Connection, lead_id: int) -> Cadence | None:
+    row = conn.execute("SELECT * FROM crm_cadences WHERE lead_id = ?", (lead_id,)).fetchone()
+    return None if row is None else Cadence(**dict(row))
+
+
+def upsert_cadence(conn: sqlite3.Connection, cadence: Cadence) -> None:
+    conn.execute(
+        """INSERT INTO crm_cadences (
+            lead_id, reason, interval_days, total_steps, steps_done, sent_count,
+            next_action_at, last_sent_at, status, started_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(lead_id) DO UPDATE SET
+            reason = excluded.reason,
+            interval_days = excluded.interval_days,
+            total_steps = excluded.total_steps,
+            steps_done = excluded.steps_done,
+            sent_count = excluded.sent_count,
+            next_action_at = excluded.next_action_at,
+            last_sent_at = excluded.last_sent_at,
+            status = excluded.status,
+            started_at = excluded.started_at,
+            updated_at = excluded.updated_at""",
+        (
+            cadence.lead_id,
+            cadence.reason,
+            cadence.interval_days,
+            cadence.total_steps,
+            cadence.steps_done,
+            cadence.sent_count,
+            cadence.next_action_at,
+            cadence.last_sent_at,
+            cadence.status,
+            cadence.started_at,
+            cadence.updated_at,
+        ),
+    )
+
+
+def update_cadence(conn: sqlite3.Connection, lead_id: int, **fields: Any) -> None:
+    if not fields:
+        return
+    _check_columns(fields, _CADENCE_UPDATE_FIELDS)
+    serialized: dict[str, Any] = {}
+    for k, v in fields.items():
+        if isinstance(v, datetime):
+            serialized[k] = to_iso(v)
+        elif hasattr(v, "value"):
+            serialized[k] = v.value
+        else:
+            serialized[k] = v
+    cols = ", ".join(f"{k} = ?" for k in serialized)
+    vals = list(serialized.values()) + [lead_id]
+    conn.execute(f"UPDATE crm_cadences SET {cols} WHERE lead_id = ?", vals)  # noqa: S608
+
+
+def due_cadences(conn: sqlite3.Connection, now: datetime) -> list[Cadence]:
+    rows = conn.execute(
+        """SELECT * FROM crm_cadences
+        WHERE status = 'active' AND next_action_at IS NOT NULL AND next_action_at <= ?
+        ORDER BY next_action_at, lead_id""",
+        (to_iso(now),),
+    ).fetchall()
+    return [Cadence(**dict(r)) for r in rows]
+
+
+# --- F2: Propuestas y versiones (plan-f2 §5.3) -----------------------------------------
+
+_PROPOSAL_UPDATE_FIELDS = frozenset(
+    {
+        "kind",
+        "step",
+        "status",
+        "current_version",
+        "approver_user_id",
+        "expires_at",
+        "resolved_at",
+        "resolved_by",
+    }
+)
+
+
+def insert_proposal(
+    conn: sqlite3.Connection,
+    *,
+    lead_id: int,
+    kind: ProposalKind | str,
+    step: int | None,
+    approver_user_id: int,
+    expires_at: datetime | str,
+    created_at: datetime | str,
+) -> int | None:
+    kind_val = kind.value if isinstance(kind, ProposalKind) else str(kind)
+    exp_str = to_iso(expires_at) if isinstance(expires_at, datetime) else str(expires_at)
+    cre_str = to_iso(created_at) if isinstance(created_at, datetime) else str(created_at)
+    try:
+        row = conn.execute(
+            """INSERT INTO crm_proposals (
+                lead_id, kind, step, approver_user_id, expires_at, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT DO NOTHING RETURNING id""",
+            (lead_id, kind_val, step, approver_user_id, exp_str, cre_str),
+        ).fetchone()
+        return int(row["id"]) if row is not None else None
+    except sqlite3.IntegrityError:
+        return None
+
+
+def get_proposal(conn: sqlite3.Connection, proposal_id: int) -> Proposal | None:
+    row = conn.execute("SELECT * FROM crm_proposals WHERE id = ?", (proposal_id,)).fetchone()
+    return None if row is None else Proposal(**dict(row))
+
+
+def update_proposal(conn: sqlite3.Connection, proposal_id: int, **fields: Any) -> None:
+    if not fields:
+        return
+    _check_columns(fields, _PROPOSAL_UPDATE_FIELDS)
+    serialized: dict[str, Any] = {}
+    for k, v in fields.items():
+        if isinstance(v, datetime):
+            serialized[k] = to_iso(v)
+        elif hasattr(v, "value"):
+            serialized[k] = v.value
+        else:
+            serialized[k] = v
+    cols = ", ".join(f"{k} = ?" for k in serialized)
+    vals = list(serialized.values()) + [proposal_id]
+    conn.execute(f"UPDATE crm_proposals SET {cols} WHERE id = ?", vals)  # noqa: S608
+
+
+def add_proposal_version(
+    conn: sqlite3.Connection,
+    *,
+    proposal_id: int,
+    version: int,
+    subject: str,
+    body: str,
+    content_hash: str,
+    author_user_id: int,
+    created_at: datetime | str,
+) -> None:
+    cre_str = to_iso(created_at) if isinstance(created_at, datetime) else str(created_at)
+    conn.execute(
+        """INSERT INTO crm_proposal_versions (
+            proposal_id, version, subject, body, content_hash, author_user_id, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)""",
+        (proposal_id, version, subject, body, content_hash, author_user_id, cre_str),
+    )
+
+
+def get_proposal_version(
+    conn: sqlite3.Connection, proposal_id: int, version: int
+) -> ProposalVersion | None:
+    row = conn.execute(
+        "SELECT * FROM crm_proposal_versions WHERE proposal_id = ? AND version = ?",
+        (proposal_id, version),
+    ).fetchone()
+    return None if row is None else ProposalVersion(**dict(row))
+
+
+def pending_proposals(conn: sqlite3.Connection, now: datetime) -> list[Proposal]:
+    rows = conn.execute(
+        """SELECT * FROM crm_proposals
+        WHERE status = 'pending' AND expires_at <= ?
+        ORDER BY expires_at, id""",
+        (to_iso(now),),
+    ).fetchall()
+    return [Proposal(**dict(r)) for r in rows]
+
+
+def open_auth_request(conn: sqlite3.Connection, lead_id: int) -> Proposal | None:
+    row = conn.execute(
+        """SELECT * FROM crm_proposals
+        WHERE lead_id = ? AND kind = 'auth_request' AND status IN ('pending', 'approved')
+        ORDER BY id DESC LIMIT 1""",
+        (lead_id,),
+    ).fetchone()
+    return None if row is None else Proposal(**dict(row))
+
+
+# --- F2: Envíos (plan-f2 §5.4) --------------------------------------------------------
+
+_SEND_UPDATE_FIELDS = frozenset(
+    {
+        "version",
+        "approved_hash",
+        "approved_by",
+        "approved_at",
+        "scheduled_at",
+        "status",
+        "attempts",
+        "first_attempt_at",
+        "next_attempt_at",
+        "rfc_message_id",
+        "last_error",
+        "sent_at",
+        "week_start",
+    }
+)
+
+
+def insert_send(
+    conn: sqlite3.Connection,
+    *,
+    proposal_id: int,
+    version: int,
+    approved_hash: str,
+    approved_by: int,
+    approved_at: datetime | str,
+    scheduled_at: datetime | str,
+    lead_id: int,
+    week_start: datetime | str,
+    next_attempt_at: datetime | str | None = None,
+) -> int:
+    app_str = to_iso(approved_at) if isinstance(approved_at, datetime) else str(approved_at)
+    sch_str = to_iso(scheduled_at) if isinstance(scheduled_at, datetime) else str(scheduled_at)
+    wk_str = to_iso(week_start) if isinstance(week_start, datetime) else str(week_start)
+    nxt_str = (
+        to_iso(next_attempt_at)
+        if isinstance(next_attempt_at, datetime)
+        else (str(next_attempt_at) if next_attempt_at is not None else None)
+    )
+    row = conn.execute(
+        """INSERT INTO crm_sends (
+            proposal_id, version, approved_hash, approved_by, approved_at,
+            scheduled_at, status, attempts, first_attempt_at, next_attempt_at,
+            rfc_message_id, last_error, sent_at, lead_id, week_start
+        ) VALUES (?, ?, ?, ?, ?, ?, 'scheduled', 0, NULL, ?, NULL, NULL, NULL, ?, ?)
+        RETURNING id""",
+        (
+            proposal_id,
+            version,
+            approved_hash,
+            approved_by,
+            app_str,
+            sch_str,
+            nxt_str,
+            lead_id,
+            wk_str,
+        ),
+    ).fetchone()
+    return int(row["id"])
+
+
+def get_send(conn: sqlite3.Connection, send_id: int) -> Send | None:
+    row = conn.execute("SELECT * FROM crm_sends WHERE id = ?", (send_id,)).fetchone()
+    return None if row is None else Send(**dict(row))
+
+
+def get_send_by_proposal(conn: sqlite3.Connection, proposal_id: int) -> Send | None:
+    row = conn.execute("SELECT * FROM crm_sends WHERE proposal_id = ?", (proposal_id,)).fetchone()
+    return None if row is None else Send(**dict(row))
+
+
+def get_send_by_message_id(conn: sqlite3.Connection, rfc_message_id: str) -> Send | None:
+    row = conn.execute(
+        "SELECT * FROM crm_sends WHERE rfc_message_id = ?", (rfc_message_id,)
+    ).fetchone()
+    return None if row is None else Send(**dict(row))
+
+
+def update_send(conn: sqlite3.Connection, send_id: int, **fields: Any) -> None:
+    if not fields:
+        return
+    _check_columns(fields, _SEND_UPDATE_FIELDS)
+    serialized: dict[str, Any] = {}
+    for k, v in fields.items():
+        if isinstance(v, datetime):
+            serialized[k] = to_iso(v)
+        elif hasattr(v, "value"):
+            serialized[k] = v.value
+        else:
+            serialized[k] = v
+    cols = ", ".join(f"{k} = ?" for k in serialized)
+    vals = list(serialized.values()) + [send_id]
+    conn.execute(f"UPDATE crm_sends SET {cols} WHERE id = ?", vals)  # noqa: S608
+
+
+def due_sends(conn: sqlite3.Connection, now: datetime) -> list[Send]:
+    rows = conn.execute(
+        """SELECT * FROM crm_sends
+        WHERE status = 'scheduled' AND next_attempt_at IS NOT NULL AND next_attempt_at <= ?
+        ORDER BY next_attempt_at, id""",
+        (to_iso(now),),
+    ).fetchall()
+    return [Send(**dict(r)) for r in rows]
+
+
+def count_sends_in_week(conn: sqlite3.Connection, lead_id: int, week_start: datetime | str) -> int:
+    wk_str = to_iso(week_start) if isinstance(week_start, datetime) else str(week_start)
+    row = conn.execute(
+        """SELECT COUNT(*) FROM crm_sends
+        WHERE lead_id = ? AND week_start = ? AND status IN ('scheduled', 'sent')""",
+        (lead_id, wk_str),
+    ).fetchone()
+    return int(row[0])
+
+
+# --- F2: Entrantes (plan-f2 §5.5) -----------------------------------------------------
+
+_INBOUND_UPDATE_FIELDS = frozenset(
+    {
+        "uid",
+        "lead_id",
+        "association",
+        "classification",
+        "new_text",
+        "decision",
+        "decided_by",
+        "decided_at",
+    }
+)
+
+
+def insert_inbound(
+    conn: sqlite3.Connection,
+    *,
+    rfc_message_id: str,
+    uid: int | None,
+    received_at: datetime | str,
+    sender_fp: str,
+    lead_id: int | None,
+    association: InboundAssociation | str,
+    classification: InboundClassification | str,
+    new_text: str | None,
+) -> int | None:
+    rec_str = to_iso(received_at) if isinstance(received_at, datetime) else str(received_at)
+    assoc_val = (
+        association.value if isinstance(association, InboundAssociation) else str(association)
+    )
+    class_val = (
+        classification.value
+        if isinstance(classification, InboundClassification)
+        else str(classification)
+    )
+    try:
+        row = conn.execute(
+            """INSERT INTO crm_inbound (
+                rfc_message_id, uid, received_at, sender_fp, lead_id,
+                association, classification, new_text, decision
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending')
+            ON CONFLICT(rfc_message_id) DO NOTHING RETURNING id""",
+            (
+                rfc_message_id,
+                uid,
+                rec_str,
+                sender_fp,
+                lead_id,
+                assoc_val,
+                class_val,
+                new_text,
+            ),
+        ).fetchone()
+        return int(row["id"]) if row is not None else None
+    except sqlite3.IntegrityError:
+        return None
+
+
+def get_inbound(conn: sqlite3.Connection, inbound_id: int) -> Inbound | None:
+    row = conn.execute("SELECT * FROM crm_inbound WHERE id = ?", (inbound_id,)).fetchone()
+    return None if row is None else Inbound(**dict(row))
+
+
+def update_inbound(conn: sqlite3.Connection, inbound_id: int, **fields: Any) -> None:
+    if not fields:
+        return
+    _check_columns(fields, _INBOUND_UPDATE_FIELDS)
+    serialized: dict[str, Any] = {}
+    for k, v in fields.items():
+        if isinstance(v, datetime):
+            serialized[k] = to_iso(v)
+        elif hasattr(v, "value"):
+            serialized[k] = v.value
+        else:
+            serialized[k] = v
+    cols = ", ".join(f"{k} = ?" for k in serialized)
+    vals = list(serialized.values()) + [inbound_id]
+    conn.execute(f"UPDATE crm_inbound SET {cols} WHERE id = ?", vals)  # noqa: S608
+
+
+def list_inbound(
+    conn: sqlite3.Connection,
+    *,
+    decision: InboundDecision | str | None = None,
+    lead_id: int | None = None,
+) -> list[Inbound]:
+    clauses: list[str] = []
+    params: list[Any] = []
+    if decision is not None:
+        dec_val = decision.value if isinstance(decision, InboundDecision) else str(decision)
+        clauses.append("decision = ?")
+        params.append(dec_val)
+    if lead_id is not None:
+        clauses.append("lead_id = ?")
+        params.append(lead_id)
+
+    query = "SELECT * FROM crm_inbound"
+    if clauses:
+        query += " WHERE " + " AND ".join(clauses)
+    query += " ORDER BY id"
+
+    rows = conn.execute(query, params).fetchall()
+    return [Inbound(**dict(r)) for r in rows]

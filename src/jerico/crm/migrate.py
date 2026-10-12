@@ -71,7 +71,8 @@ _REQUESTS_V2 = """CREATE TABLE crm_titular_requests__v2 (
   medium TEXT NOT NULL, received_on TEXT NOT NULL, due_on TEXT NOT NULL,
   status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','overdue','attended')),
   registered_by INTEGER NOT NULL, registered_at TEXT NOT NULL,
-  last_escalation_on TEXT, attended_by INTEGER, attended_at TEXT
+  last_escalation_on TEXT, attended_by INTEGER, attended_at TEXT,
+  inbound_id INTEGER
 )"""
 _CONFIRMATIONS_V2 = """CREATE TABLE crm_confirmations__v2 (
   id INTEGER PRIMARY KEY,

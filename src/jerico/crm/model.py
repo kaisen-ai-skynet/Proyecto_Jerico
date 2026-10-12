@@ -264,3 +264,135 @@ class TitularRequest:
     last_escalation_on: str | None
     attended_by: int | None
     attended_at: str | None
+    inbound_id: int | None = None
+
+
+# --- Fase 2: Cadencias, propuestas, envíos y entrantes (F2-T10) ---------------------------
+
+
+class CadenceStatus(StrEnum):
+    ACTIVE = "active"
+    PAUSED = "paused"
+    COMPLETED = "completed"
+    STOPPED = "stopped"
+
+
+class ProposalKind(StrEnum):
+    FOLLOWUP = "followup"
+    AUTH_REQUEST = "auth_request"
+
+
+class ProposalStatus(StrEnum):
+    PENDING = "pending"
+    APPROVED = "approved"
+    SENT = "sent"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+    EXPIRED = "expired"
+    BLOCKED = "blocked"
+
+
+class SendStatus(StrEnum):
+    SCHEDULED = "scheduled"
+    SENT = "sent"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+
+
+class InboundAssociation(StrEnum):
+    THREAD = "thread"
+    SENDER = "sender"
+    TOKEN = "token"
+    NONE = "none"
+
+
+class InboundClassification(StrEnum):
+    STOP_KEYWORD = "stop_keyword"
+    STOP_HEADER = "stop_header"
+    AUTH_CANDIDATE = "auth_candidate"
+    REVIEW = "review"
+    UNASSOCIATED = "unassociated"
+
+
+class InboundDecision(StrEnum):
+    PENDING = "pending"
+    CONFIRMED = "confirmed"
+    REJECTED = "rejected"
+    NOT_APPLICABLE = "n/a"
+
+
+@dataclass(frozen=True)
+class Cadence:
+    lead_id: int
+    reason: str
+    interval_days: int
+    total_steps: int
+    steps_done: int = 0
+    sent_count: int = 0
+    next_action_at: str | None = None
+    last_sent_at: str | None = None
+    status: str = "active"
+    started_at: str = ""
+    updated_at: str = ""
+
+
+@dataclass(frozen=True)
+class Proposal:
+    id: int
+    lead_id: int
+    kind: str
+    step: int | None
+    status: str
+    current_version: int
+    approver_user_id: int
+    expires_at: str
+    created_at: str
+    resolved_at: str | None = None
+    resolved_by: int | None = None
+
+
+@dataclass(frozen=True)
+class ProposalVersion:
+    proposal_id: int
+    version: int
+    subject: str
+    body: str
+    content_hash: str
+    author_user_id: int
+    created_at: str
+
+
+@dataclass(frozen=True)
+class Send:
+    id: int
+    proposal_id: int
+    version: int
+    approved_hash: str
+    approved_by: int
+    approved_at: str
+    scheduled_at: str
+    status: str
+    attempts: int
+    first_attempt_at: str | None
+    next_attempt_at: str | None
+    rfc_message_id: str | None
+    last_error: str | None
+    sent_at: str | None
+    lead_id: int
+    week_start: str
+
+
+@dataclass(frozen=True)
+class Inbound:
+    id: int
+    rfc_message_id: str
+    uid: int | None
+    received_at: str
+    sender_fp: str
+    lead_id: int | None
+    association: str
+    classification: str
+    new_text: str | None
+    decision: str
+    decided_by: int | None = None
+    decided_at: str | None = None

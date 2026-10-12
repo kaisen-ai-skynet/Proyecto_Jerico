@@ -111,7 +111,7 @@ PYTHONPATH=src .venv/bin/python -m pytest <TESTS> -q \
   - **Hecho cuando:** verde y VERIF.
   - **Verificación:** VERIF con `<TESTS>` = `tests/test_crm_config.py`.
 
-- [ ] **F2-T10 — Tablas F2 y consultas (`db.py`, `repo.py`)**
+- [x] **F2-T10 — Tablas F2 y consultas (`db.py`, `repo.py`)**
   - **Delegable a Gemini:** SÍ (el esquema está fijado en plan-f2 §3; revisión del coordinador de las restricciones únicas).
   - Requisitos: VCRM-028, 160, 169 (persistencia).
   - **Entregable exacto:** `src/jerico/crm/db.py` (DDL de `crm_cadences`, `crm_proposals`, `crm_proposal_versions`, `crm_sends`, `crm_inbound`, índices únicos; `inbound_id` en `crm_titular_requests`), `src/jerico/crm/repo.py` (funciones de inserción/consulta/actualización), `src/jerico/crm/model.py` (enums y dataclasses `Cadence`, `Proposal`, `ProposalVersion`, `Send`, `Inbound`), `tests/test_crm_db.py` (adición).
