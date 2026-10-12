@@ -150,7 +150,7 @@ PYTHONPATH=src .venv/bin/python -m pytest <TESTS> -q \
   - **Hecho cuando:** verde y VERIF.
   - **Verificación:** VERIF con `<TESTS>` = `tests/test_crm_followup.py`.
 
-- [ ] **F2-T14 — Gate ✅/❌: aprobar, rechazar, cancelar, reescribir, expirar**
+- [x] **F2-T14 — Gate ✅/❌: aprobar, rechazar, cancelar, reescribir, expirar**
   - **Delegable a Gemini:** NO — arquitectura/seguridad: gate P-09 (OBJ-2).
   - Requisitos: VCRM-029 (hasta programar), 030, 031, 032, 033, 034, 035, 036, 099.
   - **Entregable exacto:** `src/jerico/crm/followup.py` (`approve`, `reject`, `cancel`, `start_rewrite`, `submit_rewrite`, `expire_due`), `tests/test_crm_gate.py`.
