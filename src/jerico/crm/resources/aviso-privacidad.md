@@ -60,21 +60,21 @@ Como titular usted puede, en cualquier momento y de forma gratuita:
 Atendemos las **consultas en máximo 10 días hábiles** y los **reclamos en máximo 15 días hábiles**
 desde su recepción (artículos 14 y 15 de la Ley 1581 de 2012).
 
-## 6. Cómo autorizar y cómo darse de baja
+## 6. Cómo autorizar y cómo dejar de recibir comunicaciones
 
 - **Para autorizar** el tratamiento descrito en este aviso, responda al correo indicando que
   **acepta**. Su respuesta queda registrada como prueba de la autorización.
-- **Para no recibir más comunicaciones**, responda con la palabra **BAJA**, o use la opción de baja
-  que acompaña cada mensaje. Procesaremos su solicitud sin costo y sin necesidad de explicar el
+- **Para no recibir más comunicaciones: Responda BAJA** a este correo, o use la opción de
+  cancelación que acompaña cada mensaje. Procesaremos su solicitud sin costo y sin necesidad de explicar el
   motivo.
 
 ## 7. Cuánto tiempo conservamos sus datos
 
 - Si no recibimos su autorización, eliminamos sus datos en **30 días**.
-- Si la relación no avanza o usted se da de baja, eliminamos los documentos que nos compartió a los
+- Si la relación no avanza o usted pide no recibir más comunicaciones, eliminamos los documentos que nos compartió a los
   **12 meses**, salvo que una norma nos obligue a conservarlos.
 - Si firmamos un contrato, conservamos los documentos que lo respaldan hasta **10 años**.
-- Mantenemos una huella mínima, sin datos personales en claro, que nos permite respetar su baja.
+- Mantenemos una huella mínima, sin datos personales en claro, que nos permite respetar su decisión de no ser contactado.
 
 ## 8. Cambios a este aviso
 

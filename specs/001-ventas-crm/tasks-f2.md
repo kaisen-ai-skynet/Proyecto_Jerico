@@ -90,7 +90,7 @@ PYTHONPATH=src .venv/bin/python -m pytest <TESTS> -q \
   - **Hecho cuando:** verde y VERIF.
   - **Verificación:** VERIF con `<TESTS>` = `tests/test_crm_inbound.py`.
 
-- [ ] **F2-T08 — Textos de seguimiento y pie legal (`followup_text.py`)**
+- [x] **F2-T08 — Textos de seguimiento y pie legal (`followup_text.py`)**
   - **Delegable a Gemini:** SÍ.
   - Requisitos: VCRM-027 (texto), 069, 148, 161.
   - **Entregable exacto:** `src/jerico/crm/followup_text.py` (carga TOML con `tomllib`, `lookup(reason, step) -> str | None`, `footer(sender_name)`, `auth_request_body(notice_ref, version, processors)`), `tests/test_crm_followup.py` (parte de textos).
