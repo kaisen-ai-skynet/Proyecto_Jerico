@@ -81,7 +81,7 @@ PYTHONPATH=src .venv/bin/python -m pytest <TESTS> -q \
   - **Hecho cuando:** verde y VERIF.
   - **Verificación:** VERIF con `<TESTS>` = `tests/test_crm_cadence.py`.
 
-- [ ] **F2-T07 — Texto nuevo, palabra «BAJA» y token de baja (`inbound.py`)**
+- [x] **F2-T07 — Texto nuevo, palabra «BAJA» y token de baja (`inbound.py`)**
   - **Delegable a Gemini:** NO — arquitectura/seguridad: decide bajas legales (J-06) y firma el token.
   - Requisitos: VCRM-102, 120, 124 (parte pura), definiciones 4.5.
   - **Entregable exacto:** `src/jerico/crm/inbound.py` (`extract_new_text`, `has_stop_keyword`, `make_unsub_token`, `verify_unsub_token`), `tests/test_crm_inbound.py` (parte pura).
