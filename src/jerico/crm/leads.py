@@ -517,9 +517,18 @@ def edit(
 # --- Lista y ficha (VCRM-010, 011, 090, 092, 136) ---------------------------------------
 
 
-def visible_leads(conn: sqlite3.Connection, actor: User) -> list[Lead]:
-    """Leads visibles para el rol, por última interacción descendente (VCRM-010)."""
-    return [lead for lead in repo.all_leads(conn) if is_visible(actor, lead)]
+def visible_leads(
+    conn: sqlite3.Connection, actor: User, *, include_suppressed: bool = False
+) -> list[Lead]:
+    """Leads visibles para el rol, por última interacción descendente (VCRM-010).
+
+    Por defecto excluye los leads suprimidos del listado (VCRM-073; observación d).
+    """
+    return [
+        lead
+        for lead in repo.all_leads(conn, exclude_suppressed=not include_suppressed)
+        if (include_suppressed or lead.suppressed_at is None) and is_visible(actor, lead)
+    ]
 
 
 def list_page(conn: sqlite3.Connection, actor: User, page: int, now: datetime) -> list[Outgoing]:

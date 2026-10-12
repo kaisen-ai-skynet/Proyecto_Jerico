@@ -272,7 +272,7 @@ PYTHONPATH=src .venv/bin/python -m pytest <TESTS> -q \
 
 ## F. Observaciones de la auditoría F1 y cierre
 
-- [ ] **F2-T27 — Lead suprimido fuera de `/lista` (observación d)**
+- [x] **F2-T27 — Lead suprimido fuera de `/lista` (observación d)**
   - **Delegable a Gemini:** SÍ.
   - Requisitos: VCRM-073 (coherencia visible), 025.
   - **Entregable exacto:** `src/jerico/crm/leads.py` (o `repo.py`, donde se arma `/lista`), `tests/test_crm_views.py`.

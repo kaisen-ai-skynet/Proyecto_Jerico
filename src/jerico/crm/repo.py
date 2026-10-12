@@ -172,11 +172,13 @@ def leads_of_user(conn: sqlite3.Connection, user_id: int) -> list[Lead]:
     return [Lead(**dict(r)) for r in rows]
 
 
-def all_leads(conn: sqlite3.Connection) -> list[Lead]:
+def all_leads(conn: sqlite3.Connection, *, exclude_suppressed: bool = False) -> list[Lead]:
     """Todos los leads por última interacción descendente y, a igualdad, id descendente."""
-    rows = conn.execute(
-        "SELECT * FROM crm_leads ORDER BY last_interaction_at DESC, id DESC"
-    ).fetchall()
+    sql = "SELECT * FROM crm_leads"
+    if exclude_suppressed:
+        sql += " WHERE suppressed_at IS NULL"
+    sql += " ORDER BY last_interaction_at DESC, id DESC"
+    rows = conn.execute(sql).fetchall()
     return [Lead(**dict(r)) for r in rows]
 
 

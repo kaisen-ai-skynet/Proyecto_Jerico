@@ -24,6 +24,7 @@ from jerico.crm.model import (
 from jerico.crm.parsing import build_callback, parse_callback
 from jerico.crm.ports import Update
 from jerico.crm.render import render_list_page
+from jerico.crm.timeutil import to_iso
 
 START = datetime(2026, 3, 2, 15, 0, tzinfo=UTC)
 CTO_TG = 1000
@@ -447,3 +448,52 @@ def test_vcrm011_long_card_split_under_telegram_limit(
     assert all(len(item.text) <= 4096 for item in tg.sent)
     joined = "\n".join(item.text for item in tg.sent)
     assert "n0 " in joined and "n59 " in joined and "Alertas activas: ninguna" in joined
+
+
+def test_vcrm073_lead_suprimido_no_aparece_en_lista(
+    db: CrmDatabase, tg: FakeTelegram, bot: CrmBot, users: dict[str, User]
+) -> None:
+    # 1. Lead del comercial (no suprimido)
+    l_com_active = _lead(db, users["com"].id, "Comercial Activo", minutes=1)
+    # 2. Lead del mismo comercial (luego suprimido, marcado como ever_accepted)
+    l_com_suppressed = _lead(db, users["com"].id, "Comercial Suprimido", minutes=2, accepted=True)
+    # 3. Lead de otro comercial (com2, no suprimido, aceptado para que el abogado lo vea)
+    l_com2_active = _lead(db, users["com2"].id, "Comercial2 Activo", minutes=3, accepted=True)
+
+    # Suprimir el segundo lead marcando suppressed_at
+    with db.tx() as tx:
+        repo.update_lead(
+            tx,
+            l_com_suppressed,
+            {"suppressed_at": to_iso(START), "name": None, "phone_e164": None, "email": None},
+            now=START,
+        )
+
+    # 1) El comercial com ve solo su lead no suprimido:
+    run(bot, _msg(COM_TG, "/lista"))
+    com_text = _last_text(tg)
+    assert f"L-{l_com_active:04d}" in com_text
+    assert f"L-{l_com_suppressed:04d}" not in com_text
+    assert f"L-{l_com2_active:04d}" not in com_text
+    assert "página 1 de 1" in com_text
+
+    # 2) El CTO ve los dos leads no suprimidos:
+    run(bot, _msg(CTO_TG, "/lista"))
+    cto_text = _last_text(tg)
+    assert f"L-{l_com_active:04d}" in cto_text
+    assert f"L-{l_com2_active:04d}" in cto_text
+    assert f"L-{l_com_suppressed:04d}" not in cto_text
+    assert "página 1 de 1" in cto_text
+
+    # 3) El abogado ve solo los no suprimidos aceptados (l_com2_active):
+    run(bot, _msg(LAW_TG, "/lista"))
+    law_text = _last_text(tg)
+    assert f"L-{l_com2_active:04d}" in law_text
+    assert f"L-{l_com_suppressed:04d}" not in law_text
+    assert f"L-{l_com_active:04d}" not in law_text
+    assert "página 1 de 1" in law_text
+
+    # 4) /ver del lead suprimido sigue respondiendo como antes (no se oculta en /ver):
+    run(bot, _msg(CTO_TG, f"/ver L-{l_com_suppressed:04d}"))
+    ver_text = _last_text(tg)
+    assert f"Ficha L-{l_com_suppressed:04d}" in ver_text
