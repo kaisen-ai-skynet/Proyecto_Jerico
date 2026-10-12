@@ -131,7 +131,7 @@ PYTHONPATH=src .venv/bin/python -m pytest <TESTS> -q \
 
 ## D. Servicios
 
-- [ ] **F2-T12 — Servicio de cadencias (alta, pausa, reanudación, frecuencia, reactivación)**
+- [x] **F2-T12 — Servicio de cadencias (alta, pausa, reanudación, frecuencia, reactivación)**
   - **Delegable a Gemini:** SÍ.
   - Requisitos: VCRM-018, 019, 020, 021, 022, 023, 024, 026, 121.
   - **Entregable exacto:** `src/jerico/crm/followup.py` (parte de cadencias: `start_cadence`, `pause`, `resume`, `set_frequency`, `reactivate`, `on_step_consumed`), gancho en `leads.py` (rechazo → cadencia o aviso; autorización de un `rejected` → cadencia), `states.py` (`CURRENT_PHASE` no cambia aún: usar `phase=2` en pruebas), `tests/test_crm_cadence.py` (parte de servicio).

@@ -1191,3 +1191,25 @@ def list_inbound(
 
     rows = conn.execute(query, params).fetchall()
     return [Inbound(**dict(r)) for r in rows]
+
+
+def cancel_open_followups(conn: sqlite3.Connection, lead_id: int, now: datetime) -> int:
+    """Cancela las propuestas de seguimiento abiertas (pending/approved) del lead."""
+    cursor = conn.execute(
+        """UPDATE crm_proposals
+        SET status = 'cancelled', resolved_at = ?
+        WHERE lead_id = ? AND kind = 'followup' AND status IN ('pending', 'approved')""",
+        (to_iso(now), lead_id),
+    )
+    return cursor.rowcount
+
+
+def cancel_scheduled_sends(conn: sqlite3.Connection, lead_id: int, now: datetime) -> int:
+    """Cancela los envíos programados del lead."""
+    cursor = conn.execute(
+        """UPDATE crm_sends
+        SET status = 'cancelled'
+        WHERE lead_id = ? AND status = 'scheduled'""",
+        (lead_id,),
+    )
+    return cursor.rowcount

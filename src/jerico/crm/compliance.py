@@ -156,7 +156,15 @@ def answer_evidence(
         f"Autorización de {short_id(found.id)} registrada como «autorizada» "
         f"(documento o captura) por {actor.email} el {format_local(now)}."
     )
-    return [Outgoing(chat, text)]
+    out = [Outgoing(chat, text)]
+    if found.state == LeadState.REJECTED.value:
+        from jerico.crm import followup
+
+        if followup.f2_active(conn):
+            up_lead = repo.get_lead(conn, found.id)
+            if up_lead is not None:
+                out.extend(followup.start_cadence(conn, up_lead, now))
+    return out
 
 
 # --- Baja (VCRM-070, 095, 164) ------------------------------------------------------------

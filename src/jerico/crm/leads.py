@@ -743,7 +743,15 @@ def transition(
     _audit_update(conn, actor, lead.id, now)
     detail = f" (motivo: {reason})" if reason else ""
     text = f"{short_id(lead.id)}: estado «{state_label(src)}» → «{state_label(dst)}»{detail}."
-    return [Outgoing(actor.telegram_id, text)]
+    out = [Outgoing(actor.telegram_id, text)]
+    if dst is LeadState.REJECTED:
+        from jerico.crm import followup
+
+        if followup.f2_active(conn):
+            up_lead = repo.get_lead(conn, lead.id)
+            if up_lead is not None:
+                out.extend(followup.start_cadence(conn, up_lead, now))
+    return out
 
 
 def answer_reject_text(
@@ -1121,4 +1129,11 @@ def confirm_retract(
         f"{sid}: retractación registrada, estado «aceptado» → «rechazado» (motivo: {label}). "
         "Se notificó al CTO y al abogado."
     )
-    return [Outgoing(chat, text)]
+    out = [Outgoing(chat, text)]
+    from jerico.crm import followup
+
+    if followup.f2_active(conn):
+        up_lead = repo.get_lead(conn, lead.id)
+        if up_lead is not None:
+            out.extend(followup.start_cadence(conn, up_lead, now))
+    return out
