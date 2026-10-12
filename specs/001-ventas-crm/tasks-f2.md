@@ -299,7 +299,7 @@ PYTHONPATH=src .venv/bin/python -m pytest <TESTS> -q \
   - **Hecho cuando:** verde sin tocar `src/` y VERIF.
   - **Verificación:** VERIF con `<TESTS>` = `tests/test_crm_f2_acceptance.py`.
 
-- [ ] **F2-T30 — Verificación integral F2**
+- [x] **F2-T30 — Verificación integral F2**
   - **Delegable a Gemini:** NO — arquitectura/seguridad: cierre y evidencia para el gate de validación (la ejecuta el coordinador).
   - Requisitos: los 49 [F2] (trazabilidad) y OBJ-2, OBJ-3, OBJ-5.
   - **Entregable exacto:** ninguno nuevo; reporte con salida de comandos.
