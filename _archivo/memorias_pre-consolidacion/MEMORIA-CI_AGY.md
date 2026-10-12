@@ -1,8 +1,8 @@
 # Memoria de Frente: Reparación de CI (Higiene Pre-commit Fase 4)
-**Proyecto:** Jericó AI-OS — Kaisen AI  
-**Frente:** CI / Higiene Pre-commit (Fase 4)  
-**Fecha:** 29/09/2026 13:42  
-**Responsable:** Santiago Gonzalez (CTO) / Antigravity Agent (Headless)  
+**Proyecto:** Jericó AI-OS — Kaisen AI
+**Frente:** CI / Higiene Pre-commit (Fase 4)
+**Fecha:** 29/09/2026 13:42
+**Responsable:** Santiago Gonzalez (CTO) / Antigravity Agent (Headless)
 
 ---
 

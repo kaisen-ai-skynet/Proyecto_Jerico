@@ -1,10 +1,10 @@
 # Memoria de Agente (agy) — Proyecto Jericó
 
-**Agente:** Antigravity (agy)  
-**Rol:** Ingeniero de Arquitectura de Sistemas (Kaisen AI)  
-**CTO:** Santiago Gonzalez  
-**Fecha:** 29/09/2026  
-**Frente:** Fase 4 · Frente 1 — SPEC_JERICO_V2 (Análisis Hermes → Jericó)  
+**Agente:** Antigravity (agy)
+**Rol:** Ingeniero de Arquitectura de Sistemas (Kaisen AI)
+**CTO:** Santiago Gonzalez
+**Fecha:** 29/09/2026
+**Frente:** Fase 4 · Frente 1 — SPEC_JERICO_V2 (Análisis Hermes → Jericó)
 
 ---
 

@@ -79,9 +79,7 @@ def test_vcrm023_frecuencia_desde_ultimo_envio() -> None:
     assert next_monthly == last_sent_at + timedelta(days=30)
 
     # Cambio a semanal desde último envío
-    next_weekly = next_action_on_frequency(
-        now, frequency_days("weekly"), last_sent_at=last_sent_at
-    )
+    next_weekly = next_action_on_frequency(now, frequency_days("weekly"), last_sent_at=last_sent_at)
     assert next_weekly == last_sent_at + timedelta(days=7)
 
 

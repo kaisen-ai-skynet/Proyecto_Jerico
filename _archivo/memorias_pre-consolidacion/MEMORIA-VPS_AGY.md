@@ -1,8 +1,8 @@
 # Memoria de Frente: Infraestructura & Aprovisionamiento VPS Oracle
-**Proyecto:** Jericó AI-OS — Kaisen AI  
-**Frente:** Fase 4 · Frente 3 (Infraestructura / Ops)  
-**Fecha:** 29/09/2026  
-**Responsable:** Santiago González (CTO / Sudo Supremo) & Frente Infraestructura  
+**Proyecto:** Jericó AI-OS — Kaisen AI
+**Frente:** Fase 4 · Frente 3 (Infraestructura / Ops)
+**Fecha:** 29/09/2026
+**Responsable:** Santiago González (CTO / Sudo Supremo) & Frente Infraestructura
 
 ---
 
