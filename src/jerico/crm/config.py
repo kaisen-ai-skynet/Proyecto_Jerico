@@ -64,6 +64,7 @@ class CrmSettings(BaseSettings):
     privacy_notice_version: str = "1.0"
     privacy_notice_file: Path | None = None
     data_processors: str = "Telegram,Google"
+    sender_name: str = "Kaisen AI"  # identificación del remitente en el pie legal (VCRM-069)
     # Textos de seguimiento por motivo y paso (VCRM-161): por defecto los del paquete.
     cadence_file: Path | None = None
 

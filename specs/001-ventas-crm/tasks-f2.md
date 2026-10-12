@@ -252,7 +252,7 @@ PYTHONPATH=src .venv/bin/python -m pytest <TESTS> -q \
   - **Hecho cuando:** verde y VERIF.
   - **Verificación:** VERIF con `<TESTS>` = `tests/test_crm_f2_bot.py`.
 
-- [ ] **F2-T25 — Barrido único y registro del job (`sweep.py`, `jobs.py`)**
+- [x] **F2-T25 — Barrido único y registro del job (`sweep.py`, `jobs.py`)**
   - **Delegable a Gemini:** NO — arquitectura/seguridad: orquesta envíos, lectura de buzón y activación.
   - Requisitos: VCRM-028, 034, 038, 160, 169, 170.
   - **Entregable exacto:** `src/jerico/crm/sweep.py` (`followup_sweep(...)`: activación F2 una vez, `poll`, `expire_due`, `generate_due`, `deliver_due`, cada paso aislado), `src/jerico/crm/jobs.py` (`FOLLOWUP_JOB = "crm-followup"`, `FOLLOWUP_CRON = "* * * * *"`, `register_jobs(..., followup=...)` con parámetro opcional para no romper F1), `tests/test_crm_sweep.py`, `tests/test_crm_app.py` (adición).

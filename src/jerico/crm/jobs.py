@@ -9,15 +9,33 @@ DAILY_JOB = "crm-daily"
 DAILY_CRON = "0 13 * * *"  # 08:00 Bogotá
 BACKUP_JOB = "crm-backup"
 BACKUP_CRON = "0 8 * * *"  # 03:00 Bogotá
+FOLLOWUP_JOB = "crm-followup"
+FOLLOWUP_CRON = "* * * * *"  # cada minuto (UTC): un solo barrido de F2 (plan-f2 D-1)
 RETRIES = 1
 
 JobCallback = Callable[[], Coroutine[Any, Any, None]]
 
 
-def register_jobs(scheduler: CronScheduler, *, daily: JobCallback, backup: JobCallback) -> None:
+def register_jobs(
+    scheduler: CronScheduler,
+    *,
+    daily: JobCallback,
+    backup: JobCallback,
+    followup: JobCallback | None = None,
+) -> None:
     """Único punto de contacto con `CronScheduler.register_job`."""
     scheduler.register_job(DAILY_JOB, DAILY_CRON, daily, max_retries=RETRIES)
     scheduler.register_job(BACKUP_JOB, BACKUP_CRON, backup, max_retries=RETRIES)
+    if followup is not None:
+        scheduler.register_job(FOLLOWUP_JOB, FOLLOWUP_CRON, followup, max_retries=RETRIES)
 
 
-__all__ = ["BACKUP_CRON", "BACKUP_JOB", "DAILY_CRON", "DAILY_JOB", "register_jobs"]
+__all__ = [
+    "BACKUP_CRON",
+    "BACKUP_JOB",
+    "DAILY_CRON",
+    "DAILY_JOB",
+    "FOLLOWUP_CRON",
+    "FOLLOWUP_JOB",
+    "register_jobs",
+]
