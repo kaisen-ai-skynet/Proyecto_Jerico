@@ -75,6 +75,11 @@ EXPECTED: dict[Action, tuple[Scope, Scope, Scope]] = {
     A.MANAGE_USERS: (Scope.NONE, Scope.ALL, Scope.NONE),
     A.REASSIGN: (Scope.NONE, Scope.ALL, Scope.NONE),
     A.RESOLVE_ALERT: (Scope.NONE, Scope.ALL, Scope.NONE),
+    A.MANAGE_CADENCE: (
+        Scope.OWN,
+        Scope.ALL,
+        Scope.NONE,
+    ),  # F2: pausar, reanudar, frecuencia, reactivar
 }
 ROLES = (Role.COMMERCIAL, Role.CTO, Role.LAWYER)
 
@@ -95,7 +100,7 @@ CASES = [
 ]
 
 
-def test_vcrm085_matrix_covers_all_f1_rows_exactly() -> None:
+def test_vcrm085_matrix_covers_all_rows_exactly() -> None:
     assert set(MATRIX) == set(EXPECTED)
     for action, scopes in EXPECTED.items():
         assert MATRIX[action] == dict(zip(ROLES, scopes, strict=True))

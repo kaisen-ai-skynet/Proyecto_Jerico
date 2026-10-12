@@ -34,6 +34,7 @@ class Action(StrEnum):
     MANAGE_USERS = "manage_users"
     REASSIGN = "reassign"
     RESOLVE_ALERT = "resolve_alert"
+    MANAGE_CADENCE = "manage_cadence"  # F2: pausar, reanudar, frecuencia y reactivar
 
 
 Denial = Literal["role", "foreign_lead"]
@@ -45,7 +46,7 @@ def _row(commercial: Scope, cto: Scope, lawyer: Scope) -> dict[Role, Scope]:
     return {Role.COMMERCIAL: commercial, Role.CTO: cto, Role.LAWYER: lawyer}
 
 
-# Filas F1 de la matriz §4.4.
+# Filas de la matriz §4.4 (F1 y F2).
 MATRIX: dict[Action, dict[Role, Scope]] = {
     Action.REGISTER: _row(_A, _A, _N),
     Action.NOTE_ATTACH: _row(_O, _A, _N),
@@ -65,6 +66,7 @@ MATRIX: dict[Action, dict[Role, Scope]] = {
     Action.MANAGE_USERS: _row(_N, _A, _N),
     Action.REASSIGN: _row(_N, _A, _N),
     Action.RESOLVE_ALERT: _row(_N, _A, _N),
+    Action.MANAGE_CADENCE: _row(_O, _A, _N),  # el abogado no accede al seguimiento (plan-f2 §5.9)
 }
 
 
