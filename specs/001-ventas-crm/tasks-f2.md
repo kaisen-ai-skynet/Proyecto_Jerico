@@ -140,7 +140,7 @@ PYTHONPATH=src .venv/bin/python -m pytest <TESTS> -q \
   - **Hecho cuando:** verde y VERIF.
   - **Verificación:** VERIF con `<TESTS>` = `tests/test_crm_cadence.py tests/test_crm_transitions.py`.
 
-- [ ] **F2-T13 — Generación de propuestas (sin envío)**
+- [x] **F2-T13 — Generación de propuestas (sin envío)**
   - **Delegable a Gemini:** SÍ (con revisión del coordinador).
   - Requisitos: VCRM-027, 028, 039, 067, 161.
   - **Entregable exacto:** `src/jerico/crm/followup.py` (`generate_due(conn, now, ...) -> list[Outgoing]`), `tests/test_crm_followup.py`.

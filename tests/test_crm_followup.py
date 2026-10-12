@@ -1,9 +1,14 @@
 import re
+from datetime import timedelta
 from pathlib import Path
 
 import pytest
 from loguru import logger
 
+from f2_support import COM_TG, CTO_TG, KEYS, NOW, make_lead
+from jerico.crm import delivery, followup, repo
+from jerico.crm.db import CrmDatabase
+from jerico.crm.fingerprint import fingerprint
 from jerico.crm.followup_text import (
     FollowupTexts,
     auth_request_body,
@@ -12,6 +17,8 @@ from jerico.crm.followup_text import (
     render,
 )
 from jerico.crm.inbound import extract_new_text, has_stop_keyword
+from jerico.crm.model import AuthStatus, Cadence, LeadState, ProposalKind, Role, User
+from jerico.crm.timeutil import to_iso
 
 REAL_CADENCES_PATH = Path("src/jerico/crm/resources/cadences.toml")
 REAL_AVISO_PATH = Path("src/jerico/crm/resources/aviso-privacidad.md")
@@ -274,3 +281,431 @@ def test_guarda_auth_request_aviso_real_no_dispara_baja() -> None:
     new_text = extract_new_text(body)
     # El aviso real, reproducido sin citar, no puede contar como una baja del cliente.
     assert has_stop_keyword(new_text) is False
+
+
+# ==============================================================================================
+# F2-T13: Generación de propuestas de seguimiento sin envío (VCRM-027, 028, 039, 067, 161)
+# ==============================================================================================
+
+SAMPLE_TEXTS = FollowupTexts(
+    version="v1",
+    reasons=("precio", "momento"),
+    _texts={
+        "precio": {
+            "subject": "Seguimiento sobre precios",
+            "1": "Hola {nombre}, te contacto de {comercial} sobre precios.",
+            "2": "Hola {nombre}, segundo paso.",
+            "3": "Hola {nombre}, tercer paso.",
+        },
+        "momento": {
+            "subject": "Seguimiento sobre el momento",
+            "1": "Hola {nombre}, momento oportuno.",
+        },
+    },
+)
+
+
+def _setup_f2_db(tmp_path: Path, *, active: bool = True) -> tuple[CrmDatabase, User, User]:
+    db = CrmDatabase(tmp_path / "f2_followup.db")
+    with db.tx() as tx:
+        cto = repo.insert_user(tx, telegram_id=CTO_TG, role=Role.CTO, email="cto@k.ai", now=NOW)
+        com = repo.insert_user(
+            tx, telegram_id=COM_TG, role=Role.COMMERCIAL, email="com@k.ai", now=NOW
+        )
+        if active:
+            repo.set_meta(tx, "f2_activated_at", to_iso(NOW))
+    return db, cto, com
+
+
+def test_vcrm027_genera_propuesta_al_vencer(tmp_path: Path) -> None:
+    """VCRM-027: genera propuesta con versión 1, hash, pie legal y boutons ✅/❌."""
+    db, cto, com = _setup_f2_db(tmp_path)
+
+    # 1. Caso lead con comercial asignado
+    l1 = make_lead(db, com, state=LeadState.NURTURING, name="Ana Pérez", email="ana@cliente.test")
+    cad1 = Cadence(
+        lead_id=l1,
+        reason="precio",
+        interval_days=30,
+        total_steps=3,
+        steps_done=0,
+        sent_count=0,
+        next_action_at=to_iso(NOW),
+        last_sent_at=None,
+        status="active",
+        started_at=to_iso(NOW),
+        updated_at=to_iso(NOW),
+    )
+    with db.tx() as tx:
+        repo.upsert_cadence(tx, cad1)
+        out = followup.generate_due(tx, NOW, KEYS, SAMPLE_TEXTS, "Kaisen AI")
+
+        # Verificar propuesta creada
+        p1 = repo.get_proposal(tx, 1)
+        assert p1 is not None
+        assert p1.lead_id == l1
+        assert p1.kind == ProposalKind.FOLLOWUP.value
+        assert p1.step == 1
+        assert p1.approver_user_id == com.id
+        assert p1.expires_at == to_iso(NOW + timedelta(hours=48))
+
+        # Versión 1
+        v1 = repo.get_proposal_version(tx, p1.id, 1)
+        assert v1 is not None
+        assert v1.subject == "Seguimiento sobre precios"
+        assert "Hola Ana Pérez" in v1.body
+        assert "Kaisen AI" in v1.body
+        assert "Responda BAJA para no recibir más mensajes." in v1.body
+        assert "{nombre}" not in v1.body
+        assert "{comercial}" not in v1.body
+        assert v1.content_hash == delivery.content_hash(v1.subject, v1.body)
+        assert v1.author_user_id == com.id
+
+        # Cadencia queda esperando decisión (next_action_at is None)
+        c1_updated = repo.get_cadence(tx, l1)
+        assert c1_updated is not None
+        assert c1_updated.next_action_at is None
+
+        # Mensajes de presentación hacia el comercial
+        assert len(out) >= 1
+        assert all(msg.chat_id == com.telegram_id for msg in out)
+        assert any(len(msg.buttons) > 0 for msg in out)
+
+    # 2. Caso lead sin comercial asignado: el aprobador es el CTO
+    l2 = make_lead(
+        db, com, state=LeadState.NURTURING, name="Carlos Gómez", email="carlos@cliente.test"
+    )
+    cad2 = Cadence(
+        lead_id=l2,
+        reason="momento",
+        interval_days=30,
+        total_steps=3,
+        steps_done=0,
+        sent_count=0,
+        next_action_at=to_iso(NOW),
+        last_sent_at=None,
+        status="active",
+        started_at=to_iso(NOW),
+        updated_at=to_iso(NOW),
+    )
+    with db.tx() as tx:
+        repo.update_lead(tx, l2, {"assigned_user_id": None}, now=NOW)
+        repo.upsert_cadence(tx, cad2)
+        out2 = followup.generate_due(tx, NOW, KEYS, SAMPLE_TEXTS, "Kaisen AI")
+
+        p2 = repo.get_proposal(tx, 2)
+        assert p2 is not None
+        assert p2.approver_user_id == cto.id
+        assert any(msg.chat_id == cto.telegram_id for msg in out2)
+    db.close()
+
+
+def test_vcrm028_barrido_repetido_no_duplica(tmp_path: Path) -> None:
+    """VCRM-028: barridos repetidos no duplican propuestas."""
+    db, cto, com = _setup_f2_db(tmp_path)
+    l1 = make_lead(db, com, state=LeadState.NURTURING, email="ana@cliente.test")
+    cad = Cadence(
+        lead_id=l1,
+        reason="precio",
+        interval_days=30,
+        total_steps=3,
+        steps_done=0,
+        sent_count=0,
+        next_action_at=to_iso(NOW),
+        last_sent_at=None,
+        status="active",
+        started_at=to_iso(NOW),
+        updated_at=to_iso(NOW),
+    )
+    with db.tx() as tx:
+        repo.upsert_cadence(tx, cad)
+        out1 = followup.generate_due(tx, NOW, KEYS, SAMPLE_TEXTS, "Kaisen AI")
+        assert len(out1) > 0
+
+        # Segundo barrido en el mismo instante
+        out2 = followup.generate_due(tx, NOW, KEYS, SAMPLE_TEXTS, "Kaisen AI")
+        assert out2 == []
+        assert repo.get_proposal(tx, 2) is None
+    db.close()
+
+
+def test_vcrm028_reinicio_no_duplica(tmp_path: Path) -> None:
+    """VCRM-028: si tras reinicio la cadencia vuelve a tener next_action_at, no duplica."""
+    db, cto, com = _setup_f2_db(tmp_path)
+    l1 = make_lead(db, com, state=LeadState.NURTURING, email="ana@cliente.test")
+    cad = Cadence(
+        lead_id=l1,
+        reason="precio",
+        interval_days=30,
+        total_steps=3,
+        steps_done=0,
+        sent_count=0,
+        next_action_at=to_iso(NOW),
+        last_sent_at=None,
+        status="active",
+        started_at=to_iso(NOW),
+        updated_at=to_iso(NOW),
+    )
+    with db.tx() as tx:
+        repo.upsert_cadence(tx, cad)
+        followup.generate_due(tx, NOW, KEYS, SAMPLE_TEXTS, "Kaisen AI")
+
+        # Simular reinicio que restaura next_action_at <= NOW
+        repo.update_cadence(tx, l1, next_action_at=to_iso(NOW))
+        out_restart = followup.generate_due(tx, NOW, KEYS, SAMPLE_TEXTS, "Kaisen AI")
+        assert out_restart == []
+        assert repo.get_proposal(tx, 2) is None
+    db.close()
+
+
+def test_vcrm161_sin_texto_no_avanza_y_avisa_una_vez(tmp_path: Path) -> None:
+    """VCRM-161: texts=None o motivo sin ese paso avisa al CTO UNA SOLA VEZ y no avanza."""
+    db, cto, com = _setup_f2_db(tmp_path)
+    l1 = make_lead(db, com, state=LeadState.NURTURING, email="ana@cliente.test")
+    cad = Cadence(
+        lead_id=l1,
+        reason="inexistente",
+        interval_days=30,
+        total_steps=3,
+        steps_done=0,
+        sent_count=0,
+        next_action_at=to_iso(NOW),
+        last_sent_at=None,
+        status="active",
+        started_at=to_iso(NOW),
+        updated_at=to_iso(NOW),
+    )
+    with db.tx() as tx:
+        repo.upsert_cadence(tx, cad)
+
+        # 1. Llamada con motivo sin texto
+        out1 = followup.generate_due(tx, NOW, KEYS, SAMPLE_TEXTS, "Kaisen AI")
+        assert len(out1) == 1
+        assert out1[0].chat_id == cto.telegram_id
+        assert "inexistente" in out1[0].text
+        # No se creó propuesta y cadencia no avanzó
+        assert repo.get_proposal(tx, 1) is None
+        c_status = repo.get_cadence(tx, l1)
+        assert c_status is not None and c_status.steps_done == 0
+
+        # Segunda llamada: no duplica aviso al CTO
+        out2 = followup.generate_due(tx, NOW, KEYS, SAMPLE_TEXTS, "Kaisen AI")
+        assert out2 == []
+
+    # 2. Caso texts=None con otro motivo (crear lead fuera de tx)
+    l2 = make_lead(db, com, state=LeadState.NURTURING, email="carlos@cliente.test")
+    cad2 = Cadence(
+        lead_id=l2,
+        reason="precio",
+        interval_days=30,
+        total_steps=3,
+        steps_done=0,
+        sent_count=0,
+        next_action_at=to_iso(NOW),
+        last_sent_at=None,
+        status="active",
+        started_at=to_iso(NOW),
+        updated_at=to_iso(NOW),
+    )
+    with db.tx() as tx:
+        repo.upsert_cadence(tx, cad2)
+        out_notext1 = followup.generate_due(tx, NOW, KEYS, None, "Kaisen AI")
+        assert len(out_notext1) == 1
+        assert out_notext1[0].chat_id == cto.telegram_id
+        out_notext2 = followup.generate_due(tx, NOW, KEYS, None, "Kaisen AI")
+        assert out_notext2 == []
+    db.close()
+
+
+def test_vcrm039_sin_correo_avisa(tmp_path: Path) -> None:
+    """VCRM-039: lead sin correo avisa una sola vez por paso y no crea propuesta."""
+    db, cto, com = _setup_f2_db(tmp_path)
+    l1 = make_lead(db, com, state=LeadState.NURTURING, email="")
+    cad = Cadence(
+        lead_id=l1,
+        reason="precio",
+        interval_days=30,
+        total_steps=3,
+        steps_done=0,
+        sent_count=0,
+        next_action_at=to_iso(NOW),
+        last_sent_at=None,
+        status="active",
+        started_at=to_iso(NOW),
+        updated_at=to_iso(NOW),
+    )
+    with db.tx() as tx:
+        repo.upsert_cadence(tx, cad)
+        out1 = followup.generate_due(tx, NOW, KEYS, SAMPLE_TEXTS, "Kaisen AI")
+        assert len(out1) == 1
+        assert out1[0].chat_id == com.telegram_id
+        assert "correo" in out1[0].text.lower()
+        assert repo.get_proposal(tx, 1) is None
+
+        # Segunda llamada: no duplica el aviso
+        out2 = followup.generate_due(tx, NOW, KEYS, SAMPLE_TEXTS, "Kaisen AI")
+        assert out2 == []
+    db.close()
+
+
+def test_vcrm067_sin_autorizacion_no_genera(tmp_path: Path) -> None:
+    """VCRM-067: leads sin autorización vigente o suprimidos no generan propuestas."""
+    db, cto, com = _setup_f2_db(tmp_path)
+    # Lead con autorización revocada
+    l_revoked = make_lead(db, com, state=LeadState.NURTURING, email="rev@cliente.test")
+    # Lead suprimido
+    l_supp = make_lead(db, com, state=LeadState.NURTURING, email="supp@cliente.test")
+
+    with db.tx() as tx:
+        repo.update_lead(tx, l_revoked, {"auth_status": AuthStatus.REVOKED.value}, now=NOW)
+        fp = fingerprint(KEYS[0], "supp@cliente.test")
+        repo.add_suppression(tx, fp, at=NOW, medium="correo")
+
+        c1 = Cadence(
+            lead_id=l_revoked,
+            reason="precio",
+            interval_days=30,
+            total_steps=3,
+            steps_done=0,
+            sent_count=0,
+            next_action_at=to_iso(NOW),
+            last_sent_at=None,
+            status="active",
+            started_at=to_iso(NOW),
+            updated_at=to_iso(NOW),
+        )
+        c2 = Cadence(
+            lead_id=l_supp,
+            reason="precio",
+            interval_days=30,
+            total_steps=3,
+            steps_done=0,
+            sent_count=0,
+            next_action_at=to_iso(NOW),
+            last_sent_at=None,
+            status="active",
+            started_at=to_iso(NOW),
+            updated_at=to_iso(NOW),
+        )
+        repo.upsert_cadence(tx, c1)
+        repo.upsert_cadence(tx, c2)
+
+        out = followup.generate_due(tx, NOW, KEYS, SAMPLE_TEXTS, "Kaisen AI")
+        assert out == []
+        assert repo.get_proposal(tx, 1) is None
+    db.close()
+
+
+def test_followup_generate_due_edge_cases(tmp_path: Path) -> None:
+    """Cubre F2 inactiva, estado pausado, múltiples cadencias y saneamiento de nombre."""
+    # 1. F2 inactiva devuelve []
+    db_off, cto, com = _setup_f2_db(tmp_path / "off", active=False)
+    l_off = make_lead(db_off, com, state=LeadState.NURTURING, email="off@cliente.test")
+    c_off = Cadence(
+        lead_id=l_off,
+        reason="precio",
+        interval_days=30,
+        total_steps=3,
+        steps_done=0,
+        sent_count=0,
+        next_action_at=to_iso(NOW),
+        last_sent_at=None,
+        status="active",
+        started_at=to_iso(NOW),
+        updated_at=to_iso(NOW),
+    )
+    with db_off.tx() as tx:
+        repo.upsert_cadence(tx, c_off)
+        assert followup.generate_due(tx, NOW, KEYS, SAMPLE_TEXTS, "Kaisen AI") == []
+    db_off.close()
+
+    # 2. Lead en PAUSED no genera
+    db, cto, com = _setup_f2_db(tmp_path / "main", active=True)
+    l_paused = make_lead(db, com, state=LeadState.PAUSED, email="p@cliente.test")
+    c_paused = Cadence(
+        lead_id=l_paused,
+        reason="precio",
+        interval_days=30,
+        total_steps=3,
+        steps_done=0,
+        sent_count=0,
+        next_action_at=to_iso(NOW),
+        last_sent_at=None,
+        status="active",
+        started_at=to_iso(NOW),
+        updated_at=to_iso(NOW),
+    )
+    with db.tx() as tx:
+        repo.upsert_cadence(tx, c_paused)
+        assert followup.generate_due(tx, NOW, KEYS, SAMPLE_TEXTS, "Kaisen AI") == []
+
+    # 3. Múltiples cadencias: una con fallo (sin email) y otra válida con company
+    l_no_mail = make_lead(db, com, state=LeadState.NURTURING, email="")
+    l_company = make_lead(
+        db,
+        com,
+        state=LeadState.NURTURING,
+        name="",
+        company="Empresa XYZ\n{malicioso}",
+        email="empresa@cliente.test",
+    )
+    c_no_mail = Cadence(
+        lead_id=l_no_mail,
+        reason="precio",
+        interval_days=30,
+        total_steps=3,
+        steps_done=0,
+        sent_count=0,
+        next_action_at=to_iso(NOW),
+        last_sent_at=None,
+        status="active",
+        started_at=to_iso(NOW),
+        updated_at=to_iso(NOW),
+    )
+    c_company = Cadence(
+        lead_id=l_company,
+        reason="precio",
+        interval_days=30,
+        total_steps=3,
+        steps_done=0,
+        sent_count=0,
+        next_action_at=to_iso(NOW),
+        last_sent_at=None,
+        status="active",
+        started_at=to_iso(NOW),
+        updated_at=to_iso(NOW),
+    )
+    with db.tx() as tx:
+        repo.upsert_cadence(tx, c_no_mail)
+        repo.upsert_cadence(tx, c_company)
+        out_batch = followup.generate_due(tx, NOW, KEYS, SAMPLE_TEXTS, "Kaisen AI")
+        # Debe contener el aviso de falta de email Y la presentación de la propuesta para l_company
+        assert any("correo" in msg.text.lower() for msg in out_batch)
+        p_comp = repo.get_proposal(tx, 1)
+        assert p_comp is not None and p_comp.lead_id == l_company
+        v_comp = repo.get_proposal_version(tx, p_comp.id, 1)
+        assert v_comp is not None
+        assert "Empresa XYZ{malicioso}" in v_comp.body
+
+    # 4. Sin destinatario comercial ni CTO activo: se salta sin error
+    db_no_user, _, com_tmp = _setup_f2_db(tmp_path / "nouser", active=True)
+    l_orphan = make_lead(db_no_user, com_tmp, state=LeadState.NURTURING, email="orp@cliente.test")
+    c_orphan = Cadence(
+        lead_id=l_orphan,
+        reason="precio",
+        interval_days=30,
+        total_steps=3,
+        steps_done=0,
+        sent_count=0,
+        next_action_at=to_iso(NOW),
+        last_sent_at=None,
+        status="active",
+        started_at=to_iso(NOW),
+        updated_at=to_iso(NOW),
+    )
+    with db_no_user.tx() as tx:
+        tx.execute("UPDATE crm_users SET active = 0")
+        repo.upsert_cadence(tx, c_orphan)
+        assert followup.generate_due(tx, NOW, KEYS, SAMPLE_TEXTS, "Kaisen AI") == []
+    db_no_user.close()
+    db.close()

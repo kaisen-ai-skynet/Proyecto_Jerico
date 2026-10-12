@@ -9,7 +9,17 @@ from collections.abc import Sequence
 from datetime import datetime
 from typing import Literal
 
-from jerico.crm import cadence, compliance, permissions, repo, states
+from jerico.crm import (
+    cadence,
+    compliance,
+    delivery,
+    followup_text,
+    gate,
+    permissions,
+    repo,
+    states,
+)
+from jerico.crm.followup_text import FollowupTexts
 from jerico.crm.leads import deny_lead
 from jerico.crm.model import (
     Cadence,
@@ -18,6 +28,7 @@ from jerico.crm.model import (
     Lead,
     LeadState,
     Outgoing,
+    ProposalKind,
     Role,
     User,
 )
@@ -387,3 +398,107 @@ def on_step_consumed(
             return [Outgoing(chat, text, buttons=buttons)]
 
     return []
+
+
+def generate_due(
+    conn: sqlite3.Connection,
+    now: datetime,
+    keys: Sequence[str],
+    texts: FollowupTexts | None,
+    sender_name: str,
+) -> list[Outgoing]:
+    """Crea propuestas para cadencias activas vencidas sin enviar correos (plan-f2 §5.3)."""
+    if not f2_active(conn):
+        return []
+
+    out: list[Outgoing] = []
+    due = repo.due_cadences(conn, now)
+
+    for cad in due:
+        paso = cad.steps_done + 1
+
+        # a. Lead en estado NURTURING
+        lead = repo.get_lead(conn, cad.lead_id)
+        if lead is None or lead.state != LeadState.NURTURING.value:
+            continue
+
+        # b. Guarda de contacto comercial
+        if not compliance.may_contact_commercially(conn, lead, keys):
+            continue
+
+        # c. Sin correo: aviso único por (lead, paso) al comercial o CTO
+        email = (lead.email or "").strip()
+        if not email:
+            notice_key = f"f2_notice:no_email:{lead.id}:{paso}"
+            if repo.get_meta(conn, notice_key) is None:
+                recipients = permissions.commercial_recipients(lead, repo.active_users(conn))
+                if recipients:
+                    msg = (
+                        f"El lead {short_id(lead.id)} no tiene correo "
+                        f"electrónico para el paso {paso} de seguimiento. "
+                        "Complete el dato para generar la propuesta."
+                    )
+                    out.append(Outgoing(recipients[0].telegram_id, msg))
+                repo.set_meta(conn, notice_key, to_iso(now))
+            continue
+
+        # d. Texto del paso: aviso único al CTO por (motivo, paso) si falta
+        text = texts.lookup(cad.reason, paso) if texts is not None else None
+        if text is None:
+            notice_key = f"f2_notice:no_text:{cad.reason}:{paso}"
+            if repo.get_meta(conn, notice_key) is None:
+                ctos = repo.active_users(conn, role=Role.CTO)
+                if ctos:
+                    msg = (
+                        f"No hay texto configurado para el motivo «{cad.reason}», paso {paso} "
+                        "de seguimiento. Configure cadences.toml."
+                    )
+                    out.append(Outgoing(ctos[0].telegram_id, msg))
+                repo.set_meta(conn, notice_key, to_iso(now))
+            continue
+
+        # e. Aprobador: comercial asignado si activo, o CTO activo
+        recipients = permissions.commercial_recipients(lead, repo.active_users(conn))
+        if not recipients:
+            continue
+        approver = recipients[0]
+
+        # f. Crear propuesta
+        expires_at = now + gate.GATE_DEADLINE
+        proposal_id = repo.insert_proposal(
+            conn,
+            lead_id=cad.lead_id,
+            kind=ProposalKind.FOLLOWUP,
+            step=paso,
+            approver_user_id=approver.id,
+            expires_at=expires_at,
+            created_at=now,
+        )
+        if proposal_id is None:
+            continue
+
+        # g. Versión 1
+        subject = (texts.subject(cad.reason) if texts else None) or "Seguimiento"
+        client_name = lead.name or lead.company or ""
+        body_text = followup_text.render(text, name=client_name, commercial="")
+        full_body = f"{body_text}\n\n{followup_text.footer(sender_name)}"
+        chash = delivery.content_hash(subject, full_body)
+
+        repo.add_proposal_version(
+            conn,
+            proposal_id=proposal_id,
+            version=1,
+            subject=subject,
+            body=full_body,
+            content_hash=chash,
+            author_user_id=approver.id,
+            created_at=now,
+        )
+
+        # h. Cadencia esperando decisión
+        repo.update_cadence(conn, cad.lead_id, next_action_at=None, updated_at=to_iso(now))
+
+        # i. Presentación con botones ✅/❌
+        out.extend(gate.present(conn, proposal_id))
+
+    return out
