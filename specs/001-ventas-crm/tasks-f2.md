@@ -261,7 +261,7 @@ PYTHONPATH=src .venv/bin/python -m pytest <TESTS> -q \
   - **Hecho cuando:** verde y VERIF.
   - **Verificación:** VERIF con `<TESTS>` = `tests/test_crm_sweep.py tests/test_crm_app.py`.
 
-- [ ] **F2-T26 — Activar la fase 2 en el arranque**
+- [x] **F2-T26 — Activar la fase 2 en el arranque**
   - **Delegable a Gemini:** NO — arquitectura/seguridad: activa el comportamiento F2 y construye adaptadores con secretos.
   - Requisitos: VCRM-160, 171 (activación).
   - **Entregable exacto:** `src/jerico/crm/__init__.py` (`CURRENT_PHASE = 2`), `src/jerico/crm/app.py` (construye `build_inbox`, registra el barrido, ejecuta el barrido una vez al arrancar), `tests/test_crm_states.py` y `tests/test_crm_app.py` (ajustes de fase).

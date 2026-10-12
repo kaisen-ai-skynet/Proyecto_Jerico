@@ -13,7 +13,15 @@ from typing import Any
 import pytest
 from loguru import logger
 
-from crm_support import FakeClock, FakeEmailSender, FakeRunner, FakeTelegram, make_settings
+from crm_support import (
+    FakeClock,
+    FakeEmailSender,
+    FakeRunner,
+    FakeTelegram,
+    build_v1_database,
+    make_settings,
+)
+from f2_support import make_lead, make_proposal
 from jerico.crm import app as app_mod
 from jerico.crm import leads, repo
 from jerico.crm.app import (
@@ -24,9 +32,16 @@ from jerico.crm.app import (
     missing_secrets,
     run_service,
 )
-from jerico.crm.jobs import BACKUP_CRON, DAILY_CRON, register_jobs
+from jerico.crm.jobs import (
+    BACKUP_CRON,
+    DAILY_CRON,
+    FOLLOWUP_CRON,
+    FOLLOWUP_JOB,
+    register_jobs,
+)
 from jerico.crm.model import LeadState, Role, User
 from jerico.crm.ports import Update
+from jerico.crm.timeutil import to_iso
 from jerico.cron.scheduler import CronScheduler
 
 NOW = datetime(2026, 3, 2, 15, 0, tzinfo=UTC)
@@ -126,9 +141,9 @@ async def test_vcrm078_register_jobs_crons_fire_on_tick() -> None:
     assert calls == ["backup", "daily"]
 
 
-def test_vcrm078_app_scheduler_has_both_jobs(env: Env) -> None:
+def test_vcrm078_app_scheduler_has_all_jobs(env: Env) -> None:
     app = env.build()
-    assert set(app.scheduler.jobs) == {"crm-daily", "crm-backup"}
+    assert set(app.scheduler.jobs) == {"crm-daily", "crm-backup", "crm-followup"}
     assert app.scheduler.timeout == 1800 and app.scheduler.interval == 20
 
 
@@ -211,10 +226,12 @@ def test_vcrm168_invalid_extra_holiday_warns_cto_and_startup_continues(
     assert (app.data_dir / "heartbeat").exists()
 
 
-def test_startup_without_warnings_sends_nothing_and_seeds_cto(env: Env) -> None:
+def test_startup_without_warnings_only_notes_that_f2_is_disabled_and_seeds_cto(env: Env) -> None:
     app = env.build()
     asyncio.run(app.startup())
-    assert env.tg.sent == []
+    # Sin avisos de configuración de F1, lo único que llega es que F2 está deshabilitada (D-9).
+    assert [s.chat_id for s in env.tg.sent] == [CTO_TG]
+    assert "deshabilitada" in env.tg.sent[0].text
     with app.db.read() as conn:
         ctos = repo.active_users(conn, Role.CTO)
     assert [c.telegram_id for c in ctos] == [CTO_TG]
@@ -389,3 +406,117 @@ def test_close_is_idempotent(env: Env) -> None:
     app = env.build()
     app.close()
     app.close()
+
+
+# --- Fase 2: job, activación y primer intento en línea (F2-T25, T26) -----------------------------
+
+F2_SETTINGS: dict[str, Any] = {
+    "imap_host": "imap.example.invalid",
+    "imap_username": "buzon@kaisen.test",
+    "imap_password": "secreto-imap-no-real",
+    "smtp_host": "smtp.example.invalid",
+    "smtp_port": 465,
+    "smtp_from": "crm@kaisen.test",
+}
+
+
+@pytest.mark.asyncio
+async def test_followup_job_se_registra_cada_minuto_con_un_reintento() -> None:
+    calls: list[str] = []
+
+    async def noop() -> None:
+        return None
+
+    async def followup() -> None:
+        calls.append("followup")
+
+    scheduler = CronScheduler()
+    register_jobs(scheduler, daily=noop, backup=noop, followup=followup)
+
+    assert FOLLOWUP_CRON == "* * * * *" and FOLLOWUP_JOB == "crm-followup"
+    assert scheduler.jobs["crm-followup"].retries == 1
+    await scheduler.tick(datetime(2026, 3, 2, 8, 5, tzinfo=UTC))
+    await asyncio.gather(*scheduler.tasks.values())
+    await scheduler.tick(datetime(2026, 3, 2, 8, 6, tzinfo=UTC))
+    await asyncio.gather(*scheduler.tasks.values())
+    assert calls == ["followup", "followup"]  # cada minuto
+
+
+def test_register_jobs_sin_followup_no_cambia_f1() -> None:
+    async def noop() -> None:
+        return None
+
+    scheduler = CronScheduler()
+    register_jobs(scheduler, daily=noop, backup=noop)
+    assert set(scheduler.jobs) == {"crm-daily", "crm-backup"}
+
+
+def test_vcrm160_arranque_registra_job_y_activa(env: Env) -> None:
+    app = env.build(**F2_SETTINGS)
+    asyncio.run(app.startup())
+
+    with app.db.read() as conn:
+        assert repo.get_meta(conn, "f2_activated_at") == to_iso(NOW)
+    assert "crm-followup" in app.scheduler.jobs
+
+
+def test_arranque_sin_configuracion_f2_no_falla_y_deja_f2_deshabilitada(env: Env) -> None:
+    app = env.build()  # solo configuración de F1: sin buzón IMAP
+    asyncio.run(app.startup())  # no falla
+
+    with app.db.read() as conn:
+        assert repo.get_meta(conn, "f2_activated_at") is None
+    disabled = [t for t in _texts(env.tg, CTO_TG) if "fase 2" in t and "deshabilitada" in t]
+    assert len(disabled) == 1 and "JERICO_CRM_IMAP_HOST" in disabled[0]
+    asyncio.run(app.run_followup_job())  # un barrido más: no repite el aviso
+    assert len([t for t in _texts(env.tg, CTO_TG) if "deshabilitada" in t]) == 1
+
+
+def test_vcrm171_arranque_con_base_v1_migra_y_opera(env: Env, tmp_path: Path) -> None:
+    data_dir = tmp_path / "crm-data"
+    data_dir.mkdir()
+    build_v1_database(data_dir / "crm.db")
+
+    app = env.build(**F2_SETTINGS)
+    asyncio.run(app.startup())
+
+    with app.db.read() as conn:
+        assert repo.get_meta(conn, "schema_version") == "2"
+        assert repo.get_lead(conn, 3).state == "accepted"  # type: ignore[union-attr]
+        assert repo.get_meta(conn, "f2_activated_at") is not None
+
+
+def test_el_bot_de_la_app_conoce_los_botones_y_el_comando_de_f2(env: Env) -> None:
+    app = env.build(**F2_SETTINGS)
+    for action in ("gok", "gno", "gcan", "grew", "freint", "fcancel", "aok", "ano", "rbaja"):
+        assert action in app.bot._callbacks  # noqa: SLF001
+    assert "pedirautorizacion" in app.bot._commands  # noqa: SLF001
+    assert "rewrite" in app.bot._pending  # noqa: SLF001
+
+
+@pytest.mark.asyncio
+async def test_un_ok_dentro_de_franja_dispara_el_primer_intento_en_linea(env: Env) -> None:
+    app = env.build(**F2_SETTINGS)
+    await app.startup()
+    with app.db.tx() as tx:
+        com = repo.insert_user(
+            tx, telegram_id=COM_TG, role=Role.COMMERCIAL, email="m@k.co", now=NOW
+        )
+    lead_id = make_lead(app.db, com)
+    proposal_id = make_proposal(app.db, lead_id, com)
+    update = Update(
+        update_id=900,
+        user_id=COM_TG,
+        chat_id=COM_TG,
+        chat_type="private",
+        callback_id="cb",
+        callback_data=f"v1:gok:{proposal_id}:1",
+    )
+
+    await app.bot.process_update(update)
+    for _ in range(50):  # el envío corre en una tarea aparte
+        if env.mail.sent:
+            break
+        await asyncio.sleep(0.01)
+
+    assert len(env.mail.sent) == 1  # salió sin esperar al siguiente barrido

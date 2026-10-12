@@ -19,14 +19,17 @@ from jerico.crm.config import (
     parse_extra_holidays,
 )
 from jerico.crm.db import CrmDatabase
+from jerico.crm.f2_bot import F2Context, register_f2
 from jerico.crm.files import LocalFileStore
+from jerico.crm.inbox import build_inbox
 from jerico.crm.jobs import register_jobs
 from jerico.crm.mail import build_email_sender
 from jerico.crm.migrate import MigrationError, migrate_if_needed
 from jerico.crm.model import Role
 from jerico.crm.outbox import OutboxWorker, escalate
-from jerico.crm.ports import CommandRunner, EmailSender, TelegramPort
+from jerico.crm.ports import CommandRunner, EmailSender, InboxPort, TelegramPort
 from jerico.crm.retention import daily_sweep
+from jerico.crm.sweep import SweepContext, deliver_now, followup_sweep
 from jerico.crm.team import seed_cto
 from jerico.crm.telegram import HttpxTelegramClient
 from jerico.cron.scheduler import CronScheduler
@@ -88,12 +91,15 @@ class CrmApp:
         email: EmailSender,
         runner: CommandRunner,
         clock: Callable[[], datetime] = utcnow,
+        inbox: InboxPort | None = None,
     ) -> None:
         self.settings = settings
         self.telegram = telegram
         self.email = email
         self.runner = runner
         self.clock = clock
+        self.inbox: InboxPort = inbox or build_inbox(settings)
+        self._tasks: set[asyncio.Task[None]] = set()
         holidays, self.holiday_warnings = parse_extra_holidays(settings.extra_holidays)
         self.params, self.config_warnings = effective_params(settings, extra_holidays=holidays)
         self.keys = fingerprint_keys(settings)
@@ -118,10 +124,25 @@ class CrmApp:
             files=self.files,
             params=self.params,
         )
+        register_f2(
+            self.bot,
+            F2Context(
+                keys=tuple(self.keys),
+                params=self.params,
+                settings=settings,
+                sender_name=settings.sender_name,
+                kick_delivery=self._kick_delivery,
+            ),
+        )
         self.scheduler = CronScheduler(
             execution_timeout_s=EXECUTION_TIMEOUT_S, poll_interval_s=POLL_INTERVAL_S
         )
-        register_jobs(self.scheduler, daily=self.run_daily_job, backup=self.run_backup_job)
+        register_jobs(
+            self.scheduler,
+            daily=self.run_daily_job,
+            backup=self.run_backup_job,
+            followup=self.run_followup_job,
+        )
 
     async def startup(self) -> None:
         """Siembra del CTO, avisos de configuración, barrido de recuperación y latido."""
@@ -133,6 +154,7 @@ class CrmApp:
             logger.warning("Festivo extraordinario ignorado: {} ({})", w.entry, w.reason)
         await self._notify_cto(notices)
         await self.run_daily_job()
+        await self.run_followup_job()  # activa F2 si procede y avisa si falta configuración
         self.heartbeat()
 
     async def _notify_cto(self, texts: list[str]) -> None:
@@ -159,6 +181,31 @@ class CrmApp:
         await daily_sweep(
             self.db, self.telegram, self.clock(), self.params, store=self.files, keys=self.keys
         )
+
+    def _sweep_context(self) -> SweepContext:
+        return SweepContext(
+            db=self.db,
+            telegram=self.telegram,
+            email=self.email,
+            inbox=self.inbox,
+            settings=self.settings,
+            params=self.params,
+            keys=tuple(self.keys),
+        )
+
+    async def run_followup_job(self) -> None:
+        """Barrido único de F2 (cada minuto): buzón, expiración, generación y entrega."""
+        await followup_sweep(self._sweep_context(), self.clock())
+
+    def _kick_delivery(self) -> None:
+        """Primer intento de envío en línea tras un ✅ dentro de franja y cupo (D-3)."""
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:  # pragma: no cover - el bot siempre corre dentro del bucle
+            return
+        task = loop.create_task(deliver_now(self._sweep_context(), self.clock()))
+        self._tasks.add(task)
+        task.add_done_callback(self._tasks.discard)
 
     async def run_backup_job(self) -> None:
         await run_backup(
@@ -200,6 +247,7 @@ async def run_service(
     runner: CommandRunner | None = None,
     clock: Callable[[], datetime] = utcnow,
     stop: asyncio.Event | None = None,
+    inbox: InboxPort | None = None,
 ) -> None:
     """Arranca el servicio; `SIGTERM`/`SIGINT` → parada ordenada."""
     client = None
@@ -212,6 +260,7 @@ async def run_service(
         email=email or build_email_sender(settings),
         runner=runner or SubprocessRunner(),
         clock=clock,
+        inbox=inbox,
     )
     stop = stop or asyncio.Event()
     loop = asyncio.get_running_loop()
