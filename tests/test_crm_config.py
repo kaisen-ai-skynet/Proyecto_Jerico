@@ -11,8 +11,13 @@ from jerico.crm.config import (
     ConfigWarning,
     HolidayWarning,
     Params,
+    cadence_path,
     effective_params,
+    f2_enabled,
+    f2_missing,
+    load_privacy_notice,
     parse_extra_holidays,
+    processors,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -271,3 +276,126 @@ def test_vcrm167_effective_params_carries_extra_holidays() -> None:
     params, warnings = effective_params(make_settings(), extra_holidays=extra)
     assert params.extra_holidays == extra
     assert warnings == []
+
+
+# --- Fase 2: buzón, aviso de privacidad y textos (VCRM-148, 149, 161, 169, 170) ---------------
+
+
+def _f2_ready(**overrides: object):  # noqa: ANN202 - helper de prueba
+    base: dict[str, object] = {
+        "imap_host": "imap.example.invalid",
+        "imap_username": "crm@example.invalid",
+        "imap_password": "secreto-imap-no-real",
+        "smtp_host": "smtp.example.invalid",
+        "smtp_port": 465,
+        "smtp_from": "crm@example.invalid",
+    }
+    return make_settings(**{**base, **overrides})
+
+
+def test_vcrm170_repr_no_expone_password() -> None:
+    settings = _f2_ready()
+    assert "secreto-imap-no-real" not in repr(settings)
+    assert "secreto-imap-no-real" not in str(settings)
+    assert "secreto-imap-no-real" not in repr(settings.model_dump())
+    assert settings.imap_password is not None
+    assert settings.imap_password.get_secret_value() == "secreto-imap-no-real"
+
+
+def test_vcrm169_valores_por_defecto_de_f2() -> None:
+    settings = make_settings()
+    assert settings.imap_host is None
+    assert settings.imap_port == 993
+    assert settings.imap_username is None
+    assert settings.imap_password is None  # sin valor por defecto
+    assert settings.imap_mailbox == "INBOX"
+    assert settings.inbox_poll_minutes == 5
+    assert settings.privacy_notice_ref == ""
+    assert settings.privacy_notice_version == "1.0"
+    assert settings.privacy_notice_file is None
+    assert settings.cadence_file is None
+    assert processors(settings) == ("Telegram", "Google")
+    assert effective_params(settings)[0].inbox_poll_minutes == 5
+
+
+def test_vcrm169_periodo_minimo_1() -> None:
+    params, warnings = effective_params(make_settings(inbox_poll_minutes=0))
+    assert params.inbox_poll_minutes == 5  # no positivo: rige el valor por defecto
+    assert ConfigWarning("inbox_poll_minutes", 0, 5) in warnings
+    params, _ = effective_params(make_settings(inbox_poll_minutes=-3))
+    assert params.inbox_poll_minutes == 5
+    params, warnings = effective_params(make_settings(inbox_poll_minutes=1))
+    assert params.inbox_poll_minutes == 1  # el mínimo se acepta
+    assert warnings == []
+    params, _ = effective_params(make_settings(inbox_poll_minutes=15))
+    assert params.inbox_poll_minutes == 15
+
+
+def test_vcrm149_sin_buzon_ni_correo_deshabilita_y_lista_variables() -> None:
+    settings = make_settings()
+    assert f2_enabled(settings) is False
+    assert f2_missing(settings) == [
+        "JERICO_CRM_IMAP_HOST",
+        "JERICO_CRM_IMAP_USERNAME",
+        "JERICO_CRM_IMAP_PASSWORD",
+        "JERICO_CRM_SMTP_HOST",
+        "JERICO_CRM_SMTP_PORT",
+        "JERICO_CRM_SMTP_FROM",
+    ]
+
+
+def test_vcrm149_configuracion_completa_habilita_con_aviso_y_textos_del_paquete() -> None:
+    settings = _f2_ready()
+    assert f2_missing(settings) == []
+    assert f2_enabled(settings) is True
+    notice = load_privacy_notice(settings)
+    assert notice is not None and "Ley 1581 de 2012" in notice
+    assert tomllib.loads(cadence_path(settings).read_text(encoding="utf-8"))["version"] == "v1"
+
+
+def test_vcrm149_sin_aviso_deshabilita(tmp_path: Path) -> None:
+    missing_file = tmp_path / "no-existe.md"
+    settings = _f2_ready(privacy_notice_file=missing_file)
+    assert load_privacy_notice(settings) is None  # falla cerrado: NO recurre al aviso del paquete
+    assert f2_enabled(settings) is False
+    assert f2_missing(settings) == ["JERICO_CRM_PRIVACY_NOTICE_FILE"]
+
+    empty = tmp_path / "vacio.md"
+    empty.write_text("  \n", encoding="utf-8")
+    assert f2_enabled(_f2_ready(privacy_notice_file=empty)) is False
+
+    own = tmp_path / "aviso.md"
+    own.write_text("Aviso propio v2", encoding="utf-8")
+    settings = _f2_ready(privacy_notice_file=own)
+    assert load_privacy_notice(settings) == "Aviso propio v2"
+    assert f2_enabled(settings) is True
+
+    assert f2_missing(_f2_ready(privacy_notice_version="  ")) == [
+        "JERICO_CRM_PRIVACY_NOTICE_VERSION"
+    ]
+
+
+def test_vcrm161_sin_textos_de_seguimiento_deshabilita(tmp_path: Path) -> None:
+    settings = _f2_ready(cadence_file=tmp_path / "no-existe.toml")
+    assert f2_enabled(settings) is False
+    assert f2_missing(settings) == ["JERICO_CRM_CADENCE_FILE"]
+    own = tmp_path / "cadences.toml"
+    own.write_text('version = "propia"\n', encoding="utf-8")
+    assert f2_enabled(_f2_ready(cadence_file=own)) is True
+
+
+def test_vcrm148_encargados_configurables() -> None:
+    assert processors(make_settings(data_processors=" Telegram , Google,Zoho ")) == (
+        "Telegram",
+        "Google",
+        "Zoho",
+    )
+    assert f2_missing(_f2_ready(data_processors=" , ")) == ["JERICO_CRM_DATA_PROCESSORS"]
+
+
+def test_vcrm148_version_del_aviso_del_paquete_coincide_con_la_configuracion() -> None:
+    settings = make_settings()
+    notice = load_privacy_notice(settings)
+    assert notice is not None
+    assert f"Versión {settings.privacy_notice_version}" in notice
+    assert "Ley 1581 de 2012" in notice and "BAJA" in notice

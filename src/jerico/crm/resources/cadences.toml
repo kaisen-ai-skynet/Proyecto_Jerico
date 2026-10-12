@@ -1,0 +1,119 @@
+# Textos de seguimiento del CRM de ventas (fase 2).
+# v1 autorizada por el CTO 11/10/2026, editable.
+#
+# Estructura: una tabla por motivo de rechazo (precio, momento, proveedor, no_interesado, otro).
+# Cada tabla tiene `subject` y tres pasos ("1", "2", "3"). Cada texto pasa por el gate ✅/❌ del
+# comercial antes de salir; nada se envía solo.
+# Marcadores permitidos: {nombre} (contacto) y {comercial} (quien firma). El pie con el remitente y
+# la opción de baja lo añade el sistema (VCRM-069): NO lo escriba aquí. Sin enlaces.
+# Voz: cercana, profesional y sin presión. No prometa descuentos ni precios en estos textos.
+
+version = "v1"
+
+[precio]
+subject = "Retomo nuestra conversación"
+"1" = """Hola {nombre},
+
+Soy {comercial}, de Kaisen AI. Retomo nuestra conversación porque entiendo que el presupuesto es una decisión importante y quiero que cualquier paso que dé tenga sentido para usted.
+
+Si le sirve, podemos revisar el alcance y plantear una primera etapa más acotada, centrada en lo que más valor le aporta hoy, y dejar el resto para más adelante. ¿Le parece si le envío una versión de la propuesta por fases?
+
+Quedo atento."""
+"2" = """Hola {nombre},
+
+Le escribo de nuevo, sin ánimo de presionarlo. Si el tema de costos sigue siendo lo que lo frena, con gusto le explico qué incluye cada parte de la propuesta para que usted decida qué conservar y qué dejar para después.
+
+Si prefiere que lo hablemos por llamada, dígame qué horario le queda mejor.
+
+Un saludo,"""
+"3" = """Hola {nombre},
+
+Este es mi último mensaje por ahora. No quiero llenarle la bandeja de entrada, pero sí dejarle la puerta abierta: si más adelante cambian las prioridades o el presupuesto, escríbame y retomamos desde donde lo dejamos.
+
+Gracias por su tiempo y mucho éxito con su negocio."""
+
+[momento]
+subject = "Un recordatorio amable"
+"1" = """Hola {nombre},
+
+Soy {comercial}, de Kaisen AI. Me comentó que no era el mejor momento, y quise escribirle para ver cómo van las cosas por su lado. No hay ninguna prisa.
+
+Si ya es un buen momento para retomar, cuénteme y vemos cómo avanzar. Si todavía no, lo entiendo perfectamente.
+
+Un saludo,"""
+"2" = """Hola {nombre},
+
+Paso por aquí con un recordatorio breve. Si en su agenda ya hay espacio para conversar sobre lo que hablamos, puedo adaptarme a sus tiempos.
+
+Y si todavía no, dígame con tranquilidad y le escribo más adelante.
+
+Quedo atento,"""
+"3" = """Hola {nombre},
+
+Último recordatorio de mi parte por ahora. Cuando sea el momento adecuado para usted, aquí estaremos para retomar la conversación sin empezar de cero.
+
+Gracias por su tiempo y que le vaya muy bien."""
+
+[proveedor]
+subject = "Una idea para complementar lo que ya tiene"
+"1" = """Hola {nombre},
+
+Soy {comercial}, de Kaisen AI. Entiendo que ya trabaja con un proveedor y no quiero que eso se sienta como un problema: muchas veces lo más útil es entender qué cubre bien hoy y qué podría mejorar.
+
+Si le interesa, puedo compartirle cómo suelen abordar este tema las empresas que están evaluando automatizar procesos con inteligencia artificial, para que tenga un punto de comparación.
+
+¿Le parece bien?"""
+"2" = """Hola {nombre},
+
+Le escribo con una idea sencilla: antes de decidir si cambiar o complementar algo, ayuda mucho listar qué procesos le quitan más tiempo a su equipo. Con esa lista es más fácil ver si su proveedor actual cubre todo o si queda algo por resolver.
+
+Si quiere, puedo ayudarle a armarla, sin ningún compromiso.
+
+Un saludo,"""
+"3" = """Hola {nombre},
+
+Cierro por ahora este seguimiento. Si en algún momento quiere una segunda opinión o comparar alternativas, escríbame y con gusto lo ayudo.
+
+Gracias por su tiempo."""
+
+[no_interesado]
+subject = "Gracias por su tiempo"
+"1" = """Hola {nombre},
+
+Soy {comercial}, de Kaisen AI. Gracias por haberme atendido. Respeto su decisión, y no le escribo para insistir, sino para dejarle algo que puede serle útil más adelante.
+
+Si algún día quiere saber cómo otras empresas están usando la inteligencia artificial para ahorrar tiempo en tareas repetitivas, con gusto le comparto información, sin compromiso.
+
+Un saludo,"""
+"2" = """Hola {nombre},
+
+Vuelvo a escribirle de forma breve. Si en su empresa surge una tarea que consuma demasiado tiempo, puede ser un buen punto de partida para evaluar si la automatización tiene sentido. No tiene que decidir nada ahora.
+
+Si prefiere no recibir más mensajes, avíseme y lo respeto de inmediato.
+
+Un saludo,"""
+"3" = """Hola {nombre},
+
+Este es mi último mensaje. Gracias por su tiempo y por su sinceridad. Si en el futuro la inteligencia artificial entra en sus planes, aquí estaremos para ayudarle.
+
+Le deseo muchos éxitos."""
+
+[otro]
+subject = "Seguimiento de nuestra conversación"
+"1" = """Hola {nombre},
+
+Soy {comercial}, de Kaisen AI. Quería retomar nuestra conversación y saber si sigue habiendo algo en lo que podamos ayudarle.
+
+Si le queda alguna duda sobre lo que hablamos, cuénteme y se la resuelvo con gusto.
+
+Un saludo,"""
+"2" = """Hola {nombre},
+
+Le escribo de nuevo para ver cómo va todo. Si hay algo que le gustaría revisar con más calma, podemos agendar una conversación corta cuando le quede cómodo.
+
+Quedo atento,"""
+"3" = """Hola {nombre},
+
+Cierro por ahora este seguimiento. Si más adelante quiere retomar el tema, escríbame y seguimos desde donde lo dejamos.
+
+Gracias por su tiempo."""

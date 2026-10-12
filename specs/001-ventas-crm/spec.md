@@ -796,6 +796,13 @@ Decisiones del planificador no pedidas de forma explícita por el CTO. Tras la r
 
 **Riesgos tras las decisiones Q:** (1) la migración Q-1 modifica datos existentes; se mitiga con copia previa y transacción única; (2) el sondeo IMAP depende de la disponibilidad del proveedor de correo y de una credencial adicional; (3) los rebotes y respuestas automáticas llegan al CTO como respuestas no asociables (VCRM-122).
 
+**Autorizaciones del CTO — 11/10/2026 (aviso de privacidad y textos de cadencias).**
+
+| ID | Decisión | Estado y fuente |
+| :-- | :-- | :-- |
+| A-1 | Aviso de privacidad v1.0 (`src/jerico/crm/resources/aviso-privacidad.md`): responsable Kaisen AI, finalidades del CRM, derechos del titular y canal de contacto (responder al mismo correo). Satisface la guarda de activación de F2 por existencia de texto y versión (J-02). | **Autorizado por Juan José según el CTO el 11/10/2026.** Redactado por el agente. Pendiente de datos registrales (razón social, NIT y domicilio), que no constan en ninguna fuente del repo ni de las bóvedas y no se inventan. |
+| A-2 | Textos de seguimiento v1 (`src/jerico/crm/resources/cadences.toml`): 5 motivos × 3 pasos, voz cercana, profesional y sin presión, sin descuentos, precios ni enlaces (P-21). | **v1 autorizada por el CTO el 11/10/2026, editable.** Cada texto sigue pasando por el gate ✅/❌ antes de enviarse (P-09). |
+
 ---
 
 ## 9. Preguntas para el abogado (Juan José)

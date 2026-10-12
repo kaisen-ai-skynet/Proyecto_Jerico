@@ -102,7 +102,7 @@ PYTHONPATH=src .venv/bin/python -m pytest <TESTS> -q \
 
 ## C. Configuración, datos y guarda
 
-- [ ] **F2-T09 — Configuración F2 con secretos**
+- [x] **F2-T09 — Configuración F2 con secretos**
   - **Delegable a Gemini:** NO — arquitectura/seguridad: toca credenciales IMAP.
   - Requisitos: VCRM-148, 149, 169, 170 (parámetros).
   - **Entregable exacto:** `src/jerico/crm/config.py` (campos de plan-f2 §6; `imap_password` `SecretStr`; `f2_enabled(settings)`), `tests/test_crm_config.py` (adición).
