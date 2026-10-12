@@ -106,7 +106,7 @@ def _lead(
     db: CrmDatabase,
     user_id: int | None,
     *,
-    state: LeadState = LeadState.NUEVO,
+    state: LeadState = LeadState.NEW,
     phone: str | None = "+573001234567",
     email: str | None = None,
 ) -> int:
@@ -143,7 +143,7 @@ def test_vcrm003_commercial_registers_new_lead_assigned_to_self(
     leads = _leads(db)
     assert len(leads) == 1
     lead = leads[0]
-    assert lead["state"] == LeadState.NUEVO
+    assert lead["state"] == LeadState.NEW
     assert lead["assigned_user_id"] == users["com"].id
     assert lead["name"] == "Ana Pérez"
     assert lead["phone_e164"] == "+573001234567"
@@ -175,7 +175,7 @@ def test_vcrm003_registration_records_event_note_and_audit(
         notes = [dict(r) for r in conn.execute("SELECT * FROM crm_notes").fetchall()]
         audits = repo.audit_rows(conn)
     assert [(e.kind, e.new_value, e.actor_user_id) for e in events] == [
-        ("state", "nuevo", users["com"].id)
+        ("state", "new", users["com"].id)
     ]
     assert [(n["body"], n["author_user_id"]) for n in notes] == [("Plan anual", users["com"].id)]
     assert any(
@@ -214,7 +214,7 @@ def test_vcrm066_unanswered_question_leaves_lead_without_authorization(
     bot: CrmBot, db: CrmDatabase, users: dict[str, User]
 ) -> None:
     run(bot, _msg(COM_TG, NEW_LEAD))
-    assert _leads(db)[0]["auth_status"] == AuthStatus.SIN_AUTORIZACION
+    assert _leads(db)[0]["auth_status"] == AuthStatus.UNAUTHORIZED
 
 
 def test_vcrm066_answer_no_marks_without_authorization(
@@ -222,7 +222,7 @@ def test_vcrm066_answer_no_marks_without_authorization(
 ) -> None:
     run(bot, _msg(COM_TG, NEW_LEAD))
     run(bot, _cb(COM_TG, "v1:conf:1:no"))
-    assert _leads(db)[0]["auth_status"] == AuthStatus.SIN_AUTORIZACION
+    assert _leads(db)[0]["auth_status"] == AuthStatus.UNAUTHORIZED
     assert "sin autorización" in tg.sent[-1].text
     assert "L-0001" in tg.sent[-1].text
     with db.read() as conn:
@@ -240,7 +240,7 @@ def test_vcrm066_answer_yes_asks_for_evidence_and_opens_pending_input(
     assert pending is not None
     assert pending.kind == "authorization_evidence"
     assert pending.lead_id == 1
-    assert _leads(db)[0]["auth_status"] == AuthStatus.SIN_AUTORIZACION
+    assert _leads(db)[0]["auth_status"] == AuthStatus.UNAUTHORIZED
 
 
 def test_vcrm066_answer_yes_on_reassigned_lead_is_denied(
@@ -303,7 +303,7 @@ def test_vcrm004_lawyer_cannot_register(
 def test_vcrm006_visible_duplicate_by_phone_warns_with_buttons(
     bot: CrmBot, tg: FakeTelegram, db: CrmDatabase, users: dict[str, User]
 ) -> None:
-    existing = _lead(db, users["com"].id, state=LeadState.CONTACTADO)
+    existing = _lead(db, users["com"].id, state=LeadState.CONTACTED)
     run(bot, _msg(COM_TG, NEW_LEAD))
     assert len(_leads(db)) == 1
     reply = tg.sent[-1]
@@ -377,7 +377,7 @@ def test_vcrm110_hidden_duplicate_no_data_and_cto_notice(
     owner: str,
     label: str,
 ) -> None:
-    existing = _lead(db, users[owner].id, state=LeadState.ACEPTADO)
+    existing = _lead(db, users[owner].id, state=LeadState.ACCEPTED)
     run(bot, _msg(COM_TG, NEW_LEAD))
     assert len(_leads(db)) == 1
     to_com = [s for s in tg.sent if s.chat_id == COM_TG]
@@ -425,11 +425,11 @@ def test_vcrm137_reassign_button_from_notice_opens_targets(
 def test_vcrm135_match_only_with_lost_creates_new_lead(
     bot: CrmBot, tg: FakeTelegram, db: CrmDatabase, users: dict[str, User]
 ) -> None:
-    lost = _lead(db, users["com2"].id, state=LeadState.PERDIDO)
+    lost = _lead(db, users["com2"].id, state=LeadState.LOST)
     run(bot, _msg(COM_TG, NEW_LEAD))
     leads = _leads(db)
     assert len(leads) == 2
-    assert leads[0]["state"] == LeadState.PERDIDO
+    assert leads[0]["state"] == LeadState.LOST
     assert leads[0]["assigned_user_id"] == users["com2"].id
     assert leads[1]["assigned_user_id"] == users["com"].id
     assert "L-0002" in tg.sent[-1].text
@@ -467,7 +467,7 @@ def test_vcrm088_suppression_prevails_over_duplicates(
 ) -> None:
     _lead(db, users["com"].id)
     _lead(db, users["com2"].id, email="ana@empresa.co", phone=None)
-    _lead(db, users["com2"].id, state=LeadState.PERDIDO)
+    _lead(db, users["com2"].id, state=LeadState.LOST)
     _suppress(db, "+573001234567")
     run(bot, _msg(COM_TG, NEW_LEAD))
     assert len(_leads(db)) == 3

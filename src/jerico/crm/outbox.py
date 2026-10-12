@@ -148,7 +148,7 @@ class OutboxWorker:
             repo.update_outbox_attempt(
                 tx,
                 item.id,
-                status=OutboxStatus.ENTREGADA,
+                status=OutboxStatus.DELIVERED,
                 attempts=item.attempts + 1,
                 first_attempt_at=first,
                 next_attempt_at=None,
@@ -157,7 +157,7 @@ class OutboxWorker:
             return
         attempts = item.attempts if result.permanent else item.attempts + 1
         nxt = None if result.permanent else next_attempt_at(first, attempts)
-        status = OutboxStatus.PENDIENTE if nxt else OutboxStatus.FALLIDA
+        status = OutboxStatus.PENDING if nxt else OutboxStatus.FAILED
         repo.update_outbox_attempt(
             tx,
             item.id,
@@ -168,7 +168,7 @@ class OutboxWorker:
             error=result.error,
         )
         logger.warning("outbox %s: intento fallido (%s)", item.id, result.error)
-        if status == OutboxStatus.FALLIDA and self._on_failed is not None:
+        if status == OutboxStatus.FAILED and self._on_failed is not None:
             failed = replace(
                 item,
                 status=status.value,

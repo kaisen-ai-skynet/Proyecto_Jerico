@@ -26,7 +26,7 @@ def make_lead(**overrides: Any) -> Lead:
     base: dict[str, Any] = {
         "id": 42,
         "assigned_user_id": 1,
-        "state": "aceptado",
+        "state": "accepted",
         "name": "Ana Pérez",
         "phone_e164": "+573001234567",
         "email": "ana@empresa.co",
@@ -41,7 +41,7 @@ def make_lead(**overrides: Any) -> Lead:
         "reject_reason": None,
         "reject_text": None,
         "rejection_is_retraction": 0,
-        "auth_status": "sin_autorizacion",
+        "auth_status": "unauthorized",
         "ever_accepted": 1,
         "registered_at": "2026-01-01T00:00:00Z",
         "last_interaction_at": "2026-01-01T00:00:00Z",

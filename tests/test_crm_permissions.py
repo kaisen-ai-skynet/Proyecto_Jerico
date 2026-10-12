@@ -26,7 +26,7 @@ USERS = {Role.CTO: CTO, Role.COMMERCIAL: COM, Role.LAWYER: LAW}
 LEAD = Lead(
     id=10,
     assigned_user_id=COM.id,
-    state="aceptado",
+    state="accepted",
     name=None,
     phone_e164=None,
     email=None,
@@ -41,7 +41,7 @@ LEAD = Lead(
     reject_reason=None,
     reject_text=None,
     rejection_is_retraction=0,
-    auth_status="sin_autorizacion",
+    auth_status="unauthorized",
     ever_accepted=1,
     registered_at="2026-01-01T00:00:00Z",
     last_interaction_at="2026-01-01T00:00:00Z",
@@ -125,7 +125,7 @@ def test_vcrm109_commercial_on_unassigned_lead_is_foreign_lead() -> None:
 
 
 def test_vcrm136_lawyer_never_accepted_is_foreign_lead() -> None:
-    never = replace(LEAD, state="nuevo", ever_accepted=0)
+    never = replace(LEAD, state="new", ever_accepted=0)
     assert authorize(LAW, A.VIEW, never) == Decision(False, "foreign_lead")
     assert authorize(LAW, A.MARK_WON, never) == Decision(False, "foreign_lead")
     assert not is_visible(LAW, never)
@@ -133,7 +133,7 @@ def test_vcrm136_lawyer_never_accepted_is_foreign_lead() -> None:
 
 def test_vcrm136_lawyer_once_accepted_is_visible() -> None:
     # Estuvo en «aceptado» y hoy está en «perdido»/«rechazado»: sigue visible (decisión A.1).
-    for state in ("aceptado", "ganado", "perdido", "rechazado"):
+    for state in ("accepted", "won", "lost", "rejected"):
         lead = replace(LEAD, state=state, ever_accepted=1, assigned_user_id=COM2.id)
         assert is_visible(LAW, lead)
         assert authorize(LAW, A.VIEW, lead) == Decision(True, None)

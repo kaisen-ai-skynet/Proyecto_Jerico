@@ -89,7 +89,7 @@ def _lead(db: CrmDatabase, owner: User) -> int:
         return repo.insert_lead(
             tx,
             assigned_user_id=owner.id,
-            state=LeadState.ACEPTADO,
+            state=LeadState.ACCEPTED,
             now=START,
             fields={"name": "Ana Pérez"},
         )
@@ -369,7 +369,7 @@ def test_vcrm130_failed_warning_on_both_channels_stops(
     _drain(worker, clock, cycles=30)
     kinds = [r["kind"] for r in _rows(db)]
     assert kinds.count(BACKUP_KIND) == 1 and kinds.count(BACKUP_FAILED_KIND) == 2
-    assert len(kinds) == 4 and all(r["status"] == "fallida" for r in _rows(db))
+    assert len(kinds) == 4 and all(r["status"] == "failed" for r in _rows(db))
     attempts = len(tg.attempts)
     _drain(worker, clock)
     assert len(tg.attempts) == attempts and len(_rows(db)) == 4
@@ -392,7 +392,7 @@ def test_vcrm140_unconfigured_mailbox_fails_without_attempts_and_escalates(
     failed_id = _notice(db, lead_id, users["law"], Channel.EMAIL, clock.now())
     _deliver(worker)
     (row,) = [r for r in _rows(db) if r["id"] == failed_id]
-    assert row["status"] == "fallida" and row["attempts"] == 0
+    assert row["status"] == "failed" and row["attempts"] == 0
     assert len(_rows(db, BACKUP_KIND)) == 2
     _deliver(worker)  # respaldos: también «fallida» sin intentos → aviso (VCRM-129)
     assert all(r["attempts"] == 0 for r in _rows(db, BACKUP_KIND))

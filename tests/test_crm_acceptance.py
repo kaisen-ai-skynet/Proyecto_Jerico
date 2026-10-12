@@ -122,7 +122,7 @@ def run(bot: CrmBot, u: Update) -> None:
     asyncio.run(bot.process_update(u))
 
 
-def _lead(db: CrmDatabase, owner: User, state: LeadState = S.CONTACTADO, **changes: Any) -> int:
+def _lead(db: CrmDatabase, owner: User, state: LeadState = S.CONTACTED, **changes: Any) -> int:
     with db.tx() as tx:
         lead_id = repo.insert_lead(
             tx, assigned_user_id=owner.id, state=state, now=START, fields={"name": "Ana Pérez"}
@@ -191,7 +191,7 @@ def test_vcrm046_accept_button_asks_confirmation_with_summary(
     assert f"L-{lead_id:04d}" in ask.text and "Ana Pérez" in ask.text
     assert "Comercial: com@k.co" in ask.text and "1020304050" in ask.text
     assert [b.text for row in ask.buttons or [] for b in row] == ["✅", "❌"]
-    assert _get(db, lead_id).state == S.CONTACTADO  # solo pide confirmación
+    assert _get(db, lead_id).state == S.CONTACTED  # solo pide confirmación
     assert _outbox(db) == []
 
 
@@ -202,43 +202,43 @@ def test_vcrm046_cancel_does_not_transition(
     out = _request(db, users["com"], lead_id)
     run(bot, _cb(COM_TG, _conf_data(out, "❌")))
     lead = _get(db, lead_id)
-    assert (lead.state, lead.ever_accepted) == (S.CONTACTADO, 0)
+    assert (lead.state, lead.ever_accepted) == (S.CONTACTED, 0)
     assert "No se aplicó la aceptación" in tg.sent[-1].text
     assert _outbox(db) == []
 
 
-@pytest.mark.parametrize("src", [S.NUEVO, S.CONTACTADO, S.RECHAZADO])
+@pytest.mark.parametrize("src", [S.NEW, S.CONTACTED, S.REJECTED])
 def test_vcrm046_047_confirm_transitions_marks_and_enqueues_three(
     db: CrmDatabase, tg: FakeTelegram, bot: CrmBot, users: dict[str, User], src: LeadState
 ) -> None:
     lead_id = _lead(db, users["com"], src, **COMPLETE)
     _accept(bot, db, COM_TG, users["com"], lead_id)
     lead = _get(db, lead_id)
-    assert (lead.state, lead.ever_accepted) == (S.ACEPTADO, 1)
+    assert (lead.state, lead.ever_accepted) == (S.ACCEPTED, 1)
     with db.read() as conn:
         last = repo.lead_events(conn, lead_id)[-1]
     assert (last.old_value, last.new_value, last.actor_user_id) == (
         src,
-        S.ACEPTADO,
+        S.ACCEPTED,
         users["com"].id,
     )
     targets = _by_target(db, users)
     assert set(targets) == {("cto", "telegram"), ("law", "telegram"), ("law", "email")}
     assert {i.kind for i in targets.values()} == {"aceptacion"}
-    assert all(i.lead_id == lead_id and i.status == "pendiente" for i in targets.values())
+    assert all(i.lead_id == lead_id and i.status == "pending" for i in targets.values())
     assert "aceptado" in tg.sent[-1].text
 
 
 def test_n01_rejected_card_button_requests_confirmation_not_direct_transition(
     db: CrmDatabase, tg: FakeTelegram, bot: CrmBot, users: dict[str, User]
 ) -> None:
-    lead_id = _lead(db, users["com"], S.RECHAZADO, reject_reason="precio")
+    lead_id = _lead(db, users["com"], S.REJECTED, reject_reason="precio")
     run(bot, _msg(CTO_TG, f"/ver L-{lead_id}"))
     run(bot, _cb(CTO_TG, _sent_data(tg, "Aceptar")))
-    assert _get(db, lead_id).state == S.RECHAZADO
+    assert _get(db, lead_id).state == S.REJECTED
     run(bot, _cb(CTO_TG, _sent_data(tg, "✅")))
     lead = _get(db, lead_id)
-    assert (lead.state, lead.ever_accepted) == (S.ACEPTADO, 1)
+    assert (lead.state, lead.ever_accepted) == (S.ACCEPTED, 1)
     assert len(_outbox(db)) == 3
 
 
@@ -272,9 +272,9 @@ def test_vcrm047_first_attempt_at_confirmation_instant_via_kick(
     asyncio.run(scenario())
     targets = _by_target(db, users)
     assert {i.first_attempt_at for i in targets.values()} == {to_iso(NOW)}
-    assert targets[("cto", "telegram")].status == "pendiente"
-    assert targets[("law", "telegram")].status == "entregada"
-    assert targets[("law", "email")].status == "entregada"
+    assert targets[("cto", "telegram")].status == "pending"
+    assert targets[("law", "telegram")].status == "delivered"
+    assert targets[("law", "email")].status == "delivered"
     assert [m.to for m in mail.sent] == ["law@k.co"]
     assert any(m.chat_id == LAW_TG for m in tg.sent)
 
@@ -285,7 +285,7 @@ def test_vcrm047_first_attempt_at_confirmation_instant_via_kick(
 def test_vcrm048_cto_notification_content(
     db: CrmDatabase, bot: CrmBot, users: dict[str, User]
 ) -> None:
-    lead_id = _lead(db, users["com"], auth_status="autorizada", **COMPLETE)
+    lead_id = _lead(db, users["com"], auth_status="authorized", **COMPLETE)
     _accept(bot, db, CTO_TG, users["cto"], lead_id)
     body = _by_target(db, users)[("cto", "telegram")].body or ""
     for part in (
@@ -324,7 +324,7 @@ def test_vcrm048_156_lawyer_email_only_handoff_data(
     lead_id = _lead(
         db,
         users["com"],
-        S.RECHAZADO,
+        S.REJECTED,
         reject_reason="otro",
         reject_text="Motivo privado",
         **COMPLETE,
@@ -412,7 +412,7 @@ def test_vcrm051_second_confirmation_of_accepted_lead(
 
 
 def test_vcrm051_request_on_accepted_lead(db: CrmDatabase, users: dict[str, User]) -> None:
-    lead_id = _lead(db, users["com"], S.ACEPTADO, ever_accepted=1)
+    lead_id = _lead(db, users["com"], S.ACCEPTED, ever_accepted=1)
     out = _request(db, users["cto"], lead_id)
     assert "ya estaba aceptado" in out[0].text and not out[0].buttons
 
@@ -425,7 +425,7 @@ def test_double_confirm_after_cancel_is_already_processed(
     run(bot, _cb(COM_TG, _conf_data(out, "❌")))
     run(bot, _cb(COM_TG, _conf_data(out, "✅")))
     assert tg.sent[-1].text == ALREADY_PROCESSED
-    assert _get(db, lead_id).state == S.CONTACTADO
+    assert _get(db, lead_id).state == S.CONTACTED
 
 
 # --- Permisos y casos de error ------------------------------------------------------------
@@ -444,7 +444,7 @@ def test_vcrm046_lawyer_and_foreign_commercial_cannot_request(
 
 def test_request_unknown_lead_and_invalid_state(db: CrmDatabase, users: dict[str, User]) -> None:
     assert "no existe" in _request(db, users["cto"], 999)[0].text
-    lead_id = _lead(db, users["com"], S.GANADO, ever_accepted=1)
+    lead_id = _lead(db, users["com"], S.WON, ever_accepted=1)
     out = _request(db, users["cto"], lead_id)
     assert "Transiciones válidas: baja." in out[0].text and not out[0].buttons
 
@@ -455,9 +455,9 @@ def test_confirm_when_state_changed_meanwhile_does_not_notify(
     lead_id = _lead(db, users["com"])
     yes = _conf_data(_request(db, users["com"], lead_id), "✅")
     with db.tx() as tx:
-        repo.update_lead(tx, lead_id, {"state": S.GANADO}, now=NOW)
+        repo.update_lead(tx, lead_id, {"state": S.WON}, now=NOW)
     run(bot, _cb(COM_TG, yes))
-    assert _get(db, lead_id).state == S.GANADO
+    assert _get(db, lead_id).state == S.WON
     assert "No se aplicó la transición" in tg.sent[-1].text
     assert _outbox(db) == []
 
@@ -468,7 +468,7 @@ def test_confirm_by_other_user_is_denied(
     lead_id = _lead(db, users["com"])
     yes = _conf_data(_request(db, users["com"], lead_id), "✅")
     run(bot, _cb(CTO_TG, yes))
-    assert _get(db, lead_id).state == S.CONTACTADO
+    assert _get(db, lead_id).state == S.CONTACTED
     assert _outbox(db) == []
 
 
@@ -483,7 +483,7 @@ def test_confirm_after_permission_lost_is_denied(db: CrmDatabase, users: dict[st
         gone = leads.confirm_accept(tx, users["com"], replace(conf, lead_id=999), True, NOW)
     assert "No tiene permiso" in denied[0].text
     assert "no existe" in gone[0].text
-    assert _get(db, lead_id).state == S.CONTACTADO
+    assert _get(db, lead_id).state == S.CONTACTED
 
 
 def test_state_callback_accept_bad_args_is_invalid(

@@ -83,7 +83,7 @@ def lead_id(db: CrmDatabase, users: dict[str, User]) -> int:
         return repo.insert_lead(
             tx,
             assigned_user_id=users["com"].id,
-            state=LeadState.NUEVO,
+            state=LeadState.NEW,
             now=START,
             fields={"name": "Ana Pérez", "phone_e164": "+573001234567"},
         )
@@ -128,11 +128,11 @@ def register(db: CrmDatabase, actor: User, text: str, day: date = date(2026, 3, 
 @pytest.mark.parametrize(
     ("kind", "received", "extra", "due"),
     [
-        (RequestType.CONSULTA, date(2026, 3, 2), frozenset(), date(2026, 3, 16)),
-        (RequestType.RECLAMO, date(2026, 3, 2), frozenset(), date(2026, 3, 24)),  # festivo 23/03
-        (RequestType.CONSULTA, date(2026, 3, 16), frozenset(), date(2026, 3, 31)),
-        (RequestType.CONSULTA, date(2026, 3, 2), frozenset({date(2026, 3, 3)}), date(2026, 3, 17)),
-        (RequestType.CONSULTA, date(2026, 3, 7), frozenset(), date(2026, 3, 20)),  # sábado
+        (RequestType.INQUIRY, date(2026, 3, 2), frozenset(), date(2026, 3, 16)),
+        (RequestType.CLAIM, date(2026, 3, 2), frozenset(), date(2026, 3, 24)),  # festivo 23/03
+        (RequestType.INQUIRY, date(2026, 3, 16), frozenset(), date(2026, 3, 31)),
+        (RequestType.INQUIRY, date(2026, 3, 2), frozenset({date(2026, 3, 3)}), date(2026, 3, 17)),
+        (RequestType.INQUIRY, date(2026, 3, 7), frozenset(), date(2026, 3, 20)),  # sábado
     ],
 )
 def test_due_on_counts_business_days_from_next_business_day(
@@ -150,17 +150,17 @@ def test_configured_deadline_above_legal_cap_uses_cap() -> None:
         "query_deadline_business_days",
         "claim_deadline_business_days",
     }
-    assert compliance.request_due_on(RequestType.CONSULTA, date(2026, 3, 2), params) == date(
+    assert compliance.request_due_on(RequestType.INQUIRY, date(2026, 3, 2), params) == date(
         2026, 3, 16
     )
-    assert compliance.request_due_on(RequestType.RECLAMO, date(2026, 3, 2), params) == date(
+    assert compliance.request_due_on(RequestType.CLAIM, date(2026, 3, 2), params) == date(
         2026, 3, 24
     )
 
 
 def test_shorter_configured_deadline_is_respected() -> None:
     params = effective_params(make_settings(query_deadline_business_days=5))[0]
-    assert compliance.request_due_on(RequestType.CONSULTA, date(2026, 3, 2), params) == date(
+    assert compliance.request_due_on(RequestType.INQUIRY, date(2026, 3, 2), params) == date(
         2026, 3, 9
     )
 
@@ -177,11 +177,11 @@ def test_commercial_registers_own_lead_request_and_cto_is_shown(
         (req,) = repo.titular_requests(tx)
         events = repo.lead_events(tx, lead_id)
     assert req.lead_id == lead_id
-    assert req.type == RequestType.CONSULTA
+    assert req.type == RequestType.INQUIRY
     assert req.medium == "correo electrónico"
     assert req.received_on == "2026-03-02"
     assert req.due_on == "2026-03-16"
-    assert req.status == RequestStatus.ABIERTA
+    assert req.status == RequestStatus.OPEN
     assert req.registered_by == users["com"].id
     assert any(e.kind == EventKind.TITULAR_REQUEST for e in events)
     (mine,) = texts(tg, COM_TG)
@@ -198,7 +198,7 @@ def test_cto_registers_on_any_lead_without_self_copy(
     send(bot, CTO_TG, "/solicitud L-0001; reclamo; 2026-03-02; llamada")
     with db.tx() as tx:
         (req,) = repo.titular_requests(tx)
-    assert req.type == RequestType.RECLAMO and req.due_on == "2026-03-24"
+    assert req.type == RequestType.CLAIM and req.due_on == "2026-03-24"
     assert len(texts(tg, CTO_TG)) == 1
 
 
@@ -308,7 +308,7 @@ def test_vcrm152_overdue_marks_alert_and_keeps_daily_notice(
     with db.tx() as tx:
         (req,) = repo.titular_requests(tx)
         alerts = repo.open_alerts(tx)
-    assert req.status == RequestStatus.VENCIDA
+    assert req.status == RequestStatus.OVERDUE
     assert [(a.kind, a.lead_id, a.request_id) for a in alerts] == [
         (AlertKind.REQUEST_OVERDUE, lead_id, req.id)
     ]
@@ -330,12 +330,12 @@ def test_attended_only_by_cto_records_author_and_stops_notices(
     clock.advance(days=15)
     send(bot, COM_TG, "/atendida S-0001")
     with db.tx() as tx:
-        assert repo.titular_requests(tx)[0].status == RequestStatus.VENCIDA
+        assert repo.titular_requests(tx)[0].status == RequestStatus.OVERDUE
     send(bot, CTO_TG, "/atendida S-0001")
     with db.tx() as tx:
         (req,) = repo.titular_requests(tx)
         assert repo.open_alerts(tx) == []
-    assert req.status == RequestStatus.ATENDIDA
+    assert req.status == RequestStatus.ATTENDED
     assert req.attended_by == users["cto"].id
     assert req.attended_at is not None
     assert "S-0001" in texts(tg, CTO_TG)[-1]
@@ -368,6 +368,6 @@ def test_daily_sweep_delivers_and_records_failed_notice(
     asyncio.run(retention.daily_sweep(db, tg, at(date(2026, 3, 5)) + timedelta(hours=1), PARAMS))
     with db.tx() as tx:
         failed = tx.execute(
-            "SELECT recipient_user_id, body FROM crm_outbox WHERE status = 'fallida'"
+            "SELECT recipient_user_id, body FROM crm_outbox WHERE status = 'failed'"
         ).fetchall()
     assert [(r["recipient_user_id"], r["body"]) for r in failed] == [(users["cto"].id, None)]

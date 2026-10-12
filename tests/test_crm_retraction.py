@@ -105,8 +105,8 @@ def run(bot: CrmBot, u: Update) -> None:
     asyncio.run(bot.process_update(u))
 
 
-def _lead(db: CrmDatabase, owner: User, state: LeadState = S.ACEPTADO, **changes: Any) -> int:
-    fields = {**COMPLETE, "ever_accepted": 1 if state == S.ACEPTADO else 0, **changes}
+def _lead(db: CrmDatabase, owner: User, state: LeadState = S.ACCEPTED, **changes: Any) -> int:
+    fields = {**COMPLETE, "ever_accepted": 1 if state == S.ACCEPTED else 0, **changes}
     with db.tx() as tx:
         lead_id = repo.insert_lead(
             tx, assigned_user_id=owner.id, state=state, now=START, fields={"name": "Ana Pérez"}
@@ -164,7 +164,7 @@ def test_vcrm131_request_asks_reason_by_buttons_without_transition(
     run(bot, _msg(COM_TG, f"/retractar L-{lead_id}"))
     assert f"L-{lead_id:04d}" in tg.sent[-1].text
     assert "Otro" in _labels(tg) and "Precio o presupuesto" in _labels(tg)
-    assert _get(db, lead_id).state == S.ACEPTADO
+    assert _get(db, lead_id).state == S.ACCEPTED
     assert _outbox(db) == []
 
 
@@ -194,7 +194,7 @@ def test_vcrm131_confirmation_shows_id_name_and_reason(
     assert f"L-{lead_id:04d}" in ask.text and "Ana Pérez" in ask.text
     assert "Ya tiene proveedor" in ask.text
     assert _labels(tg) == ["✅", "❌"]
-    assert _get(db, lead_id).state == S.ACEPTADO
+    assert _get(db, lead_id).state == S.ACCEPTED
     assert _outbox(db) == []
 
 
@@ -204,10 +204,10 @@ def test_vcrm131_other_commercial_has_no_access(
     lead_id = _lead(db, users["com"])
     run(bot, _msg(COM2_TG, f"/retractar L-{lead_id}"))
     assert "no tiene acceso" in tg.sent[-1].text
-    assert _get(db, lead_id).state == S.ACEPTADO
+    assert _get(db, lead_id).state == S.ACCEPTED
 
 
-@pytest.mark.parametrize("state", [S.CONTACTADO, S.RECHAZADO, S.GANADO])
+@pytest.mark.parametrize("state", [S.CONTACTED, S.REJECTED, S.WON])
 def test_vcrm131_only_accepted_leads(
     db: CrmDatabase, tg: FakeTelegram, bot: CrmBot, users: dict[str, User], state: LeadState
 ) -> None:
@@ -223,7 +223,7 @@ def test_vcrm114_invalid_reason_button_does_nothing(
     lead_id = _lead(db, users["com"])
     run(bot, _cb(COM_TG, build_callback("rmotivo", str(lead_id), "inventado")))
     assert tg.sent[-1].text == INVALID_BUTTON
-    assert _get(db, lead_id).state == S.ACEPTADO
+    assert _get(db, lead_id).state == S.ACCEPTED
     assert _outbox(db) == []
 
 
@@ -236,7 +236,7 @@ def test_vcrm114_other_without_text_stays_accepted(
     assert "Escriba el motivo de la retractación" in tg.sent[-1].text
     run(bot, _msg(COM_TG, answer))
     lead = _get(db, lead_id)
-    assert (lead.state, lead.rejection_is_retraction) == (S.ACEPTADO, 0)
+    assert (lead.state, lead.rejection_is_retraction) == (S.ACCEPTED, 0)
     assert _outbox(db) == []
     with db.read() as conn:
         assert conn.execute("SELECT COUNT(*) FROM crm_confirmations").fetchone()[0] == 0
@@ -263,7 +263,7 @@ def test_vcrm131_cancel_keeps_accepted_without_notifications(
     run(bot, _cb(COM_TG, _data(tg, "❌")))
     lead = _get(db, lead_id)
     assert (lead.state, lead.rejection_is_retraction, lead.accepted_exit_at) == (
-        S.ACEPTADO,
+        S.ACCEPTED,
         0,
         None,
     )
@@ -279,7 +279,7 @@ def test_vcrm113_confirm_rejects_as_retraction_and_enqueues_three(
     _retract(bot, tg, who, lead_id)
     lead = _get(db, lead_id)
     assert (lead.state, lead.rejection_is_retraction, lead.reject_reason) == (
-        S.RECHAZADO,
+        S.REJECTED,
         1,
         "precio",
     )
@@ -287,15 +287,15 @@ def test_vcrm113_confirm_rejects_as_retraction_and_enqueues_three(
     with db.read() as conn:
         last = repo.lead_events(conn, lead_id)[-1]
     assert (last.old_value, last.new_value, last.reason, last.actor_user_id) == (
-        S.ACEPTADO,
-        S.RECHAZADO,
+        S.ACCEPTED,
+        S.REJECTED,
         "precio",
         users[who].id,
     )
     targets = _by_target(db, users)
     assert set(targets) == {("cto", "telegram"), ("law", "telegram"), ("law", "email")}
     for (name, channel), item in targets.items():
-        assert item.kind == "retractacion" and item.status == "pendiente"
+        assert item.kind == "retractacion" and item.status == "pending"
         assert item.idempotency_key == (f"retract:{lead_id}:{last.id}:{channel}:{users[name].id}")
         body = item.body or ""
         assert f"L-{lead_id:04d}" in body and "Ana Pérez" in body
@@ -320,7 +320,7 @@ def test_vcrm113_other_text_in_notifications_and_delivery(
     run(bot, _cb(LAW_TG, _data(tg, "✅")))
     assert _get(db, lead_id).reject_text == "Desistió"
     asyncio.run(worker.deliver_due())
-    assert {i.status for i in _outbox(db)} == {"entregada"}
+    assert {i.status for i in _outbox(db)} == {"delivered"}
     assert any("Desistió" in s.text and s.chat_id == CTO_TG for s in tg.sent)
     assert [m.to for m in mail.sent] == ["law@k.co"] and "Desistió" in mail.sent[0].body
 
@@ -397,7 +397,7 @@ def test_vcrm084_editing_non_missing_field_does_not_notify(
 def test_vcrm084_not_accepted_lead_does_not_notify(
     db: CrmDatabase, tg: FakeTelegram, bot: CrmBot, users: dict[str, User]
 ) -> None:
-    lead_id = _lead(db, users["com"], S.CONTACTADO, service=None)
+    lead_id = _lead(db, users["com"], S.CONTACTED, service=None)
     run(bot, _msg(COM_TG, f"/editar L-{lead_id}; servicio; Chatbot"))
     assert _get(db, lead_id).service == "Chatbot"
     assert _outbox(db) == []
@@ -429,7 +429,7 @@ def test_vcrm163_card_shows_retract_button_to_allowed_users(
     assert len(data.encode("utf-8")) <= 64
 
 
-@pytest.mark.parametrize("state", [S.NUEVO, S.CONTACTADO, S.RECHAZADO, S.GANADO, S.PERDIDO])
+@pytest.mark.parametrize("state", [S.NEW, S.CONTACTED, S.REJECTED, S.WON, S.LOST])
 def test_vcrm163_no_retract_button_outside_accepted(
     db: CrmDatabase, tg: FakeTelegram, bot: CrmBot, users: dict[str, User], state: LeadState
 ) -> None:
@@ -446,13 +446,13 @@ def test_vcrm163_button_starts_same_flow_as_command(
     run(bot, _cb(COM_TG, build_callback("retractar", str(lead_id))))
     assert "motivo de la retractación" in tg.sent[-1].text
     assert "Otro" in _labels(tg) and "Precio o presupuesto" in _labels(tg)
-    assert _get(db, lead_id).state == S.ACEPTADO
+    assert _get(db, lead_id).state == S.ACCEPTED
     run(bot, _cb(COM_TG, _data(tg, "Momento no oportuno")))
     assert _labels(tg) == ["✅", "❌"]
     assert _outbox(db) == []
     run(bot, _cb(COM_TG, _data(tg, "✅")))
     lead = _get(db, lead_id)
-    assert (lead.state, lead.rejection_is_retraction) == (S.RECHAZADO, 1)
+    assert (lead.state, lead.rejection_is_retraction) == (S.REJECTED, 1)
     assert len(_outbox(db)) == 3
 
 
@@ -463,10 +463,10 @@ def test_vcrm163_stale_button_is_rejected_with_reason(
     run(bot, _msg(COM_TG, f"/ver L-{lead_id}"))
     stale = _data(tg, RETRACT_LABEL)
     with db.tx() as tx:
-        repo.update_lead(tx, lead_id, {"state": S.GANADO.value}, now=NOW)
+        repo.update_lead(tx, lead_id, {"state": S.WON.value}, now=NOW)
     run(bot, _cb(COM_TG, stale))
     assert "solo un lead «aceptado»" in tg.sent[-1].text
-    assert _get(db, lead_id).state == S.GANADO
+    assert _get(db, lead_id).state == S.WON
     assert _outbox(db) == []
 
 
@@ -478,7 +478,7 @@ def test_vcrm163_foreign_commercial_has_no_button_and_press_is_rejected(
     assert RETRACT_LABEL not in _labels(tg)
     run(bot, _cb(COM2_TG, build_callback("retractar", str(lead_id))))
     assert "no tiene acceso" in tg.sent[-1].text
-    assert _get(db, lead_id).state == S.ACEPTADO
+    assert _get(db, lead_id).state == S.ACCEPTED
     assert _outbox(db) == []
 
 
@@ -489,4 +489,4 @@ def test_vcrm163_malformed_retract_button_is_invalid(
     lead_id = _lead(db, users["com"])
     run(bot, _cb(COM_TG, build_callback("retractar", *args)))
     assert tg.sent[-1].text == INVALID_BUTTON
-    assert _get(db, lead_id).state == S.ACEPTADO
+    assert _get(db, lead_id).state == S.ACCEPTED

@@ -228,7 +228,7 @@ def test_startup_warning_failed_delivery_is_recorded(env: Env) -> None:
         rows = conn.execute(
             "SELECT status FROM crm_outbox WHERE kind = ?", (app_mod.STARTUP_NOTICE_KIND,)
         ).fetchall()
-    assert [r["status"] for r in rows] == ["fallida"]
+    assert [r["status"] for r in rows] == ["failed"]
 
 
 def test_vcrm078_startup_runs_recovery_daily_sweep(
@@ -346,12 +346,12 @@ def test_vcrm078_vcrm049_restart_keeps_leads_history_and_resumes_pending(env: En
     with app1.db.read() as conn:
         (lead,) = repo.leads_of_user(conn, com.id)
     with app1.db.tx() as tx:
-        repo.update_lead(tx, lead.id, {"state": LeadState.CONTACTADO, **COMPLETE}, now=NOW)
+        repo.update_lead(tx, lead.id, {"state": LeadState.CONTACTED, **COMPLETE}, now=NOW)
         out = leads.request_accept(tx, com, lead.id, NOW)
     asyncio.run(app1.bot.process_update(_msg(2, COM_TG, data=_yes(out))))
     asyncio.run(app1.worker.deliver_due())
     law_item = _lawyer_telegram_item(app1, LAW_TG)
-    assert law_item["status"] != "entregada" and law_item["attempts"] == 1
+    assert law_item["status"] != "delivered" and law_item["attempts"] == 1
     app1.close()
 
     env.clock.advance(seconds=61)
@@ -362,13 +362,13 @@ def test_vcrm078_vcrm049_restart_keeps_leads_history_and_resumes_pending(env: En
         events = conn.execute(
             "SELECT COUNT(*) FROM crm_lead_events WHERE lead_id = ?", (lead.id,)
         ).fetchone()[0]
-    assert again is not None and again.state == LeadState.ACEPTADO and events >= 1
+    assert again is not None and again.state == LeadState.ACCEPTED and events >= 1
     asyncio.run(app2.worker.deliver_due())
     assert _lawyer_telegram_item(app2, LAW_TG)["attempts"] == 2
     env.clock.advance(seconds=300)
     asyncio.run(app2.worker.deliver_due())
     final = _lawyer_telegram_item(app2, LAW_TG)
-    assert final["attempts"] == 3 and final["status"] == "entregada"
+    assert final["attempts"] == 3 and final["status"] == "delivered"
     assert any(f"L-{lead.id:04d}" in t for t in _texts(env.tg, LAW_TG))
 
 

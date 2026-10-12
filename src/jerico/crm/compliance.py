@@ -141,13 +141,13 @@ def answer_evidence(
         repo.insert_consent(
             conn,
             lead_id=found.id,
-            status=AuthStatus.AUTORIZADA,
+            status=AuthStatus.AUTHORIZED,
             medium=AUTH_MEDIUM,
             at=now,
             actor_user_id=actor.id,
             attachment_id=attachment_id,
         )
-        repo.update_lead(conn, found.id, {"auth_status": AuthStatus.AUTORIZADA.value}, now=now)
+        repo.update_lead(conn, found.id, {"auth_status": AuthStatus.AUTHORIZED.value}, now=now)
         _audit(conn, actor, found.id, now)
     except Exception:
         store.delete(key)  # sin adjunto parcial
@@ -175,9 +175,11 @@ def opt_out_command(
     if isinstance(found, list):
         return found
     src = LeadState(found.state)
-    check = check_transition(src, LeadState.BAJA)
+    check = check_transition(src, LeadState.OPTED_OUT)
     if not check.ok:
-        return [Outgoing(actor.telegram_id, _invalid_transition_text(src, LeadState.BAJA, check))]
+        return [
+            Outgoing(actor.telegram_id, _invalid_transition_text(src, LeadState.OPTED_OUT, check))
+        ]
     if not keys:
         raise ValueError("fingerprint keys required to register an opt-out")
     for contact in (found.phone_e164, found.email):
@@ -187,9 +189,9 @@ def opt_out_command(
         conn,
         found.id,
         {
-            "state": LeadState.BAJA.value,
+            "state": LeadState.OPTED_OUT.value,
             "final_state_at": to_iso(now),
-            "auth_status": AuthStatus.REVOCADA.value,
+            "auth_status": AuthStatus.REVOKED.value,
         },
         now=now,
     )
@@ -199,7 +201,7 @@ def opt_out_command(
     repo.insert_consent(
         conn,
         lead_id=found.id,
-        status=AuthStatus.REVOCADA,
+        status=AuthStatus.REVOKED,
         medium=medium,
         at=now,
         actor_user_id=actor.id,
@@ -211,7 +213,7 @@ def opt_out_command(
         actor_user_id=actor.id,
         at=now,
         old_value=src.value,
-        new_value=LeadState.BAJA.value,
+        new_value=LeadState.OPTED_OUT.value,
         reason_text=medium,
     )
     _audit(conn, actor, found.id, now)
@@ -227,7 +229,7 @@ def opt_out_command(
 
 def may_contact_commercially(conn: sqlite3.Connection, lead: Lead, keys: Sequence[str]) -> bool:
     """Falso si el lead está en baja, bloqueado, suprimido o con huella en la lista (VCRM-071)."""
-    if lead.state == LeadState.BAJA or lead.commercial_block or lead.suppressed_at is not None:
+    if lead.state == LeadState.OPTED_OUT or lead.commercial_block or lead.suppressed_at is not None:
         return False
     contacts = [c for c in (lead.phone_e164, lead.email) if c is not None]
     fps = [fingerprint(key, contact) for contact in contacts for key in keys]
@@ -274,7 +276,7 @@ KEEP_FIELDS: dict[str, tuple[str, ...]] = {
     "valor": ("agreed_value",),
     "plazo": ("start_term",),
 }
-HOLD_STATES = frozenset({LeadState.ACEPTADO, LeadState.GANADO})
+HOLD_STATES = frozenset({LeadState.ACCEPTED, LeadState.WON})
 
 
 class SuppressionFailed(RuntimeError):
@@ -300,9 +302,7 @@ def plan_suppression(
     """Qué anular y qué archivos borrar (pura). La evidencia solo se reduce por orden del CTO
     (VCRM-165); por plazo se conserva íntegra (VCRM-164)."""
     live = [a for a in attachments if a.deleted_at is None]
-    keep_won = keep_attachments_of_won and (
-        lead.state == LeadState.GANADO or lead.won_at is not None
-    )
+    keep_won = keep_attachments_of_won and (lead.state == LeadState.WON or lead.won_at is not None)
     files = tuple(a for a in live if a.kind != "authorization" and not keep_won)
     evidence = tuple(a for a in live if a.kind == "authorization") if cause == ORDER_CAUSE else ()
     nulls = tuple(c for c in PERSONAL_COLUMNS if c not in keep_fields)
@@ -737,7 +737,7 @@ def request_due_on(kind: RequestType, received_on: date, params: Params) -> date
     Los plazos de `params` ya vienen acotados a su tope legal por `effective_params`."""
     days = (
         params.query_deadline_business_days
-        if kind is RequestType.CONSULTA
+        if kind is RequestType.INQUIRY
         else params.claim_deadline_business_days
     )
     return add_business_days(received_on, days, params.extra_holidays)
@@ -747,12 +747,32 @@ def _date_text(iso_day: str) -> str:
     return date.fromisoformat(iso_day).strftime("%d/%m/%Y")
 
 
+_REQUEST_TYPE_LABELS: dict[str, str] = {
+    RequestType.INQUIRY.value: "consulta",
+    RequestType.CLAIM.value: "reclamo",
+    RequestType.UNCLASSIFIED.value: "sin clasificar",
+}
+_REQUEST_STATUS_LABELS: dict[str, str] = {
+    RequestStatus.OPEN.value: "abierta",
+    RequestStatus.OVERDUE.value: "vencida",
+    RequestStatus.ATTENDED.value: "atendida",
+}
+_REQUEST_TYPE_MAP: dict[str, RequestType] = {
+    "consulta": RequestType.INQUIRY,
+    "reclamo": RequestType.CLAIM,
+    RequestType.INQUIRY.value: RequestType.INQUIRY,
+    RequestType.CLAIM.value: RequestType.CLAIM,
+}
+
+
 def request_summary(req: TitularRequest) -> str:
+    type_str = _REQUEST_TYPE_LABELS.get(req.type, str(req.type))
+    status_str = _REQUEST_STATUS_LABELS.get(req.status, str(req.status))
     return (
-        f"{request_short_id(req.id)} · {short_id(req.lead_id)} · {req.type} · "
+        f"{request_short_id(req.id)} · {short_id(req.lead_id)} · {type_str} · "
         f"medio: {req.medium} · "
         f"recibida {_date_text(req.received_on)} · fecha límite {_date_text(req.due_on)} · "
-        f"{req.status}"
+        f"{status_str}"
     )
 
 
@@ -762,7 +782,10 @@ def _parse_request(text: str) -> tuple[int, RequestType, date, str] | None:
         return None
     lead_id = parse_short_id(match.group(1))
     try:
-        kind = RequestType(match.group(2).lower())
+        raw_kind = match.group(2).lower()
+        if raw_kind not in _REQUEST_TYPE_MAP:
+            return None
+        kind = _REQUEST_TYPE_MAP[raw_kind]
         received = date.fromisoformat(match.group(3))
     except ValueError:
         return None
@@ -821,7 +844,7 @@ def requests_command(
     """`/solicitudes`: abiertas y vencidas, solo para el CTO."""
     if not authorize(actor, Action.ATTEND_REQUEST, None).allowed:
         return _deny(conn, actor, now)
-    pending = repo.titular_requests(conn, (RequestStatus.ABIERTA, RequestStatus.VENCIDA))
+    pending = repo.titular_requests(conn, (RequestStatus.OPEN, RequestStatus.OVERDUE))
     if not pending:
         return [Outgoing(actor.telegram_id, NO_REQUESTS)]
     lines = ["Solicitudes de titulares:"] + [request_summary(r) for r in pending]
@@ -841,13 +864,13 @@ def attended_command(
     if req is None:
         sid = request_short_id(int(match.group(1)))
         return [Outgoing(actor.telegram_id, f"La solicitud {sid} no existe.")]
-    if req.status == RequestStatus.ATENDIDA:
+    if req.status == RequestStatus.ATTENDED:
         return [Outgoing(actor.telegram_id, REQUEST_ALREADY_ATTENDED)]
     repo.update_titular_request(
         conn,
         req.id,
         {
-            "status": RequestStatus.ATENDIDA.value,
+            "status": RequestStatus.ATTENDED.value,
             "attended_by": actor.id,
             "attended_at": to_iso(now),
         },
@@ -863,11 +886,12 @@ def request_notice(req: TitularRequest, today: date, params: Params) -> str:
     remaining = business_days_between(today, date.fromisoformat(req.due_on), params.extra_holidays)
     head = (
         "Solicitud de titular vencida"
-        if req.status == RequestStatus.VENCIDA
+        if req.status == RequestStatus.OVERDUE
         else ("Solicitud de titular sin atender")
     )
+    type_str = _REQUEST_TYPE_LABELS.get(req.type, str(req.type))
     return (
-        f"{head}: {request_short_id(req.id)} · {short_id(req.lead_id)} · {req.type} · "
+        f"{head}: {request_short_id(req.id)} · {short_id(req.lead_id)} · {type_str} · "
         f"recibida {_date_text(req.received_on)} · días hábiles restantes: {remaining}. "
         f"Márquela con {EXAMPLE_ATTENDED.split()[0]} {request_short_id(req.id)}."
     )

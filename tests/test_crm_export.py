@@ -93,7 +93,7 @@ def run(bot: CrmBot, u: Update) -> None:
     asyncio.run(bot.process_update(u))
 
 
-def _lead(db: CrmDatabase, user_id: int, state: LeadState = LeadState.NUEVO) -> int:
+def _lead(db: CrmDatabase, user_id: int, state: LeadState = LeadState.NEW) -> int:
     with db.tx() as tx:
         return repo.insert_lead(
             tx,
@@ -146,7 +146,7 @@ def _tmp_entries(store: LocalFileStore) -> list[Path]:
 
 
 def _full_lead(db: CrmDatabase, store: LocalFileStore, users: dict[str, User]) -> int:
-    lead_id = _lead(db, users["com"].id, LeadState.ACEPTADO)
+    lead_id = _lead(db, users["com"].id, LeadState.ACCEPTED)
     ev_id, _ = _attach(db, store, lead_id, users["com"].id, b"firma-pdf", kind="authorization")
     with db.tx() as tx:
         repo.insert_note(tx, lead_id=lead_id, author_user_id=users["com"].id, body=NOTE, at=START)
@@ -163,7 +163,7 @@ def _full_lead(db: CrmDatabase, store: LocalFileStore, users: dict[str, User]) -
         repo.insert_consent(
             tx,
             lead_id=lead_id,
-            status=AuthStatus.AUTORIZADA,
+            status=AuthStatus.AUTHORIZED,
             medium="documento_o_captura",
             at=START,
             actor_user_id=users["com"].id,
@@ -245,7 +245,7 @@ def test_vcrm074_zip_with_readable_document_and_live_attachments_to_cto_chat(
         "Historial",
         "ACME SAS",
         "Autorizaciones",
-        "autorizada",
+        "authorized",
         "documento_o_captura",
     ):
         assert expected in text

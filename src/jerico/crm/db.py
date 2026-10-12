@@ -11,7 +11,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 BUSY_TIMEOUT_MS = 60_000
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 _DDL: tuple[str, ...] = (
     "CREATE TABLE IF NOT EXISTS crm_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)",
@@ -33,7 +33,7 @@ _DDL: tuple[str, ...] = (
   client_type TEXT, doc_type TEXT, doc_number TEXT, legal_rep TEXT,
   service TEXT, agreed_value TEXT, start_term TEXT,
   reject_reason TEXT, reject_text TEXT, rejection_is_retraction SMALLINT NOT NULL DEFAULT 0,
-  auth_status TEXT NOT NULL DEFAULT 'sin_autorizacion',
+  auth_status TEXT NOT NULL DEFAULT 'unauthorized',
   ever_accepted SMALLINT NOT NULL DEFAULT 0,
   registered_at TEXT NOT NULL, last_interaction_at TEXT NOT NULL,
   accepted_exit_at TEXT,
@@ -68,9 +68,9 @@ _DDL: tuple[str, ...] = (
     "(fingerprint TEXT PRIMARY KEY, at TEXT NOT NULL, medium TEXT NOT NULL)",
     """CREATE TABLE IF NOT EXISTS crm_titular_requests (
   id INTEGER PRIMARY KEY, lead_id INTEGER NOT NULL,
-  type TEXT NOT NULL CHECK (type IN ('consulta','reclamo')),
+  type TEXT NOT NULL CHECK (type IN ('inquiry','claim','unclassified')),
   medium TEXT NOT NULL, received_on TEXT NOT NULL, due_on TEXT NOT NULL,
-  status TEXT NOT NULL DEFAULT 'abierta' CHECK (status IN ('abierta','vencida','atendida')),
+  status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','overdue','attended')),
   registered_by INTEGER NOT NULL, registered_at TEXT NOT NULL,
   last_escalation_on TEXT, attended_by INTEGER, attended_at TEXT
 )""",
@@ -80,7 +80,7 @@ _DDL: tuple[str, ...] = (
   channel TEXT NOT NULL CHECK (channel IN ('telegram','email')),
   recipient_user_id INTEGER NOT NULL, lead_id INTEGER, origin_outbox_id INTEGER,
   subject TEXT, body TEXT,
-  status TEXT NOT NULL CHECK (status IN ('pendiente','entregada','fallida')),
+  status TEXT NOT NULL CHECK (status IN ('pending','delivered','failed')),
   attempts SMALLINT NOT NULL DEFAULT 0, first_attempt_at TEXT, next_attempt_at TEXT,
   last_error TEXT, provider_message_id TEXT, created_at TEXT NOT NULL
 )""",
@@ -101,13 +101,13 @@ _DDL: tuple[str, ...] = (
   id INTEGER PRIMARY KEY,
   kind TEXT NOT NULL CHECK (kind IN ('accept','retract','authorization_question')),
   lead_id INTEGER NOT NULL, user_id INTEGER NOT NULL, reason TEXT, reason_text TEXT,
-  status TEXT NOT NULL DEFAULT 'pendiente', created_at TEXT NOT NULL, resolved_at TEXT
+  status TEXT NOT NULL DEFAULT 'pending', created_at TEXT NOT NULL, resolved_at TEXT
 )""",
     """CREATE TABLE IF NOT EXISTS crm_retention_notices (
   lead_id INTEGER NOT NULL, clock_start TEXT NOT NULL, kind TEXT NOT NULL,
   sent_at TEXT NOT NULL, PRIMARY KEY (lead_id, clock_start, kind)
 )""",
-    "INSERT INTO crm_meta (key, value) VALUES ('schema_version', '1') ON CONFLICT (key) DO NOTHING",
+    "INSERT INTO crm_meta (key, value) VALUES ('schema_version', '2') ON CONFLICT (key) DO NOTHING",
 )
 
 SCHEMA_SQL = ";\n".join(_DDL) + ";\n"

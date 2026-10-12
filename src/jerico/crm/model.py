@@ -11,22 +11,22 @@ class Role(StrEnum):
 
 
 class LeadState(StrEnum):
-    NUEVO = "nuevo"
-    CONTACTADO = "contactado"
-    ACEPTADO = "aceptado"
-    RECHAZADO = "rechazado"
-    EN_NUTRICION = "en_nutricion"
-    PAUSADO = "pausado"
-    REACTIVADO = "reactivado"
-    GANADO = "ganado"
-    PERDIDO = "perdido"
-    BAJA = "baja"
+    NEW = "new"
+    CONTACTED = "contacted"
+    ACCEPTED = "accepted"
+    REJECTED = "rejected"
+    NURTURING = "nurturing"
+    PAUSED = "paused"
+    REACTIVATED = "reactivated"
+    WON = "won"
+    LOST = "lost"
+    OPTED_OUT = "opted_out"
 
 
 class AuthStatus(StrEnum):
-    SIN_AUTORIZACION = "sin_autorizacion"
-    AUTORIZADA = "autorizada"
-    REVOCADA = "revocada"
+    UNAUTHORIZED = "unauthorized"
+    AUTHORIZED = "authorized"
+    REVOKED = "revoked"
 
 
 class EventKind(StrEnum):
@@ -42,9 +42,9 @@ class Channel(StrEnum):
 
 
 class OutboxStatus(StrEnum):
-    PENDIENTE = "pendiente"
-    ENTREGADA = "entregada"
-    FALLIDA = "fallida"
+    PENDING = "pending"
+    DELIVERED = "delivered"
+    FAILED = "failed"
 
 
 class AlertKind(StrEnum):
@@ -235,16 +235,17 @@ class OutboxItem:
 
 
 class RequestType(StrEnum):
-    """Tipo de solicitud de un titular (VCRM-150)."""
+    """Tipo de solicitud de un titular (VCRM-150, 153)."""
 
-    CONSULTA = "consulta"
-    RECLAMO = "reclamo"
+    INQUIRY = "inquiry"
+    CLAIM = "claim"
+    UNCLASSIFIED = "unclassified"
 
 
 class RequestStatus(StrEnum):
-    ABIERTA = "abierta"
-    VENCIDA = "vencida"  # VCRM-152
-    ATENDIDA = "atendida"
+    OPEN = "open"
+    OVERDUE = "overdue"  # VCRM-152
+    ATTENDED = "attended"
 
 
 @dataclass(frozen=True)

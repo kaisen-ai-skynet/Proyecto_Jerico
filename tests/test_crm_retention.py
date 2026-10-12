@@ -150,7 +150,7 @@ def _suppressed_fp(db: CrmDatabase) -> bool:
 def test_vcrm158_warns_once_at_25_days_with_id_name_and_date(
     db: CrmDatabase, tg: FakeTelegram, store: FlakyStore, users: dict[str, User]
 ) -> None:
-    lead_id = _lead(db, users["com"].id, LeadState.CONTACTADO)
+    lead_id = _lead(db, users["com"].id, LeadState.CONTACTED)
     _sweep(db, tg, store, START + timedelta(days=24))
     assert _texts(tg, COM_TG) == []
     day25 = START + timedelta(days=25)
@@ -168,7 +168,7 @@ def test_vcrm158_warns_once_at_25_days_with_id_name_and_date(
 def test_vcrm158_warning_goes_to_cto_without_commercial(
     db: CrmDatabase, tg: FakeTelegram, store: FlakyStore, users: dict[str, User]
 ) -> None:
-    lead_id = _lead(db, None, LeadState.NUEVO)
+    lead_id = _lead(db, None, LeadState.NEW)
     _sweep(db, tg, store, START + timedelta(days=25))
     texts = _texts(tg, CTO_TG)
     assert len(texts) == 1 and short_id(lead_id) in texts[0]
@@ -177,7 +177,7 @@ def test_vcrm158_warning_goes_to_cto_without_commercial(
 def test_vcrm159_suppresses_at_30_days_without_fingerprint(
     db: CrmDatabase, tg: FakeTelegram, store: FlakyStore, users: dict[str, User]
 ) -> None:
-    lead_id = _lead(db, users["com"].id, LeadState.CONTACTADO)
+    lead_id = _lead(db, users["com"].id, LeadState.CONTACTED)
     photo = _attach(db, store, lead_id, users["com"].id, "photo")
     day30 = START + timedelta(days=30)
     _sweep(db, tg, store, day30)
@@ -208,14 +208,14 @@ def test_vcrm159_authorized_before_deadline_is_not_suppressed(
     db: CrmDatabase, tg: FakeTelegram, store: FlakyStore, users: dict[str, User]
 ) -> None:
     lead_id = _lead(
-        db, users["com"].id, LeadState.CONTACTADO, auth_status=AuthStatus.AUTORIZADA.value
+        db, users["com"].id, LeadState.CONTACTED, auth_status=AuthStatus.AUTHORIZED.value
     )
     _sweep(db, tg, store, START + timedelta(days=40))
     assert _get(db, lead_id).suppressed_at is None
     assert tg.sent == []
 
 
-@pytest.mark.parametrize("state", [LeadState.ACEPTADO, LeadState.GANADO])
+@pytest.mark.parametrize("state", [LeadState.ACCEPTED, LeadState.WON])
 def test_vcrm159_clock_stopped_in_accepted_or_won(
     db: CrmDatabase,
     tg: FakeTelegram,
@@ -234,7 +234,7 @@ def test_vcrm159_clock_restarts_on_leaving_accepted(
 ) -> None:
     exit_at = START + timedelta(days=50)
     lead_id = _lead(
-        db, users["com"].id, LeadState.RECHAZADO, accepted_exit_at=exit_at, ever_accepted=1
+        db, users["com"].id, LeadState.REJECTED, accepted_exit_at=exit_at, ever_accepted=1
     )
     _sweep(db, tg, store, exit_at + timedelta(days=29))
     assert _get(db, lead_id).suppressed_at is None
@@ -248,7 +248,9 @@ def test_vcrm159_clock_restarts_on_leaving_accepted(
 # --- VCRM-146 / 164 -----------------------------------------------------------------------
 
 
-@pytest.mark.parametrize(("state", "with_fp"), [(LeadState.PERDIDO, False), (LeadState.BAJA, True)])
+@pytest.mark.parametrize(
+    ("state", "with_fp"), [(LeadState.LOST, False), (LeadState.OPTED_OUT, True)]
+)
 def test_vcrm146_vcrm164_final_state_suppressed_at_12_months_keeping_evidence(
     db: CrmDatabase,
     tg: FakeTelegram,
@@ -263,7 +265,7 @@ def test_vcrm146_vcrm164_final_state_suppressed_at_12_months_keeping_evidence(
         users["com"].id,
         state,
         final_state_at=final_at,
-        auth_status=AuthStatus.AUTORIZADA.value,
+        auth_status=AuthStatus.AUTHORIZED.value,
     )
     photo = _attach(db, store, lead_id, users["com"].id, "photo")
     evidence = _attach(db, store, lead_id, users["com"].id, "authorization")
@@ -297,10 +299,10 @@ def test_vcrm145_won_then_baja_keeps_attachments_until_10_years(
     lead_id = _lead(
         db,
         users["com"].id,
-        LeadState.BAJA,
+        LeadState.OPTED_OUT,
         won_at=won_at,
         final_state_at=final_at,
-        auth_status=AuthStatus.AUTORIZADA.value,
+        auth_status=AuthStatus.AUTHORIZED.value,
         ever_accepted=1,
     )
     photo = _attach(db, store, lead_id, users["com"].id, "photo")
@@ -324,7 +326,7 @@ def test_vcrm145_won_then_baja_keeps_attachments_until_10_years(
 def test_vcrm145_won_lead_attachments_expire_after_10_years(
     db: CrmDatabase, tg: FakeTelegram, store: FlakyStore, users: dict[str, User]
 ) -> None:
-    lead_id = _lead(db, users["com"].id, LeadState.GANADO, won_at=START)
+    lead_id = _lead(db, users["com"].id, LeadState.WON, won_at=START)
     photo = _attach(db, store, lead_id, users["com"].id, "photo")
     _sweep(db, tg, store, add_years(START, 10))
     assert not (store.base_dir / photo).exists()
@@ -337,7 +339,7 @@ def test_vcrm145_won_lead_attachments_expire_after_10_years(
 def test_vcrm147_failed_suppression_alerts_cto_and_retries(
     db: CrmDatabase, tg: FakeTelegram, store: FlakyStore, users: dict[str, User]
 ) -> None:
-    lead_id = _lead(db, users["com"].id, LeadState.CONTACTADO)
+    lead_id = _lead(db, users["com"].id, LeadState.CONTACTED)
     photo = _attach(db, store, lead_id, users["com"].id, "photo")
     store.broken = True
     day30 = START + timedelta(days=30)
@@ -357,7 +359,7 @@ def test_vcrm147_failed_suppression_alerts_cto_and_retries(
 def test_vcrm147_failed_attachment_expiry_alerts_and_retries(
     db: CrmDatabase, tg: FakeTelegram, store: FlakyStore, users: dict[str, User]
 ) -> None:
-    lead_id = _lead(db, users["com"].id, LeadState.GANADO, won_at=START)
+    lead_id = _lead(db, users["com"].id, LeadState.WON, won_at=START)
     photo = _attach(db, store, lead_id, users["com"].id, "photo")
     store.broken = True
     ten = add_years(START, 10)

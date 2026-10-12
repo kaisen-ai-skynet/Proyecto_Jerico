@@ -98,7 +98,7 @@ def _count(db: CrmDatabase, sql: str) -> int:
 def _new_lead(db: CrmDatabase, user_id: int) -> int:
     with db.tx() as tx:
         return repo.insert_lead(
-            tx, assigned_user_id=user_id, state=LeadState.NUEVO, now=START, fields={}
+            tx, assigned_user_id=user_id, state=LeadState.NEW, now=START, fields={}
         )
 
 
@@ -416,7 +416,7 @@ def test_vcrm079_confirmation_resolves_once(
     assert "ya fue procesada" in tg.sent[1].text
     with db.read() as conn:
         conf = repo.get_confirmation(conn, conf_id)
-    assert conf is not None and conf.status == "confirmada" and conf.resolved_at == to_iso(START)
+    assert conf is not None and conf.status == "confirmed" and conf.resolved_at == to_iso(START)
 
 
 def test_vcrm079_confirmation_cancel_and_unregistered_kind(
@@ -436,7 +436,7 @@ def test_vcrm079_confirmation_cancel_and_unregistered_kind(
     run(bot.process_update(_cb(1, CTO_TG, build_callback("conf", str(conf_id), "no"))))
     with db.read() as conn:
         conf = repo.get_confirmation(conn, conf_id)
-    assert conf is not None and conf.status == "cancelada" and conf.reason == "otro"
+    assert conf is not None and conf.status == "cancelled" and conf.reason == "otro"
     # Desde T17 el tipo «retract» tiene manejador: ❌ responde con su propio texto.
     assert tg.sent[0].text == f"No se aplicó la retractación de L-{lead_id:04d}."
 
@@ -454,7 +454,7 @@ def test_vcrm086_confirmation_of_another_user_is_denied(
     assert _audit(db)[-1]["action"] == AuditAction.PERMISSION_DENIED
     with db.read() as conn:
         conf = repo.get_confirmation(conn, conf_id)
-    assert conf is not None and conf.status == "pendiente"
+    assert conf is not None and conf.status == "pending"
 
 
 # --- Respuestas fallidas (VCRM-012) ------------------------------------------------------
@@ -473,7 +473,7 @@ def test_vcrm012_failed_reply_is_recorded_without_body_and_not_retried(
         assert repo.active_user_by_telegram(conn, 3000) is not None  # el efecto se conserva
     assert len(rows) == 1
     row = rows[0]
-    assert row["status"] == "fallida" and row["critical"] == 0
+    assert row["status"] == "failed" and row["critical"] == 0
     assert row["body"] is None and row["subject"] is None
     assert row["channel"] == "telegram" and row["recipient_user_id"] == users[0].id
     assert row["attempts"] == 1 and row["next_attempt_at"] is None
@@ -511,7 +511,7 @@ def test_vcrm079_handler_error_rolls_back_replies_generic_and_marks_processed(
         repo.insert_lead(
             conn,
             assigned_user_id=user.id,
-            state=LeadState.NUEVO,
+            state=LeadState.NEW,
             now=now,
             fields={"name": "Ana Pérez"},
         )
@@ -582,7 +582,7 @@ def test_vcrm079_repo_mark_processed_and_confirmation_helpers(db: CrmDatabase) -
         assert repo.mark_update_processed(tx, 1, START) is True
         assert repo.mark_update_processed(tx, 1, START) is False
         assert repo.get_confirmation(tx, 404) is None
-        assert repo.resolve_confirmation(tx, 404, "confirmada", START) is False
+        assert repo.resolve_confirmation(tx, 404, "confirmed", START) is False
         repo.clear_pending_input(tx, 404)
 
 

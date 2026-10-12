@@ -41,7 +41,7 @@ PYTHONPATH=src .venv/bin/python -m pytest <TESTS> -q \
   - **Hecho cuando:** `tests/test_crm_migration.py` en verde salvo `callbacks_v1...` (se cierra en T03) y VERIF.
   - **Verificación:** VERIF con `<TESTS>` = `tests/test_crm_migration.py`.
 
-- [ ] **F2-T03 — Renombrar valores y miembros de enums a inglés (mecánico, atómico)**
+- [x] **F2-T03 — Renombrar valores y miembros de enums a inglés (mecánico, atómico)**
   - **Delegable a Gemini:** SÍ (con revisión del coordinador del diff de `db.py` y `repo.py`). Excepción de tamaño: cambio mecánico que no puede partirse sin dejar la suite en rojo (≈ 45 min).
   - Requisitos: VCRM-171 (conservación del significado visible).
   - **Entregable exacto:** `src/jerico/crm/{model,states,leads,compliance,retention,repo,render,outbox,bot,parsing,db}.py` (miembros, literales SQL y `CHECK` v2; `SCHEMA_VERSION = 2`; fila inicial `schema_version = '2'`; `RequestType.UNCLASSIFIED`) y todos los `tests/test_crm_*.py` + `tests/crm_support.py` con los literales actualizados.

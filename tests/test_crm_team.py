@@ -55,7 +55,7 @@ def _com(conn: sqlite3.Connection, tg: int = COM_TG) -> User:
     )
 
 
-def _lead(conn: sqlite3.Connection, user_id: int | None, state: LeadState = LeadState.NUEVO) -> int:
+def _lead(conn: sqlite3.Connection, user_id: int | None, state: LeadState = LeadState.NEW) -> int:
     return repo.insert_lead(conn, assigned_user_id=user_id, state=state, now=NOW, fields={})
 
 
@@ -179,9 +179,9 @@ def test_vcrm091_deactivate_commercial_lists_leads_with_reassign_buttons(
 ) -> None:
     cto = _cto(conn)
     com = _com(conn)
-    open_lead = _lead(conn, com.id, LeadState.CONTACTADO)
-    lost = _lead(conn, com.id, LeadState.PERDIDO)
-    _lead(conn, com.id, LeadState.BAJA)
+    open_lead = _lead(conn, com.id, LeadState.CONTACTED)
+    lost = _lead(conn, com.id, LeadState.LOST)
+    _lead(conn, com.id, LeadState.OPTED_OUT)
     out = deactivate_user(conn, cto, f"/baja_usuario {COM_TG}", NOW)
     assert repo.active_user_by_telegram(conn, COM_TG) is None
     assert len(_audits(conn, AuditAction.USER_DEACTIVATED)) == 1

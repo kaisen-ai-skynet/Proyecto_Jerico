@@ -40,8 +40,8 @@ from jerico.crm.timeutil import (
 
 NOTICE_KIND = "aviso_solicitud"
 TERM_CAUSE = AuditDetail.VENCIMIENTO_PLAZO.value
-_CLOCK_STOPPED = frozenset({LeadState.ACEPTADO, LeadState.GANADO})
-_FINAL_STATES = frozenset({LeadState.PERDIDO, LeadState.BAJA})
+_CLOCK_STOPPED = frozenset({LeadState.ACCEPTED, LeadState.WON})
+_FINAL_STATES = frozenset({LeadState.LOST, LeadState.OPTED_OUT})
 
 
 class _Ctx:
@@ -95,7 +95,7 @@ def _suppress(ctx: _Ctx, lead: Lead, *, add_fingerprint: bool, keep_won: bool) -
 
 def _sweep_unauthorized(ctx: _Ctx, lead: Lead) -> list[Outgoing] | None:
     """J-14 (VCRM-158, 159); None si el lead no está sujeto al reloj."""
-    if lead.state in _CLOCK_STOPPED or lead.auth_status != AuthStatus.SIN_AUTORIZACION:
+    if lead.state in _CLOCK_STOPPED or lead.auth_status != AuthStatus.UNAUTHORIZED:
         return None
     start = from_iso(lead.registered_at)
     if lead.accepted_exit_at is not None:
@@ -134,7 +134,9 @@ def _sweep_final_state(ctx: _Ctx, lead: Lead) -> list[Outgoing]:
     keep_won = lead.won_at is not None and ctx.now < add_years(
         from_iso(lead.won_at), ctx.params.won_attachments_retention_years
     )
-    result = _suppress(ctx, lead, add_fingerprint=lead.state == LeadState.BAJA, keep_won=keep_won)
+    result = _suppress(
+        ctx, lead, add_fingerprint=lead.state == LeadState.OPTED_OUT, keep_won=keep_won
+    )
     return [] if result is True else ctx.failure(lead, "fail", str(result))
 
 
@@ -190,9 +192,9 @@ def sweep_requests(conn: sqlite3.Connection, now: datetime, params: Params) -> l
     extra = params.extra_holidays
     ctos = repo.active_users(conn, Role.CTO)
     out: list[Outgoing] = []
-    for req in repo.titular_requests(conn, (RequestStatus.ABIERTA, RequestStatus.VENCIDA)):
-        if req.status == RequestStatus.ABIERTA and today >= date.fromisoformat(req.due_on):
-            repo.update_titular_request(conn, req.id, {"status": RequestStatus.VENCIDA.value})
+    for req in repo.titular_requests(conn, (RequestStatus.OPEN, RequestStatus.OVERDUE)):
+        if req.status == RequestStatus.OPEN and today >= date.fromisoformat(req.due_on):
+            repo.update_titular_request(conn, req.id, {"status": RequestStatus.OVERDUE.value})
             repo.create_alert(
                 conn,
                 kind=AlertKind.REQUEST_OVERDUE,

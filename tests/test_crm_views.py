@@ -108,7 +108,7 @@ def _lead(
     """Lead con última interacción en `START + minutes`; `accepted` marca «alguna vez aceptado»."""
     with db.tx() as tx:
         lead_id = repo.insert_lead(
-            tx, assigned_user_id=user_id, state=LeadState.NUEVO, now=START, fields={"name": name}
+            tx, assigned_user_id=user_id, state=LeadState.NEW, now=START, fields={"name": name}
         )
         values: dict[str, Any] = dict(changes)
         if accepted:
@@ -161,9 +161,9 @@ def test_vcrm010_lawyer_sees_only_ever_accepted(
     db: CrmDatabase, tg: FakeTelegram, bot: CrmBot, users: dict[str, User]
 ) -> None:
     _lead(db, users["com"].id, "Nunca Aceptado")
-    _lead(db, users["com"].id, "Aceptado Hoy", accepted=True, state=LeadState.ACEPTADO.value)
-    _lead(db, users["com2"].id, "Ganado Antes", accepted=True, state=LeadState.GANADO.value)
-    _lead(db, users["com2"].id, "Retractado", accepted=True, state=LeadState.RECHAZADO.value)
+    _lead(db, users["com"].id, "Aceptado Hoy", accepted=True, state=LeadState.ACCEPTED.value)
+    _lead(db, users["com2"].id, "Ganado Antes", accepted=True, state=LeadState.WON.value)
+    _lead(db, users["com2"].id, "Retractado", accepted=True, state=LeadState.REJECTED.value)
     run(bot, _msg(LAW_TG, "/lista"))
     text = _last_text(tg)
     assert "Nunca Aceptado" not in text
@@ -174,7 +174,7 @@ def test_vcrm010_list_ordered_by_last_interaction_desc_with_fields(
     db: CrmDatabase, tg: FakeTelegram, bot: CrmBot, users: dict[str, User]
 ) -> None:
     old = _lead(db, users["com"].id, "Antiguo", minutes=1)
-    new = _lead(db, users["com"].id, "Reciente", minutes=300, state=LeadState.CONTACTADO.value)
+    new = _lead(db, users["com"].id, "Reciente", minutes=300, state=LeadState.CONTACTED.value)
     mid = _lead(db, users["com"].id, "Medio", minutes=60)
     run(bot, _msg(COM_TG, "/lista"))
     lines = [line for line in _last_text(tg).split("\n") if line.startswith("L-")]
@@ -288,10 +288,10 @@ def test_vcrm011_full_card(
         service="Asesoría",
         agreed_value="5000000",
         start_term="2026-04-01",
-        state=LeadState.RECHAZADO.value,
+        state=LeadState.REJECTED.value,
         reject_reason="precio",
         reject_text="Le pareció caro",
-        auth_status="autorizada",
+        auth_status="authorized",
     )
     with db.tx() as tx:
         repo.insert_note(
@@ -377,7 +377,7 @@ def test_vcrm011_card_hides_resolved_alerts_and_deleted_attachments(
 def test_vcrm011_lawyer_sees_card_of_ever_accepted_lead(
     db: CrmDatabase, tg: FakeTelegram, bot: CrmBot, users: dict[str, User]
 ) -> None:
-    lead_id = _lead(db, users["com"].id, "Aceptada", accepted=True, state="aceptado")
+    lead_id = _lead(db, users["com"].id, "Aceptada", accepted=True, state=LeadState.ACCEPTED.value)
     run(bot, _msg(LAW_TG, f"/ver L-{lead_id:04d}"))
     assert "Aceptada" in _last_text(tg) and "Estado: aceptado" in _last_text(tg)
 

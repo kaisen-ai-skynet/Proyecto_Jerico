@@ -233,7 +233,7 @@ def test_vcrm098_undelivered_notice_is_recorded_as_failed(
     assert _run(db, tg, runner, tmp_path, attachments) is False
     with db.read() as conn:
         rows = conn.execute("SELECT kind, status FROM crm_outbox").fetchall()
-    assert [tuple(r) for r in rows] == [(backup.NOTICE_KIND, "fallida")]
+    assert [tuple(r) for r in rows] == [(backup.NOTICE_KIND, "failed")]
 
 
 def test_vcrm098_failure_notifies_cto_by_email_too(
@@ -270,7 +270,7 @@ def test_vcrm098_undelivered_email_notice_is_recorded_as_failed(
     with db.read() as conn:
         rows = conn.execute("SELECT kind, channel, status, last_error FROM crm_outbox").fetchall()
     assert [tuple(r) for r in rows] == [
-        (backup.NOTICE_KIND, "email", "fallida", "mailbox_not_configured")
+        (backup.NOTICE_KIND, "email", "failed", "mailbox_not_configured")
     ]
 
 

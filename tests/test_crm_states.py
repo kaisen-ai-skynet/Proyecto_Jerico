@@ -6,33 +6,33 @@ from jerico.crm.model import LeadState as S
 from jerico.crm.states import TRANSITIONS, TransitionCheck, check_transition, valid_targets
 
 F1_TRANSITIONS = [
-    (S.NUEVO, S.CONTACTADO),
-    (S.RECHAZADO, S.CONTACTADO),
-    (S.NUEVO, S.ACEPTADO),
-    (S.CONTACTADO, S.ACEPTADO),
-    (S.RECHAZADO, S.ACEPTADO),
-    (S.NUEVO, S.RECHAZADO),
-    (S.CONTACTADO, S.RECHAZADO),
-    (S.ACEPTADO, S.RECHAZADO),
-    (S.ACEPTADO, S.GANADO),
-    (S.NUEVO, S.PERDIDO),
-    (S.CONTACTADO, S.PERDIDO),
-    (S.RECHAZADO, S.PERDIDO),
-] + [(s, S.BAJA) for s in S if s is not S.BAJA]
+    (S.NEW, S.CONTACTED),
+    (S.REJECTED, S.CONTACTED),
+    (S.NEW, S.ACCEPTED),
+    (S.CONTACTED, S.ACCEPTED),
+    (S.REJECTED, S.ACCEPTED),
+    (S.NEW, S.REJECTED),
+    (S.CONTACTED, S.REJECTED),
+    (S.ACCEPTED, S.REJECTED),
+    (S.ACCEPTED, S.WON),
+    (S.NEW, S.LOST),
+    (S.CONTACTED, S.LOST),
+    (S.REJECTED, S.LOST),
+] + [(s, S.OPTED_OUT) for s in S if s is not S.OPTED_OUT]
 
 F2_TRANSITIONS = [
-    (S.EN_NUTRICION, S.PERDIDO),
-    (S.PAUSADO, S.PERDIDO),
-    (S.REACTIVADO, S.PERDIDO),
-    (S.RECHAZADO, S.EN_NUTRICION),
-    (S.EN_NUTRICION, S.PAUSADO),
-    (S.PAUSADO, S.EN_NUTRICION),
-    (S.EN_NUTRICION, S.REACTIVADO),
-    (S.PAUSADO, S.REACTIVADO),
-    (S.RECHAZADO, S.REACTIVADO),
-    (S.REACTIVADO, S.CONTACTADO),
-    (S.REACTIVADO, S.ACEPTADO),
-    (S.REACTIVADO, S.RECHAZADO),
+    (S.NURTURING, S.LOST),
+    (S.PAUSED, S.LOST),
+    (S.REACTIVATED, S.LOST),
+    (S.REJECTED, S.NURTURING),
+    (S.NURTURING, S.PAUSED),
+    (S.PAUSED, S.NURTURING),
+    (S.NURTURING, S.REACTIVATED),
+    (S.PAUSED, S.REACTIVATED),
+    (S.REJECTED, S.REACTIVATED),
+    (S.REACTIVATED, S.CONTACTED),
+    (S.REACTIVATED, S.ACCEPTED),
+    (S.REACTIVATED, S.REJECTED),
 ]
 
 
@@ -61,57 +61,57 @@ def test_vcrm013_table_contains_only_section_4_2_rows() -> None:
 
 
 def test_vcrm013_default_phase_is_current_phase() -> None:
-    assert not check_transition(S.RECHAZADO, S.EN_NUTRICION).ok
-    assert check_transition(S.NUEVO, S.CONTACTADO).ok
+    assert not check_transition(S.REJECTED, S.NURTURING).ok
+    assert check_transition(S.NEW, S.CONTACTED).ok
 
 
 def test_vcrm014_not_allowed_returns_valid_targets() -> None:
-    result = check_transition(S.NUEVO, S.GANADO, phase=1)
+    result = check_transition(S.NEW, S.WON, phase=1)
     assert not result.ok
     assert result.error_code == "not_allowed"
-    assert result.valid_targets == (S.CONTACTADO, S.ACEPTADO, S.RECHAZADO, S.PERDIDO, S.BAJA)
+    assert result.valid_targets == (S.CONTACTED, S.ACCEPTED, S.REJECTED, S.LOST, S.OPTED_OUT)
 
 
 def test_vcrm014_valid_targets_filtered_by_phase() -> None:
-    assert valid_targets(S.RECHAZADO, phase=1) == (
-        S.CONTACTADO,
-        S.ACEPTADO,
-        S.PERDIDO,
-        S.BAJA,
+    assert valid_targets(S.REJECTED, phase=1) == (
+        S.CONTACTED,
+        S.ACCEPTED,
+        S.LOST,
+        S.OPTED_OUT,
     )
-    assert S.EN_NUTRICION in valid_targets(S.RECHAZADO, phase=2)
-    assert valid_targets(S.EN_NUTRICION, phase=1) == (S.BAJA,)
+    assert S.NURTURING in valid_targets(S.REJECTED, phase=2)
+    assert valid_targets(S.NURTURING, phase=1) == (S.OPTED_OUT,)
 
 
 def test_vcrm014_same_state_is_not_allowed() -> None:
-    result = check_transition(S.CONTACTADO, S.CONTACTADO, phase=1)
+    result = check_transition(S.CONTACTED, S.CONTACTED, phase=1)
     assert result.error_code == "not_allowed"
-    assert result.valid_targets == (S.ACEPTADO, S.RECHAZADO, S.PERDIDO, S.BAJA)
+    assert result.valid_targets == (S.ACCEPTED, S.REJECTED, S.LOST, S.OPTED_OUT)
 
 
-@pytest.mark.parametrize("final", [S.GANADO, S.PERDIDO])
+@pytest.mark.parametrize("final", [S.WON, S.LOST])
 @pytest.mark.parametrize("phase", [1, 2])
 def test_vcrm117_final_states_only_allow_baja(final: S, phase: int) -> None:
-    assert valid_targets(final, phase=phase) == (S.BAJA,)
+    assert valid_targets(final, phase=phase) == (S.OPTED_OUT,)
     for dst in S:
-        if dst is S.BAJA:
+        if dst is S.OPTED_OUT:
             continue
         result = check_transition(final, dst, phase=phase)
         assert not result.ok
-        assert result.valid_targets == (S.BAJA,)
+        assert result.valid_targets == (S.OPTED_OUT,)
 
 
 @pytest.mark.parametrize("phase", [1, 2])
 def test_vcrm117_baja_has_no_targets(phase: int) -> None:
-    assert valid_targets(S.BAJA, phase=phase) == ()
+    assert valid_targets(S.OPTED_OUT, phase=phase) == ()
     for dst in S:
-        result = check_transition(S.BAJA, dst, phase=phase)
+        result = check_transition(S.OPTED_OUT, dst, phase=phase)
         assert result == TransitionCheck(ok=False, error_code="not_allowed", valid_targets=())
 
 
 @pytest.mark.parametrize("phase", [1, 2])
 def test_vcrm133_aceptado_to_perdido_requires_retraction(phase: int) -> None:
-    result = check_transition(S.ACEPTADO, S.PERDIDO, phase=phase)
+    result = check_transition(S.ACCEPTED, S.LOST, phase=phase)
     assert not result.ok
     assert result.error_code == "requires_retraction"
-    assert result.valid_targets == (S.RECHAZADO, S.GANADO, S.BAJA)
+    assert result.valid_targets == (S.REJECTED, S.WON, S.OPTED_OUT)

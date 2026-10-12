@@ -41,7 +41,7 @@ def _seed(db: CrmDatabase) -> tuple[int, int]:
             conn, telegram_id=111, role=Role.COMMERCIAL, email="c@kaisen.ai", now=NOW
         )
         lead_id = repo.insert_lead(
-            conn, assigned_user_id=user.id, state=LeadState.NUEVO, now=NOW, fields=TITULAR
+            conn, assigned_user_id=user.id, state=LeadState.NEW, now=NOW, fields=TITULAR
         )
     return user.id, lead_id
 
@@ -54,8 +54,8 @@ def test_vcrm078_wal_active_and_schema_version_in_meta(tmp_path: Path) -> None:
     with db.read() as conn:
         assert conn.execute("PRAGMA journal_mode").fetchone()[0].lower() == "wal"
         assert conn.execute("PRAGMA foreign_keys").fetchone()[0] == 1
-        assert repo.get_meta(conn, "schema_version") == "1"
-    assert SCHEMA_VERSION == 1
+        assert repo.get_meta(conn, "schema_version") == "2"
+    assert SCHEMA_VERSION == 2
     db.close()
 
 
@@ -83,15 +83,15 @@ def test_vcrm078_committed_data_survives_close_and_reopen(tmp_path: Path) -> Non
     db = _open(tmp_path)
     user_id, lead_id = _seed(db)
     with db.tx() as conn:
-        repo.update_lead(conn, lead_id, {"state": LeadState.CONTACTADO.value}, now=LATER)
+        repo.update_lead(conn, lead_id, {"state": LeadState.CONTACTED.value}, now=LATER)
         repo.add_event(
             conn,
             lead_id=lead_id,
             kind=EventKind.STATE,
             actor_user_id=user_id,
             at=LATER,
-            old_value=LeadState.NUEVO.value,
-            new_value=LeadState.CONTACTADO.value,
+            old_value=LeadState.NEW.value,
+            new_value=LeadState.CONTACTED.value,
         )
         repo.set_meta(conn, "telegram_offset", "7")
     db.close()
@@ -100,13 +100,13 @@ def test_vcrm078_committed_data_survives_close_and_reopen(tmp_path: Path) -> Non
     with db.read() as conn:
         lead = repo.get_lead(conn, lead_id)
         assert lead is not None
-        assert lead.state == LeadState.CONTACTADO.value
+        assert lead.state == LeadState.CONTACTED.value
         assert lead.name == TITULAR["name"]
         assert lead.assigned_user_id == user_id
         assert lead.last_interaction_at == "2026-10-06T09:30:00Z"
         events = repo.lead_events(conn, lead_id)
         assert [(e.kind, e.old_value, e.new_value) for e in events] == [
-            ("state", "nuevo", "contactado")
+            ("state", "new", "contacted")
         ]
         assert repo.get_meta(conn, "telegram_offset") == "7"
         user = repo.active_user_by_telegram(conn, 111)
@@ -135,7 +135,7 @@ def test_vcrm078_update_lead_rejects_unknown_column(tmp_path: Path) -> None:
         repo.update_lead(conn, lead_id, {"id; DROP TABLE crm_leads": 1}, now=LATER)
     with pytest.raises(ValueError, match="columna"), db.tx() as conn:
         repo.insert_lead(
-            conn, assigned_user_id=None, state=LeadState.NUEVO, now=NOW, fields={"bogus": "x"}
+            conn, assigned_user_id=None, state=LeadState.NEW, now=NOW, fields={"bogus": "x"}
         )
     with db.read() as conn:
         assert repo.get_lead(conn, 999) is None

@@ -82,6 +82,7 @@ from jerico.crm.render import (
     retraction_text,
     short_id,
     split_message,
+    state_label,
 )
 from jerico.crm.states import TransitionCheck, check_transition
 from jerico.crm.timeutil import format_local, to_iso
@@ -157,7 +158,7 @@ def _assignee(conn: sqlite3.Connection, lead: Lead) -> str:
 def _visible_duplicate(conn: sqlite3.Connection, actor: User, lead: Lead) -> Outgoing:
     """VCRM-006: id, estado y comercial del existente con «Abrir» y «Cancelar»."""
     text = (
-        f"El contacto ya está registrado: {short_id(lead.id)} · estado {lead.state} · "
+        f"El contacto ya está registrado: {short_id(lead.id)} · estado {state_label(lead.state)} · "
         f"{_assignee(conn, lead)}."
     )
     buttons = (
@@ -214,7 +215,7 @@ def register(
     lead_id = repo.insert_lead(
         conn,
         assigned_user_id=actor.id,
-        state=LeadState.NUEVO,
+        state=LeadState.NEW,
         now=now,
         fields={
             "name": cmd.name,
@@ -229,7 +230,7 @@ def register(
         kind=EventKind.STATE,
         actor_user_id=actor.id,
         at=now,
-        new_value=LeadState.NUEVO.value,
+        new_value=LeadState.NEW.value,
     )
     if cmd.note is not None:
         repo.insert_note(conn, lead_id=lead_id, author_user_id=actor.id, body=cmd.note, at=now)
@@ -245,7 +246,7 @@ def register(
         conn, kind=AUTH_QUESTION_KIND, lead_id=lead_id, user_id=actor.id, now=now
     )
     lines = [
-        f"Lead {short_id(lead_id)} registrado (estado {LeadState.NUEVO.value}).",
+        f"Lead {short_id(lead_id)} registrado (estado {LeadState.NEW.value}).",
         f"Nombre: {cmd.name}",
         f"Teléfono: {cmd.phone or NO_VALUE}",
         f"Correo: {cmd.email or NO_VALUE}",
@@ -622,19 +623,19 @@ USE_RETRACTION = "No se aplicó: un lead «aceptado» sale de ese estado con la 
 RETRACT_LABEL = "Retractar"  # botón de la ficha (VCRM-163)
 # Botón de la ficha: operación → (etiqueta, destino).
 STATE_OPS: dict[str, tuple[str, LeadState]] = {
-    "contacto": ("Registrar contacto", LeadState.CONTACTADO),
-    "aceptar": ("Aceptar", LeadState.ACEPTADO),  # pide confirmación ✅/❌ (VCRM-046)
-    "rechazo": ("Rechazar", LeadState.RECHAZADO),
-    "ganado": ("Ganado", LeadState.GANADO),
-    "perdido": ("Perdido", LeadState.PERDIDO),
+    "contacto": ("Registrar contacto", LeadState.CONTACTED),
+    "aceptar": ("Aceptar", LeadState.ACCEPTED),  # pide confirmación ✅/❌ (VCRM-046)
+    "rechazo": ("Rechazar", LeadState.REJECTED),
+    "ganado": ("Ganado", LeadState.WON),
+    "perdido": ("Perdido", LeadState.LOST),
 }
 _TARGET_ACTIONS: dict[LeadState, Action] = {
-    LeadState.CONTACTADO: Action.CONTACT_REJECT,
-    LeadState.RECHAZADO: Action.CONTACT_REJECT,
-    LeadState.ACEPTADO: Action.ACCEPT,
-    LeadState.GANADO: Action.MARK_WON,
-    LeadState.PERDIDO: Action.MARK_LOST,
-    LeadState.BAJA: Action.REGISTER_OPT_OUT,
+    LeadState.CONTACTED: Action.CONTACT_REJECT,
+    LeadState.REJECTED: Action.CONTACT_REJECT,
+    LeadState.ACCEPTED: Action.ACCEPT,
+    LeadState.WON: Action.MARK_WON,
+    LeadState.LOST: Action.MARK_LOST,
+    LeadState.OPTED_OUT: Action.REGISTER_OPT_OUT,
 }
 
 
@@ -644,10 +645,10 @@ def state_buttons(actor: User, lead: Lead) -> tuple[tuple[tuple[str, str], ...],
         (label, build_callback("estado", op, str(lead.id)))
         for op, (label, dst) in STATE_OPS.items()
         if check_transition(LeadState(lead.state), dst).ok
-        and not (lead.state == LeadState.ACEPTADO and dst is LeadState.RECHAZADO)
+        and not (lead.state == LeadState.ACCEPTED and dst is LeadState.REJECTED)
         and authorize(actor, _TARGET_ACTIONS[dst], lead).allowed
     )
-    if lead.state == LeadState.ACEPTADO and authorize(actor, Action.RETRACT, lead).allowed:
+    if lead.state == LeadState.ACCEPTED and authorize(actor, Action.RETRACT, lead).allowed:
         row += ((RETRACT_LABEL, build_callback("retractar", str(lead.id))),)  # VCRM-163
     return (row,) if row else ()
 
@@ -668,9 +669,10 @@ def _ask_other_text(conn: sqlite3.Connection, actor: User, lead_id: int, now: da
 
 
 def _invalid_transition_text(src: LeadState, dst: LeadState, check: TransitionCheck) -> str:
-    valid = ", ".join(s.value for s in check.valid_targets) or "ninguna"
+    valid = ", ".join(state_label(s) for s in check.valid_targets) or "ninguna"
+    src_l, dst_l = state_label(src), state_label(dst)
     return (
-        f"No se aplicó la transición: desde «{src}» no se puede pasar a «{dst}». "
+        f"No se aplicó la transición: desde «{src_l}» no se puede pasar a «{dst_l}». "
         f"Transiciones válidas: {valid}."
     )
 
@@ -691,7 +693,7 @@ def transition(
         return [Outgoing(actor.telegram_id, f"El lead {short_id(lead_id)} no existe.")]
     decision = authorize(actor, _TARGET_ACTIONS[dst], lead)
     if not decision.allowed:
-        if dst is LeadState.GANADO and actor.role == Role.COMMERCIAL:  # VCRM-134
+        if dst is LeadState.WON and actor.role == Role.COMMERCIAL:  # VCRM-134
             repo.audit(
                 conn,
                 actor=f"user:{actor.id}",
@@ -710,8 +712,8 @@ def transition(
     if not check.ok:  # VCRM-014, 117
         return [Outgoing(actor.telegram_id, _invalid_transition_text(src, dst, check))]
     changes: dict[str, str | None] = {"state": dst.value}
-    if dst is LeadState.RECHAZADO:
-        if src is LeadState.ACEPTADO:
+    if dst is LeadState.REJECTED:
+        if src is LeadState.ACCEPTED:
             return [Outgoing(actor.telegram_id, USE_RETRACTION)]
         if reason not in REJECT_REASONS:  # VCRM-016
             return [_reason_prompt(actor, lead.id)]
@@ -721,9 +723,9 @@ def transition(
         changes |= {"reject_reason": reason, "reject_text": reason_text}
     else:
         reason = reason_text = None
-    if dst is LeadState.GANADO:
+    if dst is LeadState.WON:
         changes["won_at"] = to_iso(now)
-    if dst is LeadState.PERDIDO:
+    if dst is LeadState.LOST:
         changes["final_state_at"] = to_iso(now)
         repo.cancel_pending_confirmations(conn, lead.id, now)  # VCRM-116
     repo.update_lead(conn, lead.id, changes, now=now)
@@ -740,7 +742,7 @@ def transition(
     )
     _audit_update(conn, actor, lead.id, now)
     detail = f" (motivo: {reason})" if reason else ""
-    text = f"{short_id(lead.id)}: estado «{src}» → «{dst}»{detail}."
+    text = f"{short_id(lead.id)}: estado «{state_label(src)}» → «{state_label(dst)}»{detail}."
     return [Outgoing(actor.telegram_id, text)]
 
 
@@ -755,7 +757,7 @@ def answer_reject_text(
         conn,
         actor,
         pending.lead_id,
-        LeadState.RECHAZADO,
+        LeadState.REJECTED,
         now,
         reason=OTHER_REASON,
         reason_text=text,
@@ -789,11 +791,11 @@ def request_accept(
     if not decision.allowed:
         return deny_lead(conn, actor, decision, lead.id, now)
     src = LeadState(lead.state)
-    if src is LeadState.ACEPTADO:  # VCRM-051
+    if src is LeadState.ACCEPTED:  # VCRM-051
         return _already_accepted(actor, lead.id)
-    check = check_transition(src, LeadState.ACEPTADO)
+    check = check_transition(src, LeadState.ACCEPTED)
     if not check.ok:
-        text = _invalid_transition_text(src, LeadState.ACEPTADO, check)
+        text = _invalid_transition_text(src, LeadState.ACCEPTED, check)
         return [Outgoing(actor.telegram_id, text)]
     conf_id = repo.create_confirmation(
         conn, kind=ACCEPT_KIND, lead_id=lead.id, user_id=actor.id, now=now
@@ -822,7 +824,7 @@ def repeated_accept(
 ) -> list[Outgoing] | None:
     """✅ repetido sobre una confirmación resuelta: «ya estaba aceptado» si lo está (VCRM-051)."""
     lead = repo.get_lead(conn, conf.lead_id)
-    if lead is None or lead.state != LeadState.ACEPTADO:
+    if lead is None or lead.state != LeadState.ACCEPTED:
         return None
     return _already_accepted(actor, lead.id)
 
@@ -837,11 +839,11 @@ def confirm_accept(
     lead = repo.get_lead(conn, conf.lead_id)
     if lead is None:
         return [Outgoing(actor.telegram_id, f"El lead {sid} no existe.")]
-    if lead.state == LeadState.ACEPTADO:  # VCRM-051
+    if lead.state == LeadState.ACCEPTED:  # VCRM-051
         return _already_accepted(actor, lead.id)
-    out = transition(conn, actor, lead.id, LeadState.ACEPTADO, now)
+    out = transition(conn, actor, lead.id, LeadState.ACCEPTED, now)
     accepted = repo.get_lead(conn, lead.id)
-    if accepted is None or accepted.state != LeadState.ACEPTADO:
+    if accepted is None or accepted.state != LeadState.ACCEPTED:
         return out
     repo.update_lead(conn, lead.id, {"ever_accepted": 1}, now=now)
     event_id = repo.lead_events(conn, lead.id)[-1].id
@@ -954,7 +956,7 @@ def _notify_handoff_update(
     after = repo.get_lead(conn, before.id)
     if (
         after is None
-        or before.state != LeadState.ACEPTADO
+        or before.state != LeadState.ACCEPTED
         or label not in _missing_labels(before)
         or label in _missing_labels(after)
     ):
@@ -1005,7 +1007,7 @@ def request_retract(
     if not decision.allowed:
         return deny_lead(conn, actor, decision, lead.id, now)
     sid = short_id(lead.id)
-    if lead.state != LeadState.ACEPTADO:
+    if lead.state != LeadState.ACCEPTED:
         text = f"No se aplicó: solo un lead «aceptado» admite retractación ({sid})."
         return [Outgoing(chat, text)]
     if reason not in REJECT_REASONS:  # VCRM-114
@@ -1074,11 +1076,11 @@ def confirm_retract(
     decision = authorize(actor, Action.RETRACT, lead)
     if not decision.allowed:
         return deny_lead(conn, actor, decision, lead.id, now)
-    if lead.state != LeadState.ACEPTADO:
+    if lead.state != LeadState.ACCEPTED:
         return [Outgoing(chat, f"No se aplicó: {sid} no está «aceptado».")]
     reason = conf.reason or OTHER_REASON
     changes: dict[str, str | int | None] = {
-        "state": LeadState.RECHAZADO.value,
+        "state": LeadState.REJECTED.value,
         "reject_reason": reason,
         "reject_text": conf.reason_text,
         "rejection_is_retraction": 1,
@@ -1091,8 +1093,8 @@ def confirm_retract(
         kind=EventKind.STATE,
         actor_user_id=actor.id,
         at=now,
-        old_value=LeadState.ACEPTADO.value,
-        new_value=LeadState.RECHAZADO.value,
+        old_value=LeadState.ACCEPTED.value,
+        new_value=LeadState.REJECTED.value,
         reason=reason,
         reason_text=conf.reason_text,
     )

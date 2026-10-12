@@ -125,7 +125,7 @@ def _state_cb(
     if len(args) != 2 or args[0] not in leads.STATE_OPS or not args[1].isdigit():
         return None
     _, dst = leads.STATE_OPS[args[0]]
-    if dst is LeadState.ACEPTADO:  # toda aceptación pasa por la confirmación ✅/❌ (VCRM-046)
+    if dst is LeadState.ACCEPTED:  # toda aceptación pasa por la confirmación ✅/❌ (VCRM-046)
         return leads.request_accept(conn, user, int(args[1]), now)
     return leads.transition(conn, user, int(args[1]), dst, now)
 
@@ -136,7 +136,7 @@ def _reason_cb(
     """Botón de motivo de rechazo: `motivo:<lead>:<código>` (VCRM-016, 017)."""
     if len(args) != 2 or not args[0].isdigit() or args[1] not in leads.REJECT_REASONS:
         return None
-    return leads.transition(conn, user, int(args[0]), LeadState.RECHAZADO, now, reason=args[1])
+    return leads.transition(conn, user, int(args[0]), LeadState.REJECTED, now, reason=args[1])
 
 
 def _retract_reason_cb(
@@ -315,7 +315,7 @@ class CrmBot:
         if conf.user_id != user.id:
             return deny(conn, user, now)
         yes = args[1] == "si"
-        if not repo.resolve_confirmation(conn, conf.id, "confirmada" if yes else "cancelada", now):
+        if not repo.resolve_confirmation(conn, conf.id, "confirmed" if yes else "cancelled", now):
             if yes and conf.kind == leads.ACCEPT_KIND:  # VCRM-051
                 again = leads.repeated_accept(conn, user, conf)
                 if again is not None:

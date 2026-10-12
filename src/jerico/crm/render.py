@@ -9,7 +9,7 @@ from jerico.crm.handoff import (
     missing_handoff_fields,
     name_or_company,
 )
-from jerico.crm.model import Alert, AlertKind, Attachment, AuthStatus, Lead, Note
+from jerico.crm.model import Alert, AlertKind, Attachment, AuthStatus, Lead, LeadState, Note
 from jerico.crm.parsing import build_callback
 from jerico.crm.timeutil import format_local, from_iso
 
@@ -21,9 +21,21 @@ ALERT_MARK = "alerta activa"  # VCRM-087
 ATTENDED_LABEL = "Atendida por otro medio"  # VCRM-087
 
 _AUTH_LABELS: dict[str, str] = {
-    AuthStatus.SIN_AUTORIZACION: "sin autorización",
-    AuthStatus.AUTORIZADA: "autorizada",
-    AuthStatus.REVOCADA: "revocada",
+    AuthStatus.UNAUTHORIZED: "sin autorización",
+    AuthStatus.AUTHORIZED: "autorizada",
+    AuthStatus.REVOKED: "revocada",
+}
+_STATE_LABELS: dict[str, str] = {
+    LeadState.NEW: "nuevo",
+    LeadState.CONTACTED: "contactado",
+    LeadState.ACCEPTED: "aceptado",
+    LeadState.REJECTED: "rechazado",
+    LeadState.NURTURING: "en nutrición",
+    LeadState.PAUSED: "pausado",
+    LeadState.REACTIVATED: "reactivado",
+    LeadState.WON: "ganado",
+    LeadState.LOST: "perdido",
+    LeadState.OPTED_OUT: "baja",
 }
 
 
@@ -33,6 +45,10 @@ def short_id(lead_id: int) -> str:
 
 def auth_label(status: str) -> str:
     return _AUTH_LABELS.get(status, status)
+
+
+def state_label(state: str) -> str:
+    return _STATE_LABELS.get(state, state)
 
 
 def handoff_rows(lead: Lead) -> tuple[tuple[str, str], ...]:
@@ -220,7 +236,7 @@ def _list_line(
 ) -> str:
     """Identificador, nombre, estado y última interacción (VCRM-010); marcas VCRM-092 y 087."""
     line = (
-        f"{short_id(lead.id)} · {lead.name or NO_VALUE} · {lead.state} · "
+        f"{short_id(lead.id)} · {lead.name or NO_VALUE} · {state_label(lead.state)} · "
         f"{_local(lead.last_interaction_at)}"
     )
     line = f"{line} · {UNASSIGNED}" if lead.id in unassigned else line
@@ -283,7 +299,7 @@ def render_lead_card(
         f"Teléfono: {lead.phone_e164 or NO_VALUE}",
         f"Correo: {lead.email or NO_VALUE}",
         f"Empresa: {lead.company or NO_VALUE}",
-        f"Estado: {lead.state}",
+        f"Estado: {state_label(lead.state)}",
         f"Comercial: {commercial}",
         "Handoff:",
         *_rows_text(handoff_rows(lead)),

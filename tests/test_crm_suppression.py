@@ -132,7 +132,7 @@ def run(bot: CrmBot, u: Update) -> None:
 def _lead(
     db: CrmDatabase,
     user_id: int | None,
-    state: LeadState = LeadState.NUEVO,
+    state: LeadState = LeadState.NEW,
     *,
     ever_accepted: bool = False,
     retracted: bool = False,
@@ -206,11 +206,11 @@ def _notices(db: CrmDatabase) -> list[dict[str, Any]]:
 def test_vcrm073_suppresses_every_lead_of_the_same_contact_and_confirms_all_ids(
     bot: CrmBot, tg: FakeTelegram, db: CrmDatabase, users: dict[str, User]
 ) -> None:
-    a = _lead(db, users["com"].id, LeadState.PERDIDO)
+    a = _lead(db, users["com"].id, LeadState.LOST)
     b = _lead(
         db,
         users["com"].id,
-        LeadState.RECHAZADO,
+        LeadState.REJECTED,
         ever_accepted=True,
         retracted=True,
         phone_e164="+573009999999",
@@ -257,7 +257,7 @@ def test_vcrm073_deletes_personal_data_and_keeps_contact_fingerprint(
     lead_id = _lead(
         db,
         com,
-        LeadState.RECHAZADO,
+        LeadState.REJECTED,
         company="Empresa SAS",
         doc_type="CC",
         doc_number=DOC,
@@ -370,7 +370,7 @@ def test_vcrm165_evidence_reduced_to_minimal_footprint_without_personal_data(
     assert after["sha256"] == hashlib.sha256(b"firma del titular").hexdigest()
     assert after["deleted_at"] == to_iso(START)
     assert _rows(db, "SELECT * FROM crm_consents") == consent_before
-    assert consent_before[0]["status"] == AuthStatus.AUTORIZADA
+    assert consent_before[0]["status"] == AuthStatus.AUTHORIZED
     text = _all_text(db)
     for sentinel in (NAME, PHONE, EMAIL, DOC, NOTE, LEGAL_REP, "3001234567"):
         assert sentinel not in text, sentinel
@@ -380,7 +380,7 @@ def test_vcrm165_evidence_reduced_to_minimal_footprint_without_personal_data(
 def test_vcrm073_only_cto_may_order_suppression(
     bot: CrmBot, tg: FakeTelegram, db: CrmDatabase, users: dict[str, User], who: int
 ) -> None:
-    _lead(db, users["com"].id, LeadState.ACEPTADO, ever_accepted=True)
+    _lead(db, users["com"].id, LeadState.ACCEPTED, ever_accepted=True)
     run(bot, _msg(who, "/suprimir L-0001"))
     assert _suppressed_ids(db) == []
     assert _notices(db) == []
@@ -400,7 +400,7 @@ def test_vcrm073_only_cto_may_order_suppression(
 def test_vcrm073_invalid_format_suppresses_nothing(
     bot: CrmBot, tg: FakeTelegram, db: CrmDatabase, users: dict[str, User], text: str
 ) -> None:
-    _lead(db, users["com"].id, LeadState.GANADO, ever_accepted=True)
+    _lead(db, users["com"].id, LeadState.WON, ever_accepted=True)
     run(bot, _msg(CTO_TG, text))
     assert _suppressed_ids(db) == []
     assert "/suprimir L-0042" in tg.sent[-1].text
@@ -428,13 +428,13 @@ def test_vcrm094_keeps_only_listed_fields_on_won_lead_and_suppresses_the_rest(
     won = _lead(
         db,
         users["com"].id,
-        LeadState.GANADO,
+        LeadState.WON,
         ever_accepted=True,
         doc_type="CC",
         doc_number=DOC,
         legal_rep=LEGAL_REP,
     )
-    lost = _lead(db, users["com"].id, LeadState.PERDIDO, doc_number=DOC)
+    lost = _lead(db, users["com"].id, LeadState.LOST, doc_number=DOC)
     run(
         bot,
         _msg(
@@ -460,7 +460,7 @@ def test_vcrm094_keeps_only_listed_fields_on_won_lead_and_suppresses_the_rest(
 def test_vcrm094_exception_rejected_when_no_lead_is_accepted_or_won(
     bot: CrmBot, tg: FakeTelegram, db: CrmDatabase, users: dict[str, User]
 ) -> None:
-    _lead(db, users["com"].id, LeadState.RECHAZADO, ever_accepted=True, retracted=True)
+    _lead(db, users["com"].id, LeadState.REJECTED, ever_accepted=True, retracted=True)
     run(bot, _msg(CTO_TG, "/suprimir L-0001; conservar: nombre; fundamento: contrato"))
     assert _suppressed_ids(db) == []
     assert _notices(db) == []
@@ -473,8 +473,8 @@ def test_vcrm094_exception_rejected_when_no_lead_is_accepted_or_won(
 def test_vcrm154_one_critical_notice_per_recipient_and_channel_without_personal_data(
     bot: CrmBot, db: CrmDatabase, users: dict[str, User]
 ) -> None:
-    accepted = _lead(db, users["com"].id, LeadState.GANADO, ever_accepted=True)
-    _lead(db, users["com"].id, LeadState.PERDIDO)
+    accepted = _lead(db, users["com"].id, LeadState.WON, ever_accepted=True)
+    _lead(db, users["com"].id, LeadState.LOST)
     run(bot, _msg(CTO_TG, "/suprimir L-0002"))
     notices = _notices(db)
     got = {(n["recipient_user_id"], n["channel"]) for n in notices}
@@ -485,7 +485,7 @@ def test_vcrm154_one_critical_notice_per_recipient_and_channel_without_personal_
     }
     assert len(notices) == 3
     for n in notices:
-        assert n["critical"] == 1 and n["status"] == "pendiente"
+        assert n["critical"] == 1 and n["status"] == "pending"
         content = f"{n['subject'] or ''}\n{n['body']}"
         for sentinel in (NAME, PHONE, EMAIL):
             assert sentinel not in content
@@ -498,7 +498,7 @@ def test_vcrm154_one_critical_notice_per_recipient_and_channel_without_personal_
 def test_vcrm154_no_lawyer_notice_when_no_lead_was_ever_accepted(
     bot: CrmBot, db: CrmDatabase, users: dict[str, User]
 ) -> None:
-    _lead(db, users["com"].id, LeadState.PERDIDO)
+    _lead(db, users["com"].id, LeadState.LOST)
     run(bot, _msg(CTO_TG, "/suprimir L-0001"))
     notices = _notices(db)
     assert [(n["recipient_user_id"], n["channel"]) for n in notices] == [
@@ -513,8 +513,8 @@ def test_vcrm155_failed_notice_raises_alert_per_lead_until_attended(
     users: dict[str, User],
     clock: FakeClock,
 ) -> None:
-    a = _lead(db, users["com"].id, LeadState.PERDIDO)
-    b = _lead(db, users["com"].id, LeadState.NUEVO, phone_e164="+573008888888")
+    a = _lead(db, users["com"].id, LeadState.LOST)
+    b = _lead(db, users["com"].id, LeadState.NEW, phone_e164="+573008888888")
     run(bot, _msg(CTO_TG, "/suprimir L-0001"))
     worker = OutboxWorker(db, tg, FakeEmailSender(), clock.now, on_failed=escalate)
     tg.fail_next(CTO_TG, 3)
@@ -522,7 +522,7 @@ def test_vcrm155_failed_notice_raises_alert_per_lead_until_attended(
         asyncio.run(worker.deliver_due())
         clock.advance(seconds=300)
     failed = _notices(db)[0]
-    assert failed["status"] == "fallida"
+    assert failed["status"] == "failed"
     with db.read() as conn:
         alerts = repo.open_alerts(conn)
     assert [(x.kind, x.lead_id, x.outbox_id) for x in alerts] == [
@@ -560,7 +560,7 @@ def test_vcrm073_file_delete_failure_marks_nothing(
     store = _FailingStore(tmp_path / "files", set())
     bot = CrmBot(db, tg, FakeClock(START).now, fingerprint_keys=(KEY,), files=store)
     a = _lead(db, users["com"].id)
-    b = _lead(db, users["com"].id, LeadState.PERDIDO)
+    b = _lead(db, users["com"].id, LeadState.LOST)
     _attach(db, store, a, users["com"].id, b"uno")
     store.failing.add(_attach(db, store, b, users["com"].id, b"dos"))
     with db.tx() as tx:
@@ -594,7 +594,7 @@ def test_vcrm073_without_file_store_suppression_with_files_fails(
 def test_vcrm165_plan_reduces_evidence_only_on_cto_order(
     db: CrmDatabase, store: LocalFileStore, users: dict[str, User]
 ) -> None:
-    lead_id = _lead(db, users["com"].id, LeadState.GANADO)
+    lead_id = _lead(db, users["com"].id, LeadState.WON)
     _attach(db, store, lead_id, users["com"].id, b"foto")
     _attach(db, store, lead_id, users["com"].id, b"firma", kind="authorization")
     with db.read() as conn:

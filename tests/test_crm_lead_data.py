@@ -111,7 +111,7 @@ def _lead(db: CrmDatabase, user_id: int | None, **fields: str | None) -> int:
     base.update(fields)
     with db.tx() as tx:
         return repo.insert_lead(
-            tx, assigned_user_id=user_id, state=LeadState.NUEVO, now=START, fields=base
+            tx, assigned_user_id=user_id, state=LeadState.NEW, now=START, fields=base
         )
 
 
@@ -461,7 +461,7 @@ def test_vcrm083_same_lead_or_lost_lead_is_not_duplicate(
         repo.insert_lead(
             tx,
             assigned_user_id=users["com"].id,
-            state=LeadState.PERDIDO,
+            state=LeadState.LOST,
             now=START,
             fields={"name": "Viejo", "email": "nuevo@empresa.co"},
         )

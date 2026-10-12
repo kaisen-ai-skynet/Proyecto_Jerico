@@ -87,7 +87,7 @@ def test_vcrm049_row_persisted_pending_before_first_attempt(tmp_path: Path) -> N
     db, cto, _ = _setup(tmp_path)
     oid = _enqueue(db, cto, Channel.TELEGRAM, "k1")
     item = _item(db, oid)
-    assert item.status == OutboxStatus.PENDIENTE
+    assert item.status == OutboxStatus.PENDING
     assert item.critical == 1
     assert item.attempts == 0
     assert item.first_attempt_at is None
@@ -102,9 +102,9 @@ def test_vcrm049_row_persisted_pending_before_first_attempt(tmp_path: Path) -> N
 
     clock = FakeClock(T0)
     asyncio.run(_worker(db, clock, SpyTelegram()).deliver_due())
-    assert seen and seen[0].status == OutboxStatus.PENDIENTE
+    assert seen and seen[0].status == OutboxStatus.PENDING
     item = _item(db, oid)
-    assert item.status == OutboxStatus.ENTREGADA
+    assert item.status == OutboxStatus.DELIVERED
     assert item.attempts == 1
     assert item.first_attempt_at == to_iso(T0)
     assert item.provider_message_id is not None
@@ -150,7 +150,7 @@ def test_vcrm127_successive_failures_attempt_at_0_1_5_min_then_failed(tmp_path: 
         clock.advance(seconds=15)
     assert attempt_times == [T0, T0 + timedelta(minutes=1), T0 + timedelta(minutes=5)]
     item = _item(db, oid)
-    assert item.status == OutboxStatus.FALLIDA
+    assert item.status == OutboxStatus.FAILED
     assert item.attempts == 3
     assert item.next_attempt_at is None
     assert item.last_error == "sendMessage: HTTP 502"
@@ -173,7 +173,7 @@ def test_vcrm127_retry_succeeds_on_second_attempt(tmp_path: Path) -> None:
     clock.advance(seconds=30)
     asyncio.run(worker.deliver_due())
     item = _item(db, oid)
-    assert item.status == OutboxStatus.ENTREGADA
+    assert item.status == OutboxStatus.DELIVERED
     assert item.attempts == 2
     assert item.first_attempt_at == to_iso(T0)
     db.close()
@@ -192,9 +192,9 @@ def test_vcrm047_failing_recipient_does_not_delay_others(tmp_path: Path) -> None
     asyncio.run(_worker(db, clock, tg, mail).deliver_due())
     items = [_item(db, i) for i in ids]
     assert all(i.first_attempt_at == to_iso(T0) for i in items)
-    assert items[0].status == OutboxStatus.PENDIENTE
-    assert items[1].status == OutboxStatus.ENTREGADA
-    assert items[2].status == OutboxStatus.ENTREGADA
+    assert items[0].status == OutboxStatus.PENDING
+    assert items[1].status == OutboxStatus.DELIVERED
+    assert items[2].status == OutboxStatus.DELIVERED
     assert [m.to for m in mail.sent] == [LAWYER_MAIL]
     assert mail.sent[0].subject == "Lead aceptado"
     assert [s.chat_id for s in tg.sent] == [LAWYER_TG]
@@ -214,10 +214,10 @@ def test_vcrm047_exception_in_one_send_is_isolated(tmp_path: Path) -> None:
     a = _enqueue(db, cto, Channel.TELEGRAM, "a")
     b = _enqueue(db, lawyer, Channel.TELEGRAM, "b")
     asyncio.run(_worker(db, clock, BoomTelegram()).deliver_due())
-    assert _item(db, a).status == OutboxStatus.PENDIENTE
+    assert _item(db, a).status == OutboxStatus.PENDING
     assert _item(db, a).attempts == 1
     assert _item(db, a).last_error == "ConnectionError"
-    assert _item(db, b).status == OutboxStatus.ENTREGADA
+    assert _item(db, b).status == OutboxStatus.DELIVERED
     db.close()
 
 
@@ -232,7 +232,7 @@ def test_vcrm012_permanent_failure_marks_failed_without_retries(tmp_path: Path) 
     clock.advance(minutes=10)
     asyncio.run(worker.deliver_due())
     item = _item(db, oid)
-    assert item.status == OutboxStatus.FALLIDA
+    assert item.status == OutboxStatus.FAILED
     assert item.attempts == 0
     assert item.next_attempt_at is None
     assert item.last_error == "mailbox_not_configured"
@@ -247,7 +247,7 @@ def test_vcrm012_unknown_recipient_is_permanent_failure(tmp_path: Path) -> None:
     oid = _enqueue(db, 999, Channel.TELEGRAM, "k")
     asyncio.run(_worker(db, clock, tg).deliver_due())
     item = _item(db, oid)
-    assert item.status == OutboxStatus.FALLIDA
+    assert item.status == OutboxStatus.FAILED
     assert item.last_error == "recipient_not_found"
     assert tg.attempts == []
     db.close()
@@ -290,7 +290,7 @@ def test_vcrm049_after_reopen_pending_gets_only_remaining_attempts(tmp_path: Pat
     clock.advance(minutes=30)
     asyncio.run(worker.deliver_due())
     assert len(tg.attempts) == 3
-    assert _item(db, oid).status == OutboxStatus.FALLIDA
+    assert _item(db, oid).status == OutboxStatus.FAILED
     db.close()
 
 
@@ -310,7 +310,7 @@ def test_vcrm047_kick_triggers_attempt_without_waiting_interval(tmp_path: Path) 
         oid = _enqueue(db, cto, Channel.TELEGRAM, "k")
         worker.kick()
         for _ in range(100):
-            if _item(db, oid).status == OutboxStatus.ENTREGADA:
+            if _item(db, oid).status == OutboxStatus.DELIVERED:
                 break
             await asyncio.sleep(0.01)
         stop.set()
@@ -333,13 +333,13 @@ def test_vcrm049_worker_delivers_pending_on_start_and_on_interval(tmp_path: Path
         stop = asyncio.Event()
         task = asyncio.create_task(worker.run(stop))
         await asyncio.sleep(0.02)
-        assert _item(db, first).status == OutboxStatus.ENTREGADA
+        assert _item(db, first).status == OutboxStatus.DELIVERED
         second = _enqueue(db, cto, Channel.TELEGRAM, "b")  # sin kick: lo toma el intervalo
         for _ in range(100):
-            if _item(db, second).status == OutboxStatus.ENTREGADA:
+            if _item(db, second).status == OutboxStatus.DELIVERED:
                 break
             await asyncio.sleep(0.01)
-        assert _item(db, second).status == OutboxStatus.ENTREGADA
+        assert _item(db, second).status == OutboxStatus.DELIVERED
         stop.set()
         await asyncio.wait_for(task, timeout=1)
 

@@ -9,32 +9,32 @@ _S = LeadState
 
 # (origen, destino) -> fase en que se habilita (spec §4.2).
 TRANSITIONS: dict[tuple[LeadState, LeadState], int] = {
-    (_S.NUEVO, _S.CONTACTADO): 1,
-    (_S.RECHAZADO, _S.CONTACTADO): 1,
-    (_S.NUEVO, _S.ACEPTADO): 1,
-    (_S.CONTACTADO, _S.ACEPTADO): 1,
-    (_S.RECHAZADO, _S.ACEPTADO): 1,
-    (_S.NUEVO, _S.RECHAZADO): 1,
-    (_S.CONTACTADO, _S.RECHAZADO): 1,
-    (_S.ACEPTADO, _S.RECHAZADO): 1,  # retractación (VCRM-131)
-    (_S.ACEPTADO, _S.GANADO): 1,
-    (_S.NUEVO, _S.PERDIDO): 1,
-    (_S.CONTACTADO, _S.PERDIDO): 1,
-    (_S.RECHAZADO, _S.PERDIDO): 1,
-    **{(s, _S.BAJA): 1 for s in _S if s is not _S.BAJA},
+    (_S.NEW, _S.CONTACTED): 1,
+    (_S.REJECTED, _S.CONTACTED): 1,
+    (_S.NEW, _S.ACCEPTED): 1,
+    (_S.CONTACTED, _S.ACCEPTED): 1,
+    (_S.REJECTED, _S.ACCEPTED): 1,
+    (_S.NEW, _S.REJECTED): 1,
+    (_S.CONTACTED, _S.REJECTED): 1,
+    (_S.ACCEPTED, _S.REJECTED): 1,  # retractación (VCRM-131)
+    (_S.ACCEPTED, _S.WON): 1,
+    (_S.NEW, _S.LOST): 1,
+    (_S.CONTACTED, _S.LOST): 1,
+    (_S.REJECTED, _S.LOST): 1,
+    **{(s, _S.OPTED_OUT): 1 for s in _S if s is not _S.OPTED_OUT},
     # Filas de F2: presentes y filtradas por fase.
-    (_S.EN_NUTRICION, _S.PERDIDO): 2,
-    (_S.PAUSADO, _S.PERDIDO): 2,
-    (_S.REACTIVADO, _S.PERDIDO): 2,
-    (_S.RECHAZADO, _S.EN_NUTRICION): 2,
-    (_S.EN_NUTRICION, _S.PAUSADO): 2,
-    (_S.PAUSADO, _S.EN_NUTRICION): 2,
-    (_S.EN_NUTRICION, _S.REACTIVADO): 2,
-    (_S.PAUSADO, _S.REACTIVADO): 2,
-    (_S.RECHAZADO, _S.REACTIVADO): 2,
-    (_S.REACTIVADO, _S.CONTACTADO): 2,
-    (_S.REACTIVADO, _S.ACEPTADO): 2,
-    (_S.REACTIVADO, _S.RECHAZADO): 2,
+    (_S.NURTURING, _S.LOST): 2,
+    (_S.PAUSED, _S.LOST): 2,
+    (_S.REACTIVATED, _S.LOST): 2,
+    (_S.REJECTED, _S.NURTURING): 2,
+    (_S.NURTURING, _S.PAUSED): 2,
+    (_S.PAUSED, _S.NURTURING): 2,
+    (_S.NURTURING, _S.REACTIVATED): 2,
+    (_S.PAUSED, _S.REACTIVATED): 2,
+    (_S.REJECTED, _S.REACTIVATED): 2,
+    (_S.REACTIVATED, _S.CONTACTED): 2,
+    (_S.REACTIVATED, _S.ACCEPTED): 2,
+    (_S.REACTIVATED, _S.REJECTED): 2,
 }
 
 
@@ -60,6 +60,6 @@ def check_transition(src: LeadState, dst: LeadState, phase: int = CURRENT_PHASE)
     if _enabled(src, dst, phase):
         return TransitionCheck(ok=True, error_code=None, valid_targets=())
     targets = valid_targets(src, phase)
-    if src is LeadState.ACEPTADO and dst is LeadState.PERDIDO:
+    if src is LeadState.ACCEPTED and dst is LeadState.LOST:
         return TransitionCheck(ok=False, error_code="requires_retraction", valid_targets=targets)
     return TransitionCheck(ok=False, error_code="not_allowed", valid_targets=targets)

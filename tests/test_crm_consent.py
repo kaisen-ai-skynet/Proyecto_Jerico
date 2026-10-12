@@ -116,7 +116,7 @@ def run(bot: CrmBot, u: Update) -> None:
 
 
 def _lead(
-    db: CrmDatabase, user_id: int | None, state: LeadState = LeadState.NUEVO, **fields: Any
+    db: CrmDatabase, user_id: int | None, state: LeadState = LeadState.NEW, **fields: Any
 ) -> int:
     base: dict[str, Any] = {"name": "Ana Pérez", "phone_e164": PHONE, "email": EMAIL}
     base.update(fields)
@@ -171,13 +171,13 @@ def test_vcrm065_vcrm138_evidence_after_command_registers_authorization(
     assert len(consents) == 1
     consent = consents[0]
     assert consent["lead_id"] == lead_id
-    assert consent["status"] == AuthStatus.AUTORIZADA
+    assert consent["status"] == AuthStatus.AUTHORIZED
     assert consent["medium"] == compliance.AUTH_MEDIUM
     assert consent["actor_user_id"] == users["com"].id
     assert consent["at"] == to_iso(START)
     assert consent["attachment_id"] == att["id"]
     assert consent["notice_version"] is None and consent["purposes"] is None  # J-04
-    assert _lead_row(db, lead_id)["auth_status"] == AuthStatus.AUTORIZADA
+    assert _lead_row(db, lead_id)["auth_status"] == AuthStatus.AUTHORIZED
     assert "autorizada" in tg.sent[-1].text
     assert "L-0001" in tg.sent[-1].text
 
@@ -189,7 +189,7 @@ def test_vcrm138_evidence_after_yes_button_registers_authorization(
     run(bot, _cb(COM_TG, "v1:conf:1:si"))
     tg.files["ev1"] = b"captura"
     run(bot, _file(COM_TG, "ev1", "photo"))
-    assert _lead_row(db, 1)["auth_status"] == AuthStatus.AUTORIZADA
+    assert _lead_row(db, 1)["auth_status"] == AuthStatus.AUTHORIZED
     assert [r["kind"] for r in _rows(db, "SELECT kind FROM crm_attachments")] == ["authorization"]
     assert len(_rows(db, "SELECT * FROM crm_consents")) == 1
 
@@ -199,7 +199,7 @@ def test_vcrm138_cto_may_register_authorization_on_any_lead(
 ) -> None:
     lead_id = _lead(db, users["com"].id)
     _authorize_with_file(bot, tg, CTO_TG, "document")
-    assert _lead_row(db, lead_id)["auth_status"] == AuthStatus.AUTORIZADA
+    assert _lead_row(db, lead_id)["auth_status"] == AuthStatus.AUTHORIZED
     assert (
         _rows(db, "SELECT actor_user_id FROM crm_consents")[0]["actor_user_id"] == users["cto"].id
     )
@@ -214,7 +214,7 @@ def test_vcrm139_text_instead_of_file_is_not_registered(
     lead_id = _lead(db, users["com"].id)
     run(bot, _msg(COM_TG, "/autorizacion L-0001"))
     run(bot, _msg(COM_TG, "El titular aceptó por teléfono"))
-    assert _lead_row(db, lead_id)["auth_status"] == AuthStatus.SIN_AUTORIZACION
+    assert _lead_row(db, lead_id)["auth_status"] == AuthStatus.UNAUTHORIZED
     assert _rows(db, "SELECT * FROM crm_consents") == []
     assert _rows(db, "SELECT * FROM crm_attachments") == []
     assert tg.sent[-1].text.startswith(compliance.NOT_REGISTERED)
@@ -226,7 +226,7 @@ def test_vcrm139_voice_note_is_not_registered(
 ) -> None:
     lead_id = _lead(db, users["com"].id)
     _authorize_with_file(bot, tg, COM_TG, "voice")
-    assert _lead_row(db, lead_id)["auth_status"] == AuthStatus.SIN_AUTORIZACION
+    assert _lead_row(db, lead_id)["auth_status"] == AuthStatus.UNAUTHORIZED
     assert _rows(db, "SELECT * FROM crm_consents") == []
     assert _rows(db, "SELECT * FROM crm_attachments") == []
     assert compliance.VALID_MEDIA in tg.sent[-1].text
@@ -239,7 +239,7 @@ def test_vcrm139_failed_download_is_not_registered(
     lead_id = _lead(db, users["com"].id)
     run(bot, _msg(COM_TG, "/autorizacion L-0001"))
     run(bot, _file(COM_TG, "inexistente", "document"))  # el doble no tiene el archivo
-    assert _lead_row(db, lead_id)["auth_status"] == AuthStatus.SIN_AUTORIZACION
+    assert _lead_row(db, lead_id)["auth_status"] == AuthStatus.UNAUTHORIZED
     assert _rows(db, "SELECT * FROM crm_consents") == []
     assert compliance.NOT_REGISTERED in tg.sent[-1].text
 
@@ -250,7 +250,7 @@ def test_vcrm139_too_large_file_is_not_registered(
     lead_id = _lead(db, users["com"].id)
     run(bot, _msg(COM_TG, "/autorizacion L-0001"))
     run(bot, _file(COM_TG, "grande", "document", size=MAX_ATTACHMENT_BYTES + 1))
-    assert _lead_row(db, lead_id)["auth_status"] == AuthStatus.SIN_AUTORIZACION
+    assert _lead_row(db, lead_id)["auth_status"] == AuthStatus.UNAUTHORIZED
     assert "20 MB" in tg.sent[-1].text
     assert compliance.NOT_REGISTERED in tg.sent[-1].text
 
@@ -260,10 +260,10 @@ def test_vcrm139_revoked_status_is_kept_when_medium_is_invalid(
 ) -> None:
     lead_id = _lead(db, users["com"].id)
     with db.tx() as tx:
-        repo.update_lead(tx, lead_id, {"auth_status": AuthStatus.REVOCADA.value}, now=START)
+        repo.update_lead(tx, lead_id, {"auth_status": AuthStatus.REVOKED.value}, now=START)
     run(bot, _msg(COM_TG, "/autorizacion L-0001"))
     run(bot, _msg(COM_TG, "sí acepta"))
-    assert _lead_row(db, lead_id)["auth_status"] == AuthStatus.REVOCADA
+    assert _lead_row(db, lead_id)["auth_status"] == AuthStatus.REVOKED
 
 
 @pytest.mark.parametrize(
@@ -320,7 +320,7 @@ def test_evidence_without_file_store_is_not_registered(
     tg.files["ev1"] = b"x"
     run(bot, _msg(COM_TG, "/autorizacion L-0001"))
     run(bot, _file(COM_TG, "ev1", "document"))
-    assert _lead_row(db, lead_id)["auth_status"] == AuthStatus.SIN_AUTORIZACION
+    assert _lead_row(db, lead_id)["auth_status"] == AuthStatus.UNAUTHORIZED
     assert compliance.VALID_MEDIA in tg.sent[-1].text
 
 
@@ -330,7 +330,7 @@ def test_evidence_without_file_store_is_not_registered(
 def test_vcrm070_opt_out_applies_immediately(
     bot: CrmBot, tg: FakeTelegram, db: CrmDatabase, store: LocalFileStore, users: dict[str, User]
 ) -> None:
-    lead_id = _lead(db, users["com"].id, state=LeadState.CONTACTADO)
+    lead_id = _lead(db, users["com"].id, state=LeadState.CONTACTED)
     _authorize_with_file(bot, tg, COM_TG, "document")
     evidence_before = _rows(db, "SELECT * FROM crm_attachments")
     consent_before = _rows(db, "SELECT * FROM crm_consents")
@@ -345,9 +345,9 @@ def test_vcrm070_opt_out_applies_immediately(
     run(bot, _msg(COM_TG, "/baja L-0001; llamada telefónica"))
 
     lead = _lead_row(db, lead_id)
-    assert lead["state"] == LeadState.BAJA
+    assert lead["state"] == LeadState.OPTED_OUT
     assert lead["final_state_at"] == to_iso(START)
-    assert lead["auth_status"] == AuthStatus.REVOCADA
+    assert lead["auth_status"] == AuthStatus.REVOKED
     # Lista de supresión: solo huella, fecha y medio; nunca el contacto en claro (VCRM-095).
     suppression = _rows(db, "SELECT * FROM crm_suppression ORDER BY fingerprint")
     assert {r["fingerprint"] for r in suppression} == {
@@ -360,19 +360,19 @@ def test_vcrm070_opt_out_applies_immediately(
     assert PHONE not in dump and EMAIL not in dump and "3001234567" not in dump
     # Confirmaciones y entradas pendientes canceladas.
     statuses = [r["status"] for r in _rows(db, "SELECT status FROM crm_confirmations")]
-    assert statuses == ["cancelada"]
+    assert statuses == ["cancelled"]
     with db.read() as conn:
         assert repo.get_pending_input(conn, users["com2"].id, START) is None
     # Registro con fecha y medio: consentimiento «revocada» y evento de estado.
     consents = _rows(db, "SELECT * FROM crm_consents ORDER BY id")
     assert consents[0] == consent_before[0]  # evidencia previa intacta (VCRM-164)
     revoked = consents[1]
-    assert revoked["status"] == AuthStatus.REVOCADA
+    assert revoked["status"] == AuthStatus.REVOKED
     assert revoked["medium"] == "llamada telefónica"
     assert revoked["at"] == to_iso(START)
     assert revoked["actor_user_id"] == users["com"].id
     events = _rows(db, "SELECT * FROM crm_lead_events WHERE kind = 'state'")
-    assert (events[-1]["old_value"], events[-1]["new_value"]) == ("contactado", "baja")
+    assert (events[-1]["old_value"], events[-1]["new_value"]) == ("contacted", "opted_out")
     # La evidencia de autorización (registro y archivo) sigue intacta (VCRM-164).
     assert _rows(db, "SELECT * FROM crm_attachments") == evidence_before
     with store.open(evidence_before[0]["storage_key"]) as fh:
@@ -410,7 +410,7 @@ def test_vcrm070_opt_out_shared_fingerprint_is_not_duplicated(
     run(bot, _msg(COM_TG, "/baja L-0001; llamada"))
     run(bot, _msg(COM_TG, "/baja L-0002; correo"))
     assert len(_rows(db, "SELECT * FROM crm_suppression")) == 2
-    assert _lead_row(db, 2)["state"] == LeadState.BAJA
+    assert _lead_row(db, 2)["state"] == LeadState.OPTED_OUT
 
 
 @pytest.mark.parametrize("text", ["/baja", "/baja L-0001", "/baja L-0001;", "/baja 7; llamada"])
@@ -420,7 +420,7 @@ def test_opt_out_bad_format(
     _lead(db, users["com"].id)
     run(bot, _msg(COM_TG, text))
     assert "Formato no válido" in tg.sent[-1].text
-    assert _lead_row(db, 1)["state"] == LeadState.NUEVO
+    assert _lead_row(db, 1)["state"] == LeadState.NEW
 
 
 def test_opt_out_unknown_lead(bot: CrmBot, tg: FakeTelegram, users: dict[str, User]) -> None:
@@ -432,10 +432,10 @@ def test_opt_out_unknown_lead(bot: CrmBot, tg: FakeTelegram, users: dict[str, Us
 def test_opt_out_denied_without_permission(
     bot: CrmBot, tg: FakeTelegram, db: CrmDatabase, users: dict[str, User], who: int
 ) -> None:
-    _lead(db, users["com"].id, state=LeadState.CONTACTADO)
+    _lead(db, users["com"].id, state=LeadState.CONTACTED)
     run(bot, _msg(who, "/baja L-0001; llamada"))
     assert "No tiene permiso" in tg.sent[-1].text
-    assert _lead_row(db, 1)["state"] == LeadState.CONTACTADO
+    assert _lead_row(db, 1)["state"] == LeadState.CONTACTED
     assert _rows(db, "SELECT * FROM crm_suppression") == []
 
 
@@ -467,7 +467,7 @@ def test_vcrm071_suppressed_fingerprint_blocks_other_lead(
     run(bot, _msg(COM_TG, "/baja L-0001; llamada"))
     with db.read() as conn:
         lead = repo.get_lead(conn, other)
-        assert lead is not None and lead.state == LeadState.NUEVO
+        assert lead is not None and lead.state == LeadState.NEW
         assert compliance.may_contact_commercially(conn, lead, (KEY, OLD_KEY)) is False
 
 
@@ -485,7 +485,11 @@ def test_vcrm071_fingerprint_with_previous_key_still_blocks(
 
 @pytest.mark.parametrize(
     "changes",
-    [{"state": "baja"}, {"commercial_block": 1}, {"suppressed_at": to_iso(START)}],
+    [
+        {"state": LeadState.OPTED_OUT.value},
+        {"commercial_block": 1},
+        {"suppressed_at": to_iso(START)},
+    ],
 )
 def test_vcrm071_baja_block_or_suppressed_lead_cannot_be_contacted(
     db: CrmDatabase, users: dict[str, User], changes: dict[str, Any]

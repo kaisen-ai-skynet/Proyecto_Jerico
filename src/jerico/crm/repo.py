@@ -158,7 +158,7 @@ def leads_of_user(conn: sqlite3.Connection, user_id: int) -> list[Lead]:
     """Leads asignados a un usuario en cualquier estado salvo «baja» (VCRM-091)."""
     rows = conn.execute(
         "SELECT * FROM crm_leads WHERE assigned_user_id = ? AND state <> ? ORDER BY id",
-        (user_id, LeadState.BAJA.value),
+        (user_id, LeadState.OPTED_OUT.value),
     ).fetchall()
     return [Lead(**dict(r)) for r in rows]
 
@@ -178,7 +178,7 @@ def contact_matches(
     rows = conn.execute(
         "SELECT * FROM crm_leads WHERE state <> ? AND suppressed_at IS NULL "
         "AND ((? IS NOT NULL AND phone_e164 = ?) OR (? IS NOT NULL AND email = ?)) ORDER BY id",
-        (LeadState.PERDIDO.value, phone, phone, email, email),
+        (LeadState.LOST.value, phone, phone, email, email),
     ).fetchall()
     return [Lead(**dict(r)) for r in rows]
 
@@ -579,7 +579,7 @@ def record_failed_noncritical(
     row = conn.execute(
         "INSERT INTO crm_outbox (idempotency_key, kind, critical, channel, recipient_user_id, "
         "lead_id, status, attempts, first_attempt_at, last_error, created_at) "
-        "VALUES (?, ?, 0, ?, ?, ?, 'fallida', 1, ?, ?, ?) RETURNING id",
+        "VALUES (?, ?, 0, ?, ?, ?, 'failed', 1, ?, ?, ?) RETURNING id",
         (
             f"noncritical:{uuid.uuid4().hex}",
             kind,
@@ -610,11 +610,11 @@ def insert_outbox(
     now: datetime,
     origin_outbox_id: int | None = None,
 ) -> int:
-    """Inserta una crítica `pendiente` debida en `now`; con la clave ya usada devuelve esa fila."""
+    """Inserta una crítica `pending` debida en `now`; con la clave ya usada devuelve esa fila."""
     conn.execute(
         "INSERT INTO crm_outbox (idempotency_key, kind, critical, channel, recipient_user_id, "
         "lead_id, origin_outbox_id, subject, body, status, attempts, next_attempt_at, created_at) "
-        "VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?, 'pendiente', 0, ?, ?) "
+        "VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?, 'pending', 0, ?, ?) "
         "ON CONFLICT (idempotency_key) DO NOTHING",
         (
             key,
@@ -641,7 +641,7 @@ def get_outbox(conn: sqlite3.Connection, outbox_id: int) -> OutboxItem | None:
 def due_outbox(conn: sqlite3.Connection, now: datetime) -> list[OutboxItem]:
     """Pendientes con `next_attempt_at <= now`, en orden de id (comparación en UTC, no textual)."""
     rows = conn.execute(
-        "SELECT * FROM crm_outbox WHERE status = 'pendiente' AND next_attempt_at IS NOT NULL "
+        "SELECT * FROM crm_outbox WHERE status = 'pending' AND next_attempt_at IS NOT NULL "
         "ORDER BY id"
     ).fetchall()
     return [OutboxItem(**dict(r)) for r in rows if from_iso(r["next_attempt_at"]) <= now]
@@ -746,7 +746,7 @@ def resolve_confirmation(
     """Resuelve una confirmación pendiente; False si no existe o ya estaba procesada."""
     cursor = conn.execute(
         "UPDATE crm_confirmations SET status = ?, resolved_at = ? "
-        "WHERE id = ? AND status = 'pendiente'",
+        "WHERE id = ? AND status = 'pending'",
         (status, to_iso(now), confirmation_id),
     )
     return cursor.rowcount == 1
@@ -755,8 +755,8 @@ def resolve_confirmation(
 def cancel_pending_confirmations(conn: sqlite3.Connection, lead_id: int, now: datetime) -> int:
     """Cancela las confirmaciones pendientes del lead (VCRM-116); devuelve cuántas."""
     cursor = conn.execute(
-        "UPDATE crm_confirmations SET status = 'cancelada', resolved_at = ? "
-        "WHERE lead_id = ? AND status = 'pendiente'",
+        "UPDATE crm_confirmations SET status = 'cancelled', resolved_at = ? "
+        "WHERE lead_id = ? AND status = 'pending'",
         (to_iso(now), lead_id),
     )
     return cursor.rowcount

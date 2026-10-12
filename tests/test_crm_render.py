@@ -12,7 +12,7 @@ from jerico.crm.handoff import (
     missing_handoff_fields,
     validate_handoff_value,
 )
-from jerico.crm.model import Lead
+from jerico.crm.model import AuthStatus, Lead, LeadState
 from jerico.crm.parsing import parse_callback
 from jerico.crm.render import (
     PAGE_SIZE,
@@ -21,11 +21,13 @@ from jerico.crm.render import (
     acceptance_alert_for_lawyer,
     acceptance_email_for_lawyer,
     acceptance_for_cto,
+    auth_label,
     handoff_error_text,
     lawyer_view,
     render_list_page,
     short_id,
     split_message,
+    state_label,
 )
 
 REP = "representante legal (obligatorio si es empresa)"
@@ -186,7 +188,7 @@ ACCEPTED_AT = "04/10/2026 10:30"
 
 
 def test_vcrm048_cto_notification_content() -> None:
-    lead = make_lead(**{**COMPLETE_COMPANY, "service": None}, auth_status="autorizada")
+    lead = make_lead(**{**COMPLETE_COMPANY, "service": None}, auth_status="authorized")
     text = acceptance_for_cto(
         lead, commercial="Carlos (123)", accepted_at=ACCEPTED_AT, notes=["Llamar el lunes"]
     )
@@ -404,3 +406,29 @@ def test_split_message_custom_limit() -> None:
 def test_split_message_rejects_non_positive_limit() -> None:
     with pytest.raises(ValueError):
         split_message("x", limit=0)
+
+
+def test_vcrm171_textos_visibles_no_cambian() -> None:
+    """Golden de etiquetas visibles de estado y autorización (VCRM-171)."""
+    expected_states = {
+        LeadState.NEW: "nuevo",
+        LeadState.CONTACTED: "contactado",
+        LeadState.ACCEPTED: "aceptado",
+        LeadState.REJECTED: "rechazado",
+        LeadState.NURTURING: "en nutrición",
+        LeadState.PAUSED: "pausado",
+        LeadState.REACTIVATED: "reactivado",
+        LeadState.WON: "ganado",
+        LeadState.LOST: "perdido",
+        LeadState.OPTED_OUT: "baja",
+    }
+    for state, expected in expected_states.items():
+        assert state_label(state) == expected
+
+    expected_auth = {
+        AuthStatus.UNAUTHORIZED: "sin autorización",
+        AuthStatus.AUTHORIZED: "autorizada",
+        AuthStatus.REVOKED: "revocada",
+    }
+    for auth, expected in expected_auth.items():
+        assert auth_label(auth) == expected
