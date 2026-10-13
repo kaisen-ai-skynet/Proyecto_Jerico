@@ -3,7 +3,7 @@ tipo: checklist-operativa
 proyecto: Jericó — Kaisen AI
 estado: lista-para-ejecutar (nada ejecutado contra OCI)
 creado: "11/10/2026 20:20"
-modificado: "13/10/2026 00:41"
+modificado: "13/10/2026 00:56"
 ---
 
 # Día 1 — Oracle Cloud + laptop en una sola sesión
@@ -51,12 +51,24 @@ Instala age y **Docker**, crea la llave SSH y la llave age, comprueba Tailscale 
 >
 > **UDP 41641 queda opcional:** no se añadió porque el permiso quedó bloqueado. Sin esa regla, Tailscale funciona por los relays DERP (algo más de latencia, sin efecto en la seguridad). Se puede añadir más adelante para tener conexión directa.
 > Si tu IP pública cambia antes de terminar el bloque 5 (cierre perimetral), actualiza la regla 22 o no podrás entrar por SSH directo.
-> 🔑 **Lo que bloquea ahora la VM** es que `~/.ssh/id_ed25519_kaisen.pub` todavía no existe. Créala con el bloque 1 (`scripts/oci/dia1_laptop.sh`).
+> 🔑 La llave `~/.ssh/id_ed25519_kaisen.pub` ya existe (bloque 1 ejecutado el 13/10/2026).
+
+> ⏳ **VM sin crear por falta de capacidad (13/10/2026 00:56).** La consola respondió «Capacidad insuficiente en VM.Standard.A1.Flex en AD-1» **con 2 OCPU / 12 GB y también con 1 OCPU / 6 GB**: 100 GB de disco, Ubuntu 24.04, subred pública y la llave `id_ed25519_kaisen.pub`. Es la falta de capacidad ARM habitual en la capa gratis; no es un error de configuración.
+> **Se pasa al Plan B** (guía, Parte D): el CTO corre `scripts/oci/00_retry_launch_a1.sh` en **OCI Cloud Shell**:
+> ```bash
+> export COMPARTMENT_ID=<OCID de kaisen-jerico>
+> export SUBNET_ID=<OCID de la subred pública de jerico-vcn>
+> export SSH_PUBKEY_FILE=~/jerico_ssh.pub      # id_ed25519_kaisen.pub subido a Cloud Shell
+> bash 00_retry_launch_a1.sh                   # 2 OCPU / 12 GB por defecto
+> # Variante más pequeña (también Always Free; se amplía después): OCPUS=1 MEMORY_GB=6 bash 00_retry_launch_a1.sh
+> ```
+> El script reintenta cada 90 s, rota los fault domains 1→2→3, se niega a pedir más de 2/12 y nunca crea una segunda VM con el mismo nombre. Si Cloud Shell se cierra, se relanza sin riesgo. Las madrugadas y los fines de semana suelen tener más capacidad. Mientras tanto, se puede avanzar con el bloque 6 (CRM en la laptop).
+> Si el script se detiene con «Error distinto a capacidad» pero el texto habla de capacidad, el mensaje de la API no coincide con el que busca el script: guarda las últimas líneas y pásalas para ajustarlo.
 
 - [x] VCN `jerico-vcn` creada con el wizard en `kaisen-jerico`: `10.0.0.0/16`, subred pública `10.0.0.0/24`, privada `10.0.1.0/24`, sin IPv6 (orquestador, 13/10/2026).
 - [x] Security List ajustada: TCP 22 solo desde la `/32` del CTO (la regla `0.0.0.0/0` está borrada) y nada en 5432/6379/8000 (orquestador, 13/10/2026).
 - [ ] *(Opcional)* Regla UDP 41641 desde `0.0.0.0/0` para que Tailscale conecte directo. Sin ella usa relays DERP.
-- [ ] VM `jerico-core-oracle-01` (**requiere `~/.ssh/id_ed25519_kaisen.pub` del bloque 1; hoy no existe**): Ubuntu 24.04 aarch64, A1.Flex **2 OCPU / 12 GB**, 100 GB Balanced, llave SSH pública pegada, etiqueta *Always Free-eligible* visible.
+- [ ] VM `jerico-core-oracle-01` (**intento por consola fallido el 13/10/2026 por capacidad; en curso por Plan B**): Ubuntu 24.04 aarch64, A1.Flex **2 OCPU / 12 GB**, 100 GB Balanced, llave SSH pública pegada, etiqueta *Always Free-eligible* visible.
 - [ ] `RUNNING` e IP pública anotada. *Si sale "Out of host capacity": Plan B de la Parte D (Cloud Shell + `00_retry_launch_a1.sh`) y sigue con el bloque 6 mientras reintenta.*
 
 ## Bloque 4 · VM segura (40 min) — Partes E, F y G
@@ -105,4 +117,4 @@ La prueba de humo del bloque 1 no usa secretos. Para ver el bot funcionando de v
 - [ ] **No dejar la VM ociosa muchos días:** el siguiente paso es desplegar Jericó (runbook §3). Oracle puede recuperar VMs gratis que pasan 7 días casi sin uso.
 
 ---
-> 🕒 **Última modificación:** 13/10/2026 00:41 (Claude Code · Opus 5.5)
+> 🕒 **Última modificación:** 13/10/2026 00:56 (Claude Code · Opus 5.5)
