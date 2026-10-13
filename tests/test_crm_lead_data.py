@@ -618,3 +618,24 @@ def test_vcrm109_foreign_state_change_denied(
     assert [o.chat_id for o in out] == [COM_TG]
     assert "no tiene acceso a ese lead" in out[0].text
     assert _last_audit(db)["detail_code"] == AuditDetail.FOREIGN_LEAD
+
+
+def test_leads_add_attachment_file_abogado_denegado(
+    db: CrmDatabase, store: LocalFileStore, users: dict[str, User], tmp_path: Path
+) -> None:
+    lead_id = _lead(db, users["com"].id)
+    temp_file = tmp_path / "temp.pdf"
+    temp_file.write_bytes(b"data")
+    prefetched = leads.Prefetched(
+        kind="document",
+        path=temp_file,
+        result=leads.DownloadResult(ok=True, size=4),
+    )
+    with db.tx() as tx:
+        out = leads.add_attachment(tx, users["law"], f"L-{lead_id:04d}", prefetched, store, START)
+    assert len(out) == 1
+    assert "No tiene permiso" in out[0].text
+
+
+def test_leads_requested_field_sin_separador_retorna_none() -> None:
+    assert leads._requested_field("/editar L-0001") is None

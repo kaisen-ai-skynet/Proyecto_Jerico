@@ -490,3 +490,84 @@ def test_vcrm163_malformed_retract_button_is_invalid(
     run(bot, _cb(COM_TG, build_callback("retractar", *args)))
     assert tg.sent[-1].text == INVALID_BUTTON
     assert _get(db, lead_id).state == S.ACCEPTED
+
+
+def test_leads_confirm_retract_lead_inexistente(db: CrmDatabase, users: dict[str, User]) -> None:
+    from jerico.crm import leads
+    from jerico.crm.model import Confirmation
+
+    conf = Confirmation(
+        id=1,
+        kind="retract",
+        lead_id=999999,
+        user_id=users["com"].id,
+        reason="precio",
+        reason_text=None,
+        status="pending",
+        created_at=to_iso(NOW),
+        resolved_at=None,
+    )
+    with db.tx() as tx:
+        out = leads.confirm_retract(tx, users["com"], conf, yes=True, now=NOW)
+    assert len(out) == 1
+    assert "no existe" in out[0].text
+
+
+def test_leads_confirm_retract_comercial_ajeno_denegado(
+    db: CrmDatabase, users: dict[str, User]
+) -> None:
+    from jerico.crm import leads
+    from jerico.crm.model import Confirmation
+
+    lead_id = _lead(db, users["com"])
+    conf = Confirmation(
+        id=2,
+        kind="retract",
+        lead_id=lead_id,
+        user_id=users["com2"].id,
+        reason="precio",
+        reason_text=None,
+        status="pending",
+        created_at=to_iso(NOW),
+        resolved_at=None,
+    )
+    with db.tx() as tx:
+        out = leads.confirm_retract(tx, users["com2"], conf, yes=True, now=NOW)
+    assert len(out) == 1
+    assert "no tiene acceso" in out[0].text
+
+
+def test_leads_confirm_retract_con_f2_activa_arranca_cadencia(
+    db: CrmDatabase, users: dict[str, User]
+) -> None:
+    from jerico.crm import leads
+    from jerico.crm.model import AuthStatus, Confirmation
+
+    lead_id = _lead(db, users["com"], auth_status=AuthStatus.AUTHORIZED.value)
+    with db.tx() as tx:
+        repo.insert_consent(
+            tx,
+            lead_id=lead_id,
+            status=AuthStatus.AUTHORIZED,
+            medium="documento",
+            at=START,
+            actor_user_id=users["com"].id,
+        )
+        repo.set_meta(tx, "f2_activated_at", to_iso(NOW))
+    conf = Confirmation(
+        id=3,
+        kind="retract",
+        lead_id=lead_id,
+        user_id=users["com"].id,
+        reason="precio",
+        reason_text=None,
+        status="pending",
+        created_at=to_iso(NOW),
+        resolved_at=None,
+    )
+    with db.tx() as tx:
+        out = leads.confirm_retract(tx, users["com"], conf, yes=True, now=NOW)
+    assert out
+    with db.read() as conn:
+        cad = repo.get_cadence(conn, lead_id)
+        assert cad is not None and cad.status == "active"

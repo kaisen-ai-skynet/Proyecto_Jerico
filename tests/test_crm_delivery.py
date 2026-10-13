@@ -618,3 +618,23 @@ async def test_vcrm036_datos_incompletos_falla_cerrado(
     assert email.attempts == []
     row = send_of(db, proposal_id)
     assert row.status == SendStatus.FAILED and row.last_error == "missing_data"
+
+
+def test_delivery_prepare_envio_inexistente_retorna_vacio(db: CrmDatabase) -> None:
+    with db.read() as conn:
+        assert delivery._prepare(conn, 999999, NOW, KEYS, frozenset()) == []
+
+
+def test_delivery_cancel_failed_auth_request_cancela_y_retorna_vacio(
+    db: CrmDatabase, users: dict[str, User]
+) -> None:
+    lead_id = make_lead(db, users["com"])
+    pid = make_proposal(db, lead_id, users["com"], kind=ProposalKind.AUTH_REQUEST, step=None)
+    approve(db, pid, users["com"])
+    with db.tx() as tx:
+        repo.update_send(tx, send_of(db, pid).id, status=SendStatus.FAILED)
+        repo.update_proposal(tx, pid, status=ProposalStatus.FAILED)
+        out = delivery.cancel_failed(tx, pid, NOW, on_step_consumed=None)
+    assert out == []
+    assert send_of(db, pid).status == SendStatus.CANCELLED
+    assert proposal_status(db, pid) == ProposalStatus.CANCELLED

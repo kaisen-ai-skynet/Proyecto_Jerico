@@ -614,3 +614,23 @@ def test_vcrm165_plan_reduces_evidence_only_on_cto_order(
         lead, attachments, cause="orden_cto", keep_fields=frozenset({"name"})
     )
     assert "name" not in kept.null_columns and "email" in kept.null_columns
+
+
+def test_compliance_suppression_exige_claves_para_anadir_huella(
+    db: CrmDatabase, users: dict[str, User]
+) -> None:
+    lead_id = _lead(db, users["com"].id)
+    with db.tx() as tx:
+        lead = repo.get_lead(tx, lead_id)
+        assert lead is not None
+        with pytest.raises(ValueError, match="fingerprint keys required"):
+            compliance.execute_suppression(
+                tx,
+                None,
+                [lead],
+                cause="orden_cto",
+                now=START,
+                actor="cto@k.co",
+                keys=(),
+                add_fingerprint=True,
+            )

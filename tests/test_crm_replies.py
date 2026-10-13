@@ -793,3 +793,11 @@ def test_vcrm153_solicitud_inexistente_o_de_otro_tipo(
         )
         # Una solicitud registrada a mano no es «por clasificar»: estos botones no le aplican.
         assert "ya fue procesada" in texts(replies.close_review(tx, users["com"], manual, NOW))
+
+
+def test_replies_apply_review_baja_lead_ya_en_baja(db: CrmDatabase, users: dict[str, User]) -> None:
+    lead_id, request_id, _ = review_case(db, users)
+    with db.tx() as tx:
+        repo.update_lead(tx, lead_id, {"state": LeadState.OPTED_OUT.value}, now=NOW)
+        out = replies.apply_review_baja(tx, users["com"], request_id, NOW, KEYS)
+    assert "ya estaba en baja" in texts(out)

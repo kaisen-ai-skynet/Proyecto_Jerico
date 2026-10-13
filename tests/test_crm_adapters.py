@@ -688,3 +688,60 @@ async def test_vcrm123_doble_de_prueba_captura_cabeceras() -> None:
 
     assert fake.sent[0].headers == {}
     assert fake.sent[1].headers == {"List-Unsubscribe": UNSUB}
+
+
+@pytest.mark.asyncio
+async def test_telegram_repr_y_aclose() -> None:
+    client = _client(lambda r: _ok({}))
+    assert repr(client) == "HttpxTelegramClient(token=***)"
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_telegram_send_document_api_error_retorna_no_entregado(tmp_path: Path) -> None:
+    doc = tmp_path / "ficha.csv"
+    doc.write_bytes(b"data")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(500, json={"ok": False, "description": "internal server error"})
+
+    result = await _client(handler).send_document(501, doc, "Caption")
+    assert result.delivered is False
+    assert "sendDocument: HTTP 500" in (result.error or "")
+
+
+@pytest.mark.asyncio
+async def test_telegram_download_file_sin_file_path(tmp_path: Path) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return _ok({"file_id": "f1", "file_size": 10})
+
+    dest = tmp_path / "f1.pdf"
+    result = await _client(handler).download_file("f1", dest, max_bytes=1000)
+    assert result.ok is False
+    assert "missing file_path" in (result.error or "")
+
+
+@pytest.mark.asyncio
+async def test_telegram_download_file_error_de_red(tmp_path: Path) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/getFile"):
+            return _ok({"file_id": "f1", "file_path": "documents/f1.pdf"})
+        raise httpx.ConnectError("conection failed")
+
+    dest = tmp_path / "f1.pdf"
+    result = await _client(handler).download_file("f1", dest, max_bytes=1000)
+    assert result.ok is False
+    assert "downloadFile: ConnectError" in (result.error or "")
+
+
+@pytest.mark.asyncio
+async def test_mail_send_cuerpo_invalido_retorna_error_permanente() -> None:
+    sender = _sender("ssl")
+    result = await sender.send(
+        "dest@k.test",
+        "Asunto",
+        "\ud800",
+    )
+    assert result.delivered is False
+    assert result.permanent is True
+    assert result.error == "invalid_header"

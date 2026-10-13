@@ -497,3 +497,21 @@ def test_vcrm073_lead_suprimido_no_aparece_en_lista(
     run(bot, _msg(CTO_TG, f"/ver L-{l_com_suppressed:04d}"))
     ver_text = _last_text(tg)
     assert f"Ficha L-{l_com_suppressed:04d}" in ver_text
+
+
+def test_leads_suppression_alert_details_outbox_inexistente_se_omite(db: CrmDatabase) -> None:
+    from jerico.crm.model import Alert, AlertKind
+
+    alert = Alert(
+        id=1,
+        lead_id=None,
+        kind=AlertKind.SUPPRESSION_NOTICE_FAILED.value,
+        outbox_id=999999,
+        request_id=None,
+        created_at=to_iso(START),
+        resolved_by=None,
+        resolved_at=None,
+    )
+    with db.read() as conn:
+        details = leads._suppression_alert_details(conn, [alert])
+    assert details == {}
