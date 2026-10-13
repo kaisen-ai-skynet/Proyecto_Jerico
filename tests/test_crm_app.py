@@ -327,6 +327,30 @@ async def test_run_service_starts_and_stops_cleanly(tmp_path: Path) -> None:
     assert (settings.data_dir / "crm.db").exists()
 
 
+@pytest.mark.asyncio
+async def test_run_service_logs_start_and_stop(tmp_path: Path) -> None:
+    """El arranque y la parada dejan rastro en los logs del contenedor (sin secretos)."""
+    from loguru import logger
+
+    lines: list[str] = []
+    sink = logger.add(lines.append, format="{message}", level="INFO")
+    try:
+        stop = asyncio.Event()
+        await run_service(
+            _settings(tmp_path),
+            telegram=StoppingTelegram(stop),
+            email=FakeEmailSender(),
+            runner=FakeRunner(),
+            clock=FakeClock(NOW).now,
+            stop=stop,
+        )
+    finally:
+        logger.remove(sink)
+    text = "".join(lines)
+    assert "jerico-crm iniciado" in text
+    assert "jerico-crm detenido" in text
+
+
 # --- De extremo a extremo: reinicio (VCRM-078, 049) --------------------------------------------
 
 

@@ -8,7 +8,7 @@ from pathlib import Path
 
 from loguru import logger
 
-from jerico.crm import repo
+from jerico.crm import CURRENT_PHASE, repo
 from jerico.crm.backup import SubprocessRunner, run_backup
 from jerico.crm.bot import CrmBot
 from jerico.crm.config import (
@@ -268,11 +268,13 @@ async def run_service(
         loop.add_signal_handler(sig, stop.set)
     try:
         await app.startup()
+        logger.info("jerico-crm iniciado (fase {})", CURRENT_PHASE)
         await app.serve(stop)
     finally:
         for sig in (signal.SIGTERM, signal.SIGINT):
             loop.remove_signal_handler(sig)
         app.close()
+        logger.info("jerico-crm detenido")
         if client is not None:  # pragma: no cover - adaptador real (red)
             await client.aclose()
 
