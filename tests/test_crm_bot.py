@@ -614,3 +614,64 @@ def test_vcrm002_error_before_identity_sends_nothing(
     assert tg.attempts == []
     row = _audit(db)[-1]
     assert row["actor"] == "system" and row["action"] == AuditAction.HANDLER_ERROR
+
+
+# --- Trabajos diferidos tras el *commit* (asistente LLM; VCRM-A36) ---------------------------
+
+
+def test_vcrma36_deferred_job_runs_after_commit_and_replies(
+    bot: CrmBot, tg: FakeTelegram, db: CrmDatabase, users: tuple[User, User]
+) -> None:
+    seen: list[bool] = []
+
+    def handler(conn: sqlite3.Connection, user: User, text: str, now: datetime) -> list[Outgoing]:
+        async def job() -> list[Outgoing]:
+            with db.read() as check:  # la transacción del handler ya se confirmó
+                seen.append(repo.get_meta(check, "telegram_offset") == "2")
+            return [Outgoing(user.telegram_id, "respuesta diferida")]
+
+        bot.defer(job)
+        return [Outgoing(user.telegram_id, "consultando")]
+
+    bot.register_command("diferido", handler)
+    run(bot.process_update(_msg(1, CTO_TG, "/diferido")))
+    assert [s.text for s in tg.sent] == ["consultando", "respuesta diferida"]
+    assert seen == [True]
+
+
+def test_vcrma36_deferred_job_is_dropped_on_handler_error(
+    bot: CrmBot, tg: FakeTelegram, users: tuple[User, User]
+) -> None:
+    ran: list[int] = []
+
+    def handler(conn: sqlite3.Connection, user: User, text: str, now: datetime) -> list[Outgoing]:
+        async def job() -> list[Outgoing]:
+            ran.append(1)
+            return []
+
+        bot.defer(job)
+        raise ValueError("x")
+
+    bot.register_command("roto", handler)
+    run(bot.process_update(_msg(1, CTO_TG, "/roto")))
+    assert ran == [] and [s.text for s in tg.sent] == [GENERIC_ERROR]
+
+
+def test_vcrma36_failing_deferred_job_replies_generic_error_and_keeps_loop(
+    bot: CrmBot,
+    tg: FakeTelegram,
+    users: tuple[User, User],
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    def handler(conn: sqlite3.Connection, user: User, text: str, now: datetime) -> list[Outgoing]:
+        async def job() -> list[Outgoing]:
+            raise RuntimeError("Ana Pérez +573001234567")
+
+        bot.defer(job)
+        return []
+
+    bot.register_command("falla", handler)
+    with caplog.at_level(logging.ERROR):
+        run(bot.process_update(_msg(1, CTO_TG, "/falla")))
+    assert [s.text for s in tg.sent] == [GENERIC_ERROR]
+    assert "RuntimeError" in caplog.text and "Ana" not in caplog.text

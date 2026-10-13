@@ -83,13 +83,14 @@ class Env:
         self.clock = FakeClock(NOW)
         self.apps: list[CrmApp] = []
 
-    def build(self, **overrides: Any) -> CrmApp:
+    def build(self, assistant_llm: Any = None, **overrides: Any) -> CrmApp:
         app = CrmApp(
             _settings(self.tmp_path, **overrides),
             telegram=self.tg,
             email=self.mail,
             runner=self.runner,
             clock=self.clock.now,
+            assistant_llm=assistant_llm,
         )
         self.apps.append(app)
         return app
@@ -98,7 +99,7 @@ class Env:
 @pytest.fixture(autouse=True)
 def _hermetic(monkeypatch: pytest.MonkeyPatch) -> None:
     for name in list(os.environ):
-        if name.startswith("JERICO_CRM_"):
+        if name.startswith(("JERICO_CRM_", "OPENAI_")):
             monkeypatch.delenv(name)
 
 
@@ -544,3 +545,62 @@ async def test_un_ok_dentro_de_franja_dispara_el_primer_intento_en_linea(env: En
         await asyncio.sleep(0.01)
 
     assert len(env.mail.sent) == 1  # salió sin esperar al siguiente barrido
+
+
+# --- Asistente comercial con LLM (VCRM-A30, A31, A35) -----------------------------------------
+
+
+class _EchoLlm:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def complete(self, *, system: str, user: str, max_output_tokens: int) -> Any:
+        from jerico.crm.llm import LlmResult
+
+        self.calls += 1
+        return LlmResult(text="Todo en orden.", input_tokens=10, output_tokens=5)
+
+
+def _command(app: CrmApp, text: str, uid: int = 1) -> None:
+    asyncio.run(
+        app.bot.process_update(
+            Update(update_id=uid, user_id=CTO_TG, chat_id=CTO_TG, chat_type="private", text=text)
+        )
+    )
+
+
+def test_vcrma30_assistant_is_off_by_default_and_silent_at_startup(env: Env) -> None:
+    app = env.build()
+    asyncio.run(app.startup())
+    assert all("asistente" not in s.text.lower() for s in env.tg.sent)
+    _command(app, "/asistente pregunta cuántos leads hay")
+    assert env.tg.sent[-1].text == "El asistente no está activado."
+
+
+def test_vcrma31_enabled_without_key_warns_cto_once_and_degrades(env: Env) -> None:
+    app = env.build(assistant_enabled=True)
+    asyncio.run(app.startup())
+    notices = [s.text for s in env.tg.sent if "asistente" in s.text.lower()]
+    assert len(notices) == 1 and "OPENAI_API_KEY" in notices[0]
+    _command(app, "/asistente pregunta hola")
+    assert "no está disponible" in env.tg.sent[-1].text
+
+
+def test_vcrma30_enabled_with_injected_client_answers_the_cto(env: Env) -> None:
+    llm = _EchoLlm()
+    app = env.build(assistant_llm=llm, assistant_enabled=True)
+    asyncio.run(app.startup())
+    assert all("asistente" not in s.text.lower() for s in env.tg.sent)
+    _command(app, "/asistente pregunta cómo va el pipeline")
+    assert llm.calls == 1
+    assert "Todo en orden." in env.tg.sent[-1].text
+
+
+def test_vcrma34_enabled_with_key_builds_the_real_client_without_leaking_it(env: Env) -> None:
+    from jerico.crm.llm import OpenAIResponsesClient
+
+    app = env.build(assistant_enabled=True, openai_api_key="sk-live-secreto")
+    assert isinstance(app.assistant_llm, OpenAIResponsesClient)
+    assert "sk-live-secreto" not in repr(app.assistant_llm)
+    asyncio.run(app.startup())
+    assert all("sk-live-secreto" not in s.text for s in env.tg.sent)

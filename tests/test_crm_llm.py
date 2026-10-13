@@ -63,6 +63,11 @@ async def test_vcrma14_request_shape_and_parsing() -> None:
         (httpx.Response(401, json={"error": {"message": "bad key sk-secret-123"}}), "http"),
         (httpx.Response(500, text="boom"), "http"),
         (httpx.Response(200, text="no es json"), "bad_response"),
+        (httpx.Response(200, json=[1, 2]), "bad_response"),
+        (
+            httpx.Response(200, json={"output": ["x", {"type": "message", "content": ["y"]}]}),
+            "empty",
+        ),
         (httpx.Response(200, json={"status": "completed", "output": []}), "empty"),
         (httpx.Response(200, json=_ok_body("  ")), "empty"),
         (

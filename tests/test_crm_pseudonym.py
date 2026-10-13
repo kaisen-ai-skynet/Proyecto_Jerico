@@ -86,3 +86,11 @@ def test_restore_is_not_fooled_by_user_text_with_markers() -> None:
     red = Redactor.for_lead(LEAD)
     out = red.scrub("el texto trae [CLIENTE] literal")
     assert red.restore(out).count("Ana María Pérez") <= 1
+
+
+def test_vcrma10_distinctive_company_words_are_scrubbed_but_legal_suffixes_are_not() -> None:
+    red = Redactor.for_lead(make_lead(company="Distribuciones Andina SAS"))
+    out = red.scrub("Automatización para Andina, contrato con la SAS")
+    assert "Andina" not in out and "Distribuciones" not in out
+    assert "SAS" in out  # sufijo legal genérico: no identifica
+    assert "[EMPRESA]" in out

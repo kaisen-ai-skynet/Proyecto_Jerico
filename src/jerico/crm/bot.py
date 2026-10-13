@@ -46,6 +46,7 @@ POLL_TIMEOUT_S = 25
 ERROR_BACKOFF_S = 5.0
 _COMMAND_RE = re.compile(r"^/([A-Za-z_]+)(?:@\w+)?(?:\s|$)")
 
+DeferredJob = Callable[[], Awaitable[list[Outgoing]]]
 CommandHandler = Callable[[sqlite3.Connection, User, str, datetime], list[Outgoing]]
 CallbackHandler = Callable[
     [sqlite3.Connection, User, tuple[str, ...], datetime], list[Outgoing] | None
@@ -203,6 +204,7 @@ class CrmBot:
         self._export_margin = export_margin
         self._params = params or default_params()
         self._export_jobs: list[compliance.ExportJob] = []  # se envían tras el *commit*
+        self._deferred: list[DeferredJob] = []  # trabajos de red tras el *commit* (asistente)
         self._commands: dict[str, CommandHandler] = {
             "alta": team.add_user,
             "baja_usuario": team.deactivate_user,
@@ -245,6 +247,10 @@ class CrmBot:
         }
 
     # --- Registro de handlers -----------------------------------------------------------
+
+    def defer(self, job: DeferredJob) -> None:
+        """Encola un trabajo asíncrono que corre tras el *commit*, fuera de la transacción."""
+        self._deferred.append(job)
 
     def register_command(self, name: str, handler: CommandHandler) -> None:
         self._commands[name] = handler
@@ -386,6 +392,7 @@ class CrmBot:
         routed = False
         out: list[Outgoing] = []
         self._export_jobs = []
+        self._deferred = []
         try:
             with self._db.tx() as tx:
                 if not repo.mark_update_processed(tx, u.update_id, now):
@@ -415,6 +422,7 @@ class CrmBot:
                     routed = True
         except Exception as exc:  # noqa: BLE001 - regla O1: ningún error detiene el bucle
             self._export_jobs = []  # *rollback*: no se entrega nada de lo preparado
+            self._deferred = []
             out = self._record_handler_error(u, user, exc, now)
         finally:
             if prefetch is not None:  # temporal no consumido: nunca queda un archivo parcial
@@ -425,6 +433,10 @@ class CrmBot:
             if self._files is not None:
                 notice = await compliance.deliver_export(job, self._telegram, self._files)
                 await self._deliver(notice, user, now)
+        deferred, self._deferred = self._deferred, []
+        if user is not None:  # VCRM-A36: la red del asistente va fuera de la transacción
+            for later in deferred:
+                await self._deliver(await self._run_deferred(later, user.telegram_id), user, now)
         if u.callback_id is not None:
             await self._telegram.answer_callback(u.callback_id)
         if routed and self._kick is not None:
@@ -451,6 +463,13 @@ class CrmBot:
         if user is None:
             return []
         return [Outgoing(user.telegram_id, GENERIC_ERROR)]
+
+    async def _run_deferred(self, job: DeferredJob, chat_id: int) -> list[Outgoing]:
+        try:
+            return await job()
+        except Exception as exc:  # noqa: BLE001 - regla O1: ningún error detiene el bucle
+            logger.error("trabajo diferido falló: %s", type(exc).__name__)
+            return [Outgoing(chat_id, GENERIC_ERROR)]
 
     async def _deliver(self, out: list[Outgoing], actor: User | None, now: datetime) -> None:
         """Envío único; si no consta entregado → fila `fallida` sin cuerpo (VCRM-012)."""

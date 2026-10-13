@@ -9,6 +9,8 @@ from pathlib import Path
 from loguru import logger
 
 from jerico.crm import CURRENT_PHASE, repo
+from jerico.crm.assistant import AssistantContext, register_assistant
+from jerico.crm.assistant_budget import AssistantBudget
 from jerico.crm.backup import SubprocessRunner, run_backup
 from jerico.crm.bot import CrmBot
 from jerico.crm.config import (
@@ -23,6 +25,7 @@ from jerico.crm.f2_bot import F2Context, register_f2
 from jerico.crm.files import LocalFileStore
 from jerico.crm.inbox import build_inbox
 from jerico.crm.jobs import register_jobs
+from jerico.crm.llm import LlmPort, OpenAIResponsesClient
 from jerico.crm.mail import build_email_sender
 from jerico.crm.migrate import MigrationError, migrate_if_needed
 from jerico.crm.model import Role
@@ -51,6 +54,18 @@ def utcnow() -> datetime:
 def _secret(value: object) -> str:
     getter = getattr(value, "get_secret_value", None)
     return (getter() if getter else str(value or "")).strip()
+
+
+def build_assistant_llm(settings: CrmSettings) -> LlmPort | None:
+    """Cliente real solo con el flag encendido y la llave presente (VCRM-A30, A31)."""
+    key = _secret(settings.openai_api_key)
+    if not settings.assistant_enabled or not key:
+        return None
+    return OpenAIResponsesClient(
+        api_key=key,
+        model=settings.openai_model,
+        effort=settings.openai_reasoning_effort,
+    )
 
 
 def missing_secrets(settings: CrmSettings) -> list[str]:
@@ -92,6 +107,7 @@ class CrmApp:
         runner: CommandRunner,
         clock: Callable[[], datetime] = utcnow,
         inbox: InboxPort | None = None,
+        assistant_llm: LlmPort | None = None,
     ) -> None:
         self.settings = settings
         self.telegram = telegram
@@ -99,6 +115,7 @@ class CrmApp:
         self.runner = runner
         self.clock = clock
         self.inbox: InboxPort = inbox or build_inbox(settings)
+        self.assistant_llm: LlmPort | None = assistant_llm or build_assistant_llm(settings)
         self._tasks: set[asyncio.Task[None]] = set()
         holidays, self.holiday_warnings = parse_extra_holidays(settings.extra_holidays)
         self.params, self.config_warnings = effective_params(settings, extra_holidays=holidays)
@@ -123,6 +140,16 @@ class CrmApp:
             fingerprint_keys=self.keys,
             files=self.files,
             params=self.params,
+        )
+        register_assistant(
+            self.bot,
+            AssistantContext(
+                settings=settings,
+                db=self.db,
+                client=self.assistant_llm,
+                budget=AssistantBudget(settings),
+                clock=clock,
+            ),
         )
         register_f2(
             self.bot,
@@ -152,6 +179,11 @@ class CrmApp:
         notices += [holiday_notice(w) for w in self.holiday_warnings]
         for w in self.holiday_warnings:
             logger.warning("Festivo extraordinario ignorado: {} ({})", w.entry, w.reason)
+        if self.settings.assistant_enabled and self.assistant_llm is None:  # VCRM-A31
+            notices.append(
+                "El asistente comercial está activado pero falta OPENAI_API_KEY: "
+                "queda no disponible hasta que se configure."
+            )
         await self._notify_cto(notices)
         await self.run_daily_job()
         await self.run_followup_job()  # activa F2 si procede y avisa si falta configuración
@@ -298,6 +330,7 @@ __all__ = [
     "EXIT_CONFIG",
     "EXIT_MIGRATION",
     "STARTUP_NOTICE_KIND",
+    "build_assistant_llm",
     "CrmApp",
     "fingerprint_keys",
     "main",

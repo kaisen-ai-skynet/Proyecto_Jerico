@@ -69,6 +69,7 @@ class AuditAction(StrEnum):
     USER_DEACTIVATED = "user_deactivated"  # VCRM-091
     HANDLER_ERROR = "handler_error"  # plan §7, regla O1
     ATTACHMENT_EXPIRED = "attachment_expired"  # VCRM-145
+    LLM_CALL = "llm_call"  # VCRM-A21: llamada al asistente, sin texto del prompt
 
 
 class AuditOutcome(StrEnum):

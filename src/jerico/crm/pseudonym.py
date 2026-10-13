@@ -16,6 +16,8 @@ _EMAIL = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+")
 _NUMBERISH = re.compile(r"\+?\(?\d[\d\s().\-/]{4,}\d")
 _DATE = re.compile(r"\d{1,4}[-/]\d{1,2}[-/]\d{1,4}")
 _MIN_PART = 3  # las partes de nombre más cortas no se tratan como identificadores aislados
+_MIN_COMPANY_PART = 4
+_LEGAL_SUFFIXES = frozenset({"ltda", "sas", "s.a.s", "cia", "eirl"})
 _MIN_DIGITS = 6
 
 
@@ -31,10 +33,7 @@ def _fold(text: str) -> str:
 
 def _replace_value(text: str, value: str, marker: str, *, whole_word: bool) -> str:
     """Sustituye `value` (sin distinguir tildes ni mayúsculas) por `marker`."""
-    folded_value = _fold(value.strip())
-    if not folded_value:
-        return text
-    pattern = re.escape(folded_value)
+    pattern = re.escape(_fold(value.strip()))  # los valores llegan no vacíos por construcción
     if whole_word:
         pattern = rf"(?<!\w){pattern}(?!\w)"
     folded = _fold(text)
@@ -82,9 +81,10 @@ class Redactor:
         parts = tuple(
             (marker, word)
             for marker, value in values
-            if marker in {"[CLIENTE]", "[REPRESENTANTE]"}
+            if marker in {"[CLIENTE]", "[REPRESENTANTE]", "[EMPRESA]"}
             for word in re.findall(r"\w+", value)
-            if len(word) >= _MIN_PART
+            if len(word) >= (_MIN_COMPANY_PART if marker == "[EMPRESA]" else _MIN_PART)
+            and word.lower() not in _LEGAL_SUFFIXES
         )
         return cls(values=values, parts=parts)
 
