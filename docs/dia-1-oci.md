@@ -1,12 +1,15 @@
 ---
 tipo: checklist-operativa
 proyecto: Jericó — Kaisen AI
-estado: lista-para-ejecutar (nada ejecutado contra OCI)
+estado: en-pausa (VM OCI aplazada; CRM desplegado en kaisen-server)
 creado: "11/10/2026 20:20"
-modificado: "13/10/2026 00:56"
+modificado: "13/10/2026 10:10"
 ---
 
 # Día 1 — Oracle Cloud + laptop en una sola sesión
+
+> 🔀 **Cambio de rumbo (13/10/2026 10:10, decisión del CTO).** Como no hubo capacidad A1 en OCI, **Jericó CRM se desplegó en `kaisen-server`** (`100.79.169.121`): directorio `~/jerico`, `docker compose -p jerico`, **solo el servicio `jerico-crm`**, estado `healthy` (según el orquestador). La **VM de OCI queda como migración futura**. El reintento en Cloud Shell (`00_retry_launch_a1.sh`) **se cortó en el intento 153/200** sin conseguir capacidad.
+> Lo que ya existe en OCI se conserva (presupuesto, compartment `kaisen-jerico`, `jerico-vcn` y su Security List); no consume nada. Los bloques 4 y 5 quedan en pausa hasta que se retome la migración. Hasta entonces, el CRM corre en `kaisen-server`, sin el Postgres ni los backups de este checklist.
 
 **Duración:** 3–4 h con pausas. **Dónde:** en casa, con la laptop que tiene este repo (los commits no están en GitHub hasta que alguien haga push; `sync_repo_to_vps.sh` copia desde la laptop).
 **Detalle de cada paso:** `docs/guia-oci-principiantes.md` (las letras A–J remiten a sus partes).
@@ -63,12 +66,13 @@ Instala age y **Docker**, crea la llave SSH y la llave age, comprueba Tailscale 
 > # Variante más pequeña (también Always Free; se amplía después): OCPUS=1 MEMORY_GB=6 bash 00_retry_launch_a1.sh
 > ```
 > El script reintenta cada 90 s, rota los fault domains 1→2→3, se niega a pedir más de 2/12 y nunca crea una segunda VM con el mismo nombre. Si Cloud Shell se cierra, se relanza sin riesgo. Las madrugadas y los fines de semana suelen tener más capacidad. Mientras tanto, se puede avanzar con el bloque 6 (CRM en la laptop).
+> 🛑 **Resultado (13/10/2026):** el CTO corrió el script en Cloud Shell y lo cortó en el intento **153/200**, todavía sin capacidad. Que llegara al intento 153 indica que el script reconocía las respuestas de la API como falta de capacidad o límite de peticiones (no se detuvo con «Error distinto a capacidad»). Para retomar la migración basta con relanzarlo con los mismos `export`.
 > Si el script se detiene con «Error distinto a capacidad» pero el texto habla de capacidad, el mensaje de la API no coincide con el que busca el script: guarda las últimas líneas y pásalas para ajustarlo.
 
 - [x] VCN `jerico-vcn` creada con el wizard en `kaisen-jerico`: `10.0.0.0/16`, subred pública `10.0.0.0/24`, privada `10.0.1.0/24`, sin IPv6 (orquestador, 13/10/2026).
 - [x] Security List ajustada: TCP 22 solo desde la `/32` del CTO (la regla `0.0.0.0/0` está borrada) y nada en 5432/6379/8000 (orquestador, 13/10/2026).
 - [ ] *(Opcional)* Regla UDP 41641 desde `0.0.0.0/0` para que Tailscale conecte directo. Sin ella usa relays DERP.
-- [ ] VM `jerico-core-oracle-01` (**intento por consola fallido el 13/10/2026 por capacidad; en curso por Plan B**): Ubuntu 24.04 aarch64, A1.Flex **2 OCPU / 12 GB**, 100 GB Balanced, llave SSH pública pegada, etiqueta *Always Free-eligible* visible.
+- [ ] VM `jerico-core-oracle-01` (**aplazada a migración futura**: la consola falló por capacidad y el Plan B se cortó en el intento 153/200 el 13/10/2026): Ubuntu 24.04 aarch64, A1.Flex **2 OCPU / 12 GB**, 100 GB Balanced, llave SSH pública pegada, etiqueta *Always Free-eligible* visible.
 - [ ] `RUNNING` e IP pública anotada. *Si sale "Out of host capacity": Plan B de la Parte D (Cloud Shell + `00_retry_launch_a1.sh`) y sigue con el bloque 6 mientras reintenta.*
 
 ## Bloque 4 · VM segura (40 min) — Partes E, F y G
@@ -117,4 +121,4 @@ La prueba de humo del bloque 1 no usa secretos. Para ver el bot funcionando de v
 - [ ] **No dejar la VM ociosa muchos días:** el siguiente paso es desplegar Jericó (runbook §3). Oracle puede recuperar VMs gratis que pasan 7 días casi sin uso.
 
 ---
-> 🕒 **Última modificación:** 13/10/2026 00:56 (Claude Code · Opus 5.5)
+> 🕒 **Última modificación:** 13/10/2026 10:10 (Claude Code · Opus 5.5)
