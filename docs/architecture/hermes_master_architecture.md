@@ -1,16 +1,16 @@
 # Arquitectura Maestra de Hermes Agent: Guía Técnica de Referencia y Transferencia
 
-> **Documento de Ingeniería Inversa y Especificación Canónica**  
-> **Origen:** [`nousresearch/hermes-agent`](https://github.com/nousresearch/hermes-agent)  
-> **Destino:** Proyecto Jericó (AI-OS Kaisen AI)  
-> **Fecha:** 29 de septiembre de 2026  
-> **Modo:** Solo lectura / Análisis profundo  
+> **Documento de Ingeniería Inversa y Especificación Canónica**
+> **Origen:** [`nousresearch/hermes-agent`](https://github.com/nousresearch/hermes-agent)
+> **Destino:** Proyecto Jericó (AI-OS Kaisen AI)
+> **Fecha:** 29 de septiembre de 2026
+> **Modo:** Solo lectura / Análisis profundo
 
 ---
 
 ## 1. Visión General y Filosofía de Diseño
 
-**Hermes Agent ☤** es un agente autónomo de IA desarrollado por **Nous Research** concebido como un sistema **auto-evolutivo con bucle cerrado de aprendizaje (*closed learning loop*)**. 
+**Hermes Agent ☤** es un agente autónomo de IA desarrollado por **Nous Research** concebido como un sistema **auto-evolutivo con bucle cerrado de aprendizaje (*closed learning loop*)**.
 
 A diferencia de los agentes tradicionales que dependen de prompts monumentales, sesiones efímeras en RAM o frameworks con dependencias descontroladas, Hermes Agent está construido bajo principios de ingeniería de sistemas de alto rendimiento y resiliencia:
 
@@ -98,16 +98,18 @@ agent/
 El bucle es completamente **sincrónico**, garantizando determinismo:
 
 ```python
-while (api_call_count < self.max_iterations and self.iteration_budget.remaining > 0) or self._budget_grace_call:
+while (
+    api_call_count < self.max_iterations and self.iteration_budget.remaining > 0
+) or self._budget_grace_call:
     if self._interrupt_requested:
         break
-        
+
     # 1. Ensamblado con System Prompt inmutable (preserva Prompt Caching)
     request_payload = build_request(model, messages, tool_schemas)
-    
+
     # 2. Llamada al proveedor (OpenAI, Anthropic, Nous Portal, etc.)
     response = client.chat.completions.create(**request_payload)
-    
+
     # 3. Si hay Tool Calls, ejecutarlas y acumular resultados
     if response.tool_calls:
         for tc in response.tool_calls:
@@ -118,7 +120,7 @@ while (api_call_count < self.max_iterations and self.iteration_budget.remaining 
                 result = handle_function_call(tc.name, tc.args, task_id)
             messages.append(make_tool_result_message(tc.id, result))
         api_call_count += 1
-        
+
         # 4. Verificar umbral de contexto para compresión
         if is_context_overflow(messages, max_window=0.85):
             messages = compact_context(messages, auxiliary_model)
