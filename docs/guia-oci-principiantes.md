@@ -3,7 +3,7 @@ tipo: guia-operativa
 proyecto: Jericó — Kaisen AI
 estado: lista-para-ejecutar (nada ejecutado contra OCI)
 creado: "11/10/2026 17:50"
-modificado: "13/10/2026 00:30"
+modificado: "13/10/2026 00:29"
 ---
 
 # Guía OCI para principiantes — preparar Oracle Cloud para Jericó
@@ -35,7 +35,7 @@ modificado: "13/10/2026 00:30"
 | Tenancy | `kaisen_cloud` (creada el 20/09/2026) |
 | Home region | `sa-bogota-1` ✅ (ya fijada) |
 | Tipo de cuenta | **Periodo de prueba (Free Trial)**: créditos de prueba durante ~30 días. Fin aproximado: **~20/10/2026**; la fecha exacta está en *Billing & Cost Management*. |
-| Recursos | Compartment raíz vacío; sin VCN, sin instancias, sin presupuestos |
+| Recursos | 13/10/2026: presupuesto `kaisen-alerta-1usd` y compartment `kaisen-jerico` **creados**; sin VCN y sin instancias |
 
 **Qué cambia por estar en prueba (léelo antes de crear nada):**
 
@@ -118,7 +118,7 @@ age-keygen -y ~/.config/kaisen/jerico-backup.agekey    # imprime la PÚBLICA: ag
 4. Espera el correo **"Your Oracle Cloud account is fully provisioned"**. Hasta entonces muchas pantallas fallan: es normal.
 5. Ya dentro de la consola (cloud.oracle.com):
    - **MFA:** perfil (arriba a la derecha) → *My profile* → *Security* / *Multi-factor authentication* → activar con una app (Google Authenticator, 1Password...).
-   - **Alerta de presupuesto:** menú ☰ → *Billing & Cost Management* → *Budgets* → *Create Budget* → objetivo: compartment **raíz** (toda la tenancy), monto **1 USD**, alerta al 100 % del gasto real al correo de empresa.
+   - **Alerta de presupuesto:** menú ☰ → *Billing & Cost Management* → *Budgets* → *Create Budget* → objetivo: compartment **raíz** (toda la tenancy), monto **1 USD**, alerta por gasto real al **1 %** (0,01 USD, para enterarte de cualquier cobro) al correo de empresa. *Hecho el 13/10/2026: `kaisen-alerta-1usd`.*
    - **Compartment:** ☰ → *Identity & Security* → *Compartments* → *Create* → nombre `kaisen-jerico`. Copia su **OCID** a un bloc de notas.
 
 ✅ **Listo cuando:** puedes entrar con MFA, la alerta de $1 existe y ves el compartment `kaisen-jerico`.
@@ -333,4 +333,4 @@ Oracle puede **recuperar** VMs Always Free que en 7 días tengan a la vez CPU, r
 - **No probado todavía:** ninguna ejecución real en una VM ni en Cloud Shell, ni `docker compose config` del override de producción (no había Docker en la laptop de revisión). El primer uso real es el Día 1.
 
 ---
-> 🕒 **Última modificación:** 13/10/2026 00:30 (Claude Code · Opus 5.5)
+> 🕒 **Última modificación:** 13/10/2026 00:29 (Claude Code · Opus 5.5)

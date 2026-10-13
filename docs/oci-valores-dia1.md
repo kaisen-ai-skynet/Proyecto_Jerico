@@ -2,8 +2,8 @@
 tipo: valores-operativos
 proyecto: Jericó — Kaisen AI
 estado: listo-para-consola (nada creado por agentes)
-creado: "13/10/2026 00:35"
-modificado: "13/10/2026 00:35"
+creado: "13/10/2026 00:25"
+modificado: "13/10/2026 00:29"
 ---
 
 # Valores exactos para la consola OCI — Día 1
@@ -27,15 +27,17 @@ modificado: "13/10/2026 00:35"
 | Recurso | Campo | Valor | Costo |
 |---|---|---|---|
 | MFA | Método | App TOTP en el usuario administrador | 🆓 |
-| Presupuesto | Nombre | `kaisen-presupuesto-1usd` | 🆓 |
+| Presupuesto ✅ **creado el 13/10/2026** (orquestador, con OK del CTO) | Nombre | `kaisen-alerta-1usd` | 🆓 |
 | | Objetivo | Compartment **raíz** `kaisen_cloud` (toda la tenancy) | |
-| | Monto mensual | **1 USD** | |
-| | Regla de alerta | Gasto **real** (*Actual spend*) ≥ **100 %** del presupuesto → correo `kaisen.ai.santiago.cto@gmail.com` | |
-| Compartment | Nombre | `kaisen-jerico` | 🆓 |
+| | Periodo / monto | Mensual · **1 USD** | |
+| | Regla de alerta | Gasto **real** (*Actual spend*) ≥ **1 %** del presupuesto (**0,01 USD**: avisa ante cualquier cobro) → correo `kaisen.ai.santiago.cto@gmail.com` | |
+| Compartment ✅ **creado el 13/10/2026** (orquestador, con OK del CTO) | Nombre | `kaisen-jerico` | 🆓 |
 | | Padre | raíz `kaisen_cloud` | |
-| | Descripción | `Proyecto Jerico - Fase 0` | |
+| | Descripción | `Proyecto Jerico (Kaisen AI) - solo recursos Always Free` | |
 
 ## 2. Red (VCN Wizard → *Create VCN with Internet Connectivity*)
+
+> **Estado 13/10/2026:** la VCN **no está creada**. Se bloqueó el permiso para crearla desde el navegador, y el CTO decide cómo seguir. Los valores de abajo no cambian.
 
 | Campo | Valor | Costo |
 |---|---|---|
@@ -121,4 +123,4 @@ modificado: "13/10/2026 00:35"
 | Ruta de la app en la VM | `/opt/jerico/app` |
 
 ---
-> 🕒 **Última modificación:** 13/10/2026 00:35 (Claude Code · Opus 5.5)
+> 🕒 **Última modificación:** 13/10/2026 00:29 (Claude Code · Opus 5.5)

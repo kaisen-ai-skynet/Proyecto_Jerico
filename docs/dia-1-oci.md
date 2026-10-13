@@ -3,7 +3,7 @@ tipo: checklist-operativa
 proyecto: Jericó — Kaisen AI
 estado: lista-para-ejecutar (nada ejecutado contra OCI)
 creado: "11/10/2026 20:20"
-modificado: "13/10/2026 00:30"
+modificado: "13/10/2026 00:29"
 ---
 
 # Día 1 — Oracle Cloud + laptop en una sola sesión
@@ -36,11 +36,15 @@ Instala age y **Docker**, crea la llave SSH y la llave age, comprueba Tailscale 
 
 - [x] Cuenta creada: tenancy `kaisen_cloud`, **home region Bogotá** (20/09/2026; verificado el 13/10/2026).
 - [ ] ⚠️ La cuenta está en **periodo de prueba** (fin aprox. ~20/10/2026): la consola deja crear recursos de pago sin avisar y, al acabar la prueba, lo que no sea Always Free se detiene y se elimina. **Crea solo lo de `docs/oci-valores-dia1.md`** y no pulses "Upgrade". Detalle: guía, sección "Estado real de la cuenta y periodo de prueba".
-- [ ] MFA activado · alerta de presupuesto de **1 USD** sobre el compartment raíz · compartment `kaisen-jerico` (OCID anotado).
+- [x] Presupuesto `kaisen-alerta-1usd` sobre la raíz `kaisen_cloud`: mensual, 1 USD, alerta por **gasto real al 1 %** (0,01 USD) a `kaisen.ai.santiago.cto@gmail.com` (creado por el orquestador el 13/10/2026, con OK del CTO).
+- [x] Compartment `kaisen-jerico` bajo la raíz, descripción «Proyecto Jerico (Kaisen AI) - solo recursos Always Free» (creado por el orquestador el 13/10/2026, con OK del CTO). Anota su OCID para el Plan B.
+- [ ] MFA activado en el usuario administrador (sin confirmar a 13/10/2026).
 
 > **Reparto acordado:** el orquestador (Claude en Chrome) crea en la consola el presupuesto, el compartment, la VCN y, cuando exista la llave SSH del bloque 1, la VM. Tú aprobarás cada paso; **la llave SSH y la llave age las creas tú** con `dia1_laptop.sh`. Ningún agente las crea ni las lee.
 
 ## Bloque 3 · Red y VM (30 min) — Partes C y D
+
+> **Estado 13/10/2026:** VCN **sin crear**. El permiso para crearla desde el navegador quedó bloqueado; el CTO decide cómo seguir (a mano en la consola o desbloqueando al orquestador).
 
 - [ ] VCN `jerico-vcn` con el wizard; regla 22 solo desde tu IP `/32`; UDP 41641; nada en 5432/6379/8000 (tabla exacta en `docs/oci-valores-dia1.md`).
 - [ ] VM `jerico-core-oracle-01`: Ubuntu 24.04 aarch64, A1.Flex **2 OCPU / 12 GB**, 100 GB Balanced, llave SSH pública pegada, etiqueta *Always Free-eligible* visible.
@@ -92,4 +96,4 @@ La prueba de humo del bloque 1 no usa secretos. Para ver el bot funcionando de v
 - [ ] **No dejar la VM ociosa muchos días:** el siguiente paso es desplegar Jericó (runbook §3). Oracle puede recuperar VMs gratis que pasan 7 días casi sin uso.
 
 ---
-> 🕒 **Última modificación:** 13/10/2026 00:30 (Claude Code · Opus 5.5)
+> 🕒 **Última modificación:** 13/10/2026 00:29 (Claude Code · Opus 5.5)
