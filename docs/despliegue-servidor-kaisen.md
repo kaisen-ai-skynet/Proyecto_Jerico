@@ -3,7 +3,7 @@ tipo: runbook
 proyecto: Jericó — Kaisen AI
 estado: listo para aprobación del CTO (nada ejecutado en el servidor)
 creado: "13/10/2026 10:25"
-modificado: "13/10/2026 10:25"
+modificado: "13/10/2026 10:34"
 ---
 
 # Runbook — Jericó CRM en kaisen-server
@@ -62,7 +62,7 @@ df -h ~ | tail -n 1
    ```bash
    cd ~/Kaisen_AI/01_Proyectos/Proyecto_Jerico
    f=$(ssh kaisen-server 'ls -1 ~/jerico-backups/crm/crm-*.tar.age | tail -n 1')
-   mkdir -p ~/jerico-backups-copia && scp "kaisen-server:$f" ~/jerico-backups-copia/
+   install -d -m 700 ~/jerico-backups-copia && scp "kaisen-server:$f" ~/jerico-backups-copia/
    scripts/servidor/restore_crm.sh verify ~/jerico-backups-copia/"$(basename "$f")" ~/.config/kaisen/jerico-backup.agekey
    ```
    Debe terminar con `RESTAURACIÓN VERIFICADA` y mostrar `integrity_check: ok`, `schema_version`, el número de leads y el de archivos. De paso, la copia queda **fuera del servidor**.
@@ -75,7 +75,11 @@ df -h ~ | tail -n 1
    - Backup diario a las 03:45; log en `~/jerico-backups/backup-crm.log`.
    - Vigía cada 5 min; log en `~/.local/state/jerico/healthwatch.log`.
    - cron en WSL2: si el servidor se reinicia, cron tiene que arrancar solo. El vigía de Hermes ya usa cron, así que hoy funciona. Si algún día deja de correr: `sudo service cron status`, y lee `research.md` §5 (`systemd=true` o `[boot] command` en `/etc/wsl.conf`).
-6. **Rotación de logs** (§5): la primera vez que uses `jcs up -d`, el contenedor se recrea con el límite de logs. Es un corte de unos segundos.
+6. **Rotación de logs** (§5): aplica el override. El contenedor se recrea con el límite de logs, lo que supone un corte de unos segundos:
+   ```bash
+   jcs up -d jerico-crm && jcs ps jerico-crm
+   docker inspect -f '{{.HostConfig.LogConfig}}' jerico-crm      # {json-file map[max-file:3 max-size:10m]}
+   ```
 
 ## 2. Actualizar la versión
 
@@ -133,24 +137,28 @@ docker tag jerico-crm:rollback jerico-crm:0.2.0
 jcs up -d --no-build --force-recreate jerico-crm
 jcs ps jerico-crm && docker logs --tail 25 jerico-crm
 ```
+Esto supone que `docker-compose.yml` sigue usando la etiqueta `jerico-crm:0.2.0`. Si la versión nueva la cambió (por ejemplo, a `0.3.0`), el rollback es volver a desplegar el commit anterior (§2.1) con `jcs up -d --no-build --force-recreate jerico-crm`, después de `docker tag jerico-crm:rollback jerico-crm:0.2.0`.
 Sirve si la versión nueva **no** cambió el esquema. Si lo cambió, la imagen vieja puede fallar con la base nueva: aplica también el §4.2 con el backup de antes de actualizar.
 
 ### 4.2 Volver a un backup (datos)
 
 1. Elige el backup, que debe ser anterior al problema: `ls -1 ~/jerico-backups/crm/`.
-2. **Descifra en la laptop** (la llave privada no viaja al servidor) y sube el `.tar`:
+2. **Pausa el cron de Jericó** en el servidor (`crontab -e`, comenta las dos líneas con `#`). Así el vigía no avisa de la parada y el backup nocturno no choca con la restauración. Si el vigía de Hermes también vigila `jerico-crm` (paso 0), páusalo igual.
+3. **Descifra en la laptop** (la llave privada no viaja al servidor) y sube el `.tar` a un directorio privado, porque el `.tar` está **en claro**:
    ```bash
    # laptop
+   umask 077 && install -d -m 700 ~/jerico-backups-copia
    scp kaisen-server:jerico-backups/crm/crm-AAAAMMDDTHHMMSSZ.tar.age ~/jerico-backups-copia/
-   age -d -i ~/.config/kaisen/jerico-backup.agekey -o ~/jerico-backups-copia/restaurar.tar ~/jerico-backups-copia/crm-AAAAMMDDTHHMMSSZ.tar.age
    scripts/servidor/restore_crm.sh verify ~/jerico-backups-copia/crm-AAAAMMDDTHHMMSSZ.tar.age ~/.config/kaisen/jerico-backup.agekey
-   scp ~/jerico-backups-copia/restaurar.tar kaisen-server:/tmp/restaurar.tar
+   age -d -i ~/.config/kaisen/jerico-backup.agekey -o ~/jerico-backups-copia/restaurar.tar ~/jerico-backups-copia/crm-AAAAMMDDTHHMMSSZ.tar.age
+   ssh kaisen-server 'install -d -m 700 ~/jerico-restaurar'
+   scp -p ~/jerico-backups-copia/restaurar.tar kaisen-server:jerico-restaurar/restaurar.tar
    ```
-3. **En el servidor**, primero mira el plan (no cambia nada) y luego ejecútalo:
+4. **En el servidor**, primero mira el plan (no cambia nada) y luego ejecútalo:
    ```bash
-   ~/jerico/scripts/servidor/restore_crm.sh apply /tmp/restaurar.tar
-   CONFIRM=1 ~/jerico/scripts/servidor/restore_crm.sh apply /tmp/restaurar.tar
-   shred -u /tmp/restaurar.tar                                   # el .tar está en claro: bórralo ya
+   ~/jerico/scripts/servidor/restore_crm.sh apply ~/jerico-restaurar/restaurar.tar
+   CONFIRM=1 ~/jerico/scripts/servidor/restore_crm.sh apply ~/jerico-restaurar/restaurar.tar
+   shred -u ~/jerico-restaurar/restaurar.tar                     # el .tar está en claro: bórralo ya
    ```
    El script verifica el archivo y luego:
    1. detiene `jerico-crm`;
@@ -158,8 +166,10 @@ Sirve si la versión nueva **no** cambió el esquema. Si lo cambió, la imagen v
    3. reemplaza el volumen;
    4. arranca el contenedor y espera a que esté `healthy`.
 
-   Si te equivocaste de backup, la copia `pre-restore-*` se restaura igual.
-4. **Borra la copia en claro de la laptop:** `shred -u ~/jerico-backups-copia/restaurar.tar`.
+   La copia previa se guarda **tal cual**, aunque la base esté corrupta. Si te equivocaste de backup, se restaura igual que cualquier otro. Las copias `pre-restore-*` caen en la misma retención que los backups (`RETENTION_DAYS`, máximo 30 días).
+5. **Borra la copia en claro de la laptop** (`shred -u ~/jerico-backups-copia/restaurar.tar`) y **reactiva el cron** (`crontab -e`, quita los `#`).
+
+> **Retención en la laptop (tope de 30 días, J-08):** los `.tar.age` que se copian a `~/jerico-backups-copia/` también son datos personales. Bórralos a los 30 días: `find ~/jerico-backups-copia -name '*.tar.age' -mtime +30 -delete`.
 
 > Lo que pasó entre el backup y la restauración (leads, notas, mensajes) **se pierde**. Avisa al equipo de ventas antes de restaurar.
 
@@ -190,4 +200,4 @@ cat ~/.local/state/jerico/healthwatch.state          # estado del vigía (status
 Si no llega ningún aviso pero sospechas un problema: `cat ~/.local/state/jerico/healthwatch.state` y `crontab -l`.
 
 ---
-> 🕒 **Última modificación:** 13/10/2026 10:25 (Claude Code · Opus 5.5)
+> 🕒 **Última modificación:** 13/10/2026 10:34 (Claude Code · Opus 5.5)

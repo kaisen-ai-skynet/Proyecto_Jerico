@@ -19,14 +19,20 @@ if [ ! -r "$ENV_FILE" ]; then
     exit 1
 fi
 
-# Valor literal de CLAVE=valor (última aparición), sin comillas exteriores.
+# Valor literal de CLAVE=valor (última aparición): entre comillas, lo de dentro; sin
+# comillas, hasta un comentario ` # ...`.
 env_get() {
     local line value
     line="$(grep -E "^[[:space:]]*(export[[:space:]]+)?$1=" "$ENV_FILE" | tail -n 1 || true)"
     value="${line#*=}"
     value="${value%$'\r'}"
     case "$value" in
-        \"*\" | \'*\') value="${value:1:${#value}-2}" ;;
+        \"*) value="${value#\"}"; value="${value%%\"*}" ;;
+        \'*) value="${value#\'}"; value="${value%%\'*}" ;;
+        *)
+            value="${value%%[[:space:]]#*}"
+            value="${value%"${value##*[![:space:]]}"}"
+            ;;
     esac
     printf '%s' "$value"
 }

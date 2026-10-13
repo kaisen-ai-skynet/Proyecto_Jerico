@@ -3,7 +3,7 @@ tipo: spec
 proyecto: Jericó — Kaisen AI
 estado: borrador para aprobación del CTO
 creado: "13/10/2026 10:15"
-modificado: "13/10/2026 10:15"
+modificado: "13/10/2026 10:34"
 ---
 
 # Spec 002 — Endurecer la operación de Jericó CRM en kaisen-server
@@ -40,9 +40,9 @@ Que el CTO pueda aprobar y ejecutar, sin improvisar, cuatro cosas:
   - En el disco nunca queda una copia sin cifrar: el directorio de trabajo es temporal y se borra siempre, también si falla.
   - La copia temporal que se hace dentro del contenedor también se borra.
 - **SRV-05:** los archivos se llaman `crm-AAAAMMDDTHHMMSSZ.tar.age` y tienen permisos 600, dentro de un directorio con permisos 700.
-- **SRV-06:** retención. Se borran los backups de más de `RETENTION_DAYS` días (14 por defecto, como máximo 30, el tope legal J-08 de la spec 001). Siempre se conserva al menos el más reciente. Solo se tocan los archivos que siguen el patrón de nombres de SRV-05.
+- **SRV-06:** retención. Se borran los backups de más de `RETENTION_DAYS` días (14 por defecto, como máximo 30, el tope legal J-08 de la spec 001). Siempre se conserva al menos el más reciente. Solo se tocan los archivos que siguen el patrón de nombres de SRV-05 y las copias `pre-restore-AAAAMMDDTHHMMSSZ.tar.age` de SRV-11.
 - **SRV-07:** solo puede correr un backup a la vez (`flock`). Si el contenedor no está corriendo, el backup falla con un código distinto de 0 y un mensaje claro.
-- **SRV-08:** si el backup falla, se manda un aviso por el mismo canal que la alerta de b). Que el aviso falle no tapa el error del backup.
+- **SRV-08:** si el backup falla (también ante errores inesperados, mediante `trap ERR`, o si Docker no responde), se manda un aviso por el mismo canal que la alerta de b). Que el aviso falle no tapa el error del backup.
 - **SRV-09:** la configuración (sin secretos) va en un archivo `backup-crm.env`, a partir de `deploy/servidor/backup-crm.env.example`. Las rutas por defecto son las del usuario `kaisenai`.
 
 ### a') Prueba de restauración (`scripts/servidor/restore_crm.sh`)
@@ -55,7 +55,7 @@ Que el CTO pueda aprobar y ejecutar, sin improvisar, cuatro cosas:
   Al final imprime un resumen con el número de tablas y de archivos, y borra todo. Corre en la laptop del CTO, que es donde está la llave privada.
 - **SRV-11:** `restore_crm.sh apply <backup.tar.age|backup.tar> [identidad]` restaura dentro del volumen y solo actúa si se pasa `CONFIRM=1`. Hace lo siguiente:
   1. Detiene `jerico-crm`.
-  2. Guarda el contenido actual del volumen en un archivo cifrado `pre-restore-*.tar.age`, usando el mismo archivo de destinatarios.
+  2. Guarda el contenido actual del volumen **tal cual** (`pack-raw`, sin comprobar la base, para que funcione aunque esté corrupta) en un archivo cifrado `pre-restore-*.tar.age`, usando el mismo archivo de destinatarios. Si esa copia falla, aborta sin tocar el volumen y vuelve a arrancar el contenedor.
   3. Vacía el volumen y extrae el backup.
   4. Arranca el contenedor y espera a que esté `healthy`.
 
@@ -115,4 +115,4 @@ Que el CTO pueda aprobar y ejecutar, sin improvisar, cuatro cosas:
 - Integrar la alerta en el vigía de Hermes, que es ajeno a este repo.
 
 ---
-> 🕒 **Última modificación:** 13/10/2026 10:15 (Claude Code · Opus 5.5)
+> 🕒 **Última modificación:** 13/10/2026 10:34 (Claude Code · Opus 5.5)

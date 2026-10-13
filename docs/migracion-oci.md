@@ -3,7 +3,7 @@ tipo: plan-de-migracion
 proyecto: Jericó — Kaisen AI
 estado: futuro (sin fecha; depende de la capacidad A1)
 creado: "13/10/2026 10:26"
-modificado: "13/10/2026 10:26"
+modificado: "13/10/2026 10:34"
 ---
 
 # Plan de migración de Jericó CRM: kaisen-server → OCI (A1 Always Free)
@@ -60,9 +60,9 @@ docker image inspect jerico-crm:0.2.0 -f '{{.Architecture}}'   # arm64
 | 1 | servidor | Comenta en `crontab -e` las dos líneas de Jericó (así el vigía no avisa de la parada) | `crontab -l \| grep jerico` muestra `#` |
 | 2 | servidor | `jcs stop jerico-crm` | `docker inspect -f '{{.State.Status}}' jerico-crm` → `exited` |
 | 3 | servidor | `ALLOW_STOPPED=1 ~/jerico/scripts/servidor/backup_crm.sh`: backup final sin escrituras en curso | aparece un `crm-*.tar.age` nuevo |
-| 4 | laptop | `scp` del backup, `restore_crm.sh verify ...` (anota los leads y archivos) y `age -d ... -o restaurar.tar` | `RESTAURACIÓN VERIFICADA` |
-| 5 | laptop | `scp restaurar.tar santiago@jerico-oracle:/tmp/` y `shred -u restaurar.tar` | — |
-| 6 | VM | `SKIP_PRE_RESTORE=1 CONFIRM=1 /opt/jerico/app/scripts/servidor/restore_crm.sh apply /tmp/restaurar.tar` y después `shred -u /tmp/restaurar.tar` | termina con `healthy` |
+| 4 | laptop | Con `umask 077`: `scp` del backup a `~/jerico-backups-copia` (700), `restore_crm.sh verify ...` (anota los leads y archivos) y `age -d ... -o restaurar.tar` | `RESTAURACIÓN VERIFICADA` |
+| 5 | laptop | `ssh santiago@jerico-oracle 'install -d -m 700 ~/jerico-restaurar'`, `scp -p restaurar.tar santiago@jerico-oracle:jerico-restaurar/` y `shred -u restaurar.tar` | — |
+| 6 | VM | `SKIP_PRE_RESTORE=1 CONFIRM=1 /opt/jerico/app/scripts/servidor/restore_crm.sh apply ~/jerico-restaurar/restaurar.tar` y después `shred -u ~/jerico-restaurar/restaurar.tar` | termina con `healthy` |
 | 7 | VM | `docker logs --tail 25 jerico-crm`; escribe al bot | responde; los leads coinciden con el paso 4 |
 | 8 | VM | Instala el cron de backup y del vigía (`deploy/servidor/crontab.example` con las rutas de `/opt/jerico/app`) y prueba `notify_cto.sh` | llega el aviso |
 
@@ -87,4 +87,4 @@ docker image inspect jerico-crm:0.2.0 -f '{{.Architecture}}'   # arm64
 - Actualiza `docs/despliegue-servidor-kaisen.md` (servidor → VM) y la nota de Jericó en la bóveda.
 
 ---
-> 🕒 **Última modificación:** 13/10/2026 10:26 (Claude Code · Opus 5.5)
+> 🕒 **Última modificación:** 13/10/2026 10:34 (Claude Code · Opus 5.5)

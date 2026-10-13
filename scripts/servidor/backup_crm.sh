@@ -6,8 +6,8 @@
 #      del contenedor vivo (crm_volume.py pack), más el resto del volumen.
 #   2. El tar sale por una tubería directo a `age -R`: nunca queda en disco sin cifrar.
 #   3. Comprueba la cabecera age, renombra de forma atómica y aplica 600/700.
-#   4. Retención por la fecha del nombre (RETENTION_DAYS, máx. 30); siempre se
-#      conserva el más reciente.
+#   4. Retención por la fecha del nombre (RETENTION_DAYS, máx. 30), también de las
+#      copias pre-restore-*; siempre se conserva el backup recién hecho.
 #   Si falla, avisa al CTO (notify_cto.sh) y sale con código != 0.
 #
 # Uso: backup_crm.sh   (cron diario; configuración en BACKUP_CONFIG, sin secretos)
@@ -41,6 +41,9 @@ fail() {
     exit 1
 }
 
+set -E
+trap 'fail "error inesperado en la línea $LINENO de backup_crm.sh."' ERR
+
 case "$RETENTION_DAYS" in
     '' | *[!0-9]*) fail "RETENTION_DAYS debe ser un número entero de días (vale '$RETENTION_DAYS')." ;;
 esac
@@ -61,6 +64,7 @@ if ! flock -n 9; then
     exit 1
 fi
 
+docker info > /dev/null 2>&1 || fail "Docker no responde en $(hostname)."
 state="$(container_state "$CONTAINER")" || fail "el contenedor $CONTAINER no existe."
 code="$(cat "$HERE/crm_volume.py")"
 if [ "${state%% *}" = "running" ]; then
@@ -85,14 +89,18 @@ mv "$partial" "$BACKUP_DIR/$name"
 chmod 600 "$BACKUP_DIR/$name"
 echo "[OK] Backup $BACKUP_DIR/$name ($(du -h "$BACKUP_DIR/$name" | cut -f1))."
 
-# Retención: los nombres llevan la fecha UTC, así que se comparan como texto.
-cutoff="crm-$(date -u -d "-$RETENTION_DAYS days" +%Y%m%dT%H%M%SZ).tar.age"
+# Retención (también de las copias pre-restore-*): los nombres llevan la fecha UTC,
+# así que se comparan como texto.
+cutoff_stamp="$(date -u -d "-$RETENTION_DAYS days" +%Y%m%dT%H%M%SZ)"
 removed=0
-for file in "$BACKUP_DIR"/crm-????????T??????Z.tar.age; do
-    base="$(basename "$file")"
-    if [ "$base" != "$name" ] && [[ "$base" < "$cutoff" ]]; then
-        rm -f "$file"
-        removed=$((removed + 1))
-    fi
+for prefix in crm pre-restore; do
+    for file in "$BACKUP_DIR/$prefix"-????????T??????Z.tar.age; do
+        [ -e "$file" ] || continue
+        base="$(basename "$file")"
+        if [ "$base" != "$name" ] && [[ "$base" < "$prefix-$cutoff_stamp.tar.age" ]]; then
+            rm -f "$file"
+            removed=$((removed + 1))
+        fi
+    done
 done
 echo "[OK] Retención de $RETENTION_DAYS días: $removed backup(s) antiguos borrados."

@@ -11,6 +11,7 @@ Solo biblioteca estándar (Python con el filtro `data` de tarfile, PEP 706). Se 
 
 pack   → tar por stdout: instantánea consistente de crm.db (API de backup de SQLite) +
          el resto del volumen, sin heartbeat ni -wal/-shm. Nunca deja copias en disco.
+pack-raw → el volumen tal cual (sin heartbeat), sin comprobar la base: copia previa a restaurar.
 unpack → vacía el directorio y extrae el tar de stdin (filtro "data": sin rutas absolutas ni ..).
 verify → integrity_check + tablas básicas + recuento de archivos.
 """
@@ -83,6 +84,20 @@ def pack(data_dir: Path) -> None:
         shutil.rmtree(work, ignore_errors=True)
 
 
+def pack_raw(data_dir: Path) -> None:
+    """Copia tal cual (sin comprobar la base) para el pre-restore con el contenedor DETENIDO:
+    debe funcionar justo cuando crm.db está corrupta, que es cuando más se restaura."""
+    if not data_dir.is_dir():
+        _fail(f"no existe el directorio {data_dir}")
+
+    def skip(info: tarfile.TarInfo) -> tarfile.TarInfo | None:
+        name = info.name.removeprefix("./")
+        return None if name == "heartbeat" or name.startswith(".jerico-unpack") else info
+
+    with tarfile.open(fileobj=sys.stdout.buffer, mode="w|") as tar:
+        tar.add(data_dir, arcname=".", filter=skip)
+
+
 def unpack(data_dir: Path) -> None:
     if not data_dir.is_dir():
         _fail(f"no existe el directorio {data_dir}")
@@ -137,9 +152,9 @@ def verify(archive: Path) -> None:
 def main(argv: list[str]) -> None:
     if not hasattr(tarfile, "data_filter"):  # PEP 706: 3.12+, y 3.8.17/3.9.17/3.10.12/3.11.4+
         _fail("este Python no tiene el filtro 'data' de tarfile (PEP 706); actualízalo")
-    commands = {"pack": pack, "unpack": unpack, "verify": verify}
+    commands = {"pack": pack, "pack-raw": pack_raw, "unpack": unpack, "verify": verify}
     if len(argv) != 2 or argv[0] not in commands:
-        _fail("uso: crm_volume.py pack|unpack <directorio> | verify <archivo.tar>")
+        _fail("uso: crm_volume.py pack|pack-raw|unpack <directorio> | verify <archivo.tar>")
     commands[argv[0]](Path(argv[1]))
 
 

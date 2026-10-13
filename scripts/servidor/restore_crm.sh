@@ -90,7 +90,7 @@ case "$mode" in
         if [ "${SKIP_PRE_RESTORE:-0}" != "1" ]; then
             mkdir -p "$BACKUP_DIR"
             pre="$BACKUP_DIR/pre-restore-$(date -u +%Y%m%dT%H%M%SZ).tar.age"
-            if ! volume_python pack | age -R "$AGE_RECIPIENTS_FILE" -o "$pre" || ! is_age_file "$pre"; then
+            if ! volume_python pack-raw | age -R "$AGE_RECIPIENTS_FILE" -o "$pre" || ! is_age_file "$pre"; then
                 rm -f "$pre"
                 docker start "$CONTAINER" > /dev/null
                 die "no se pudo guardar el estado actual; no se restauró nada y $CONTAINER volvió a arrancar."

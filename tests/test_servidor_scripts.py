@@ -45,6 +45,8 @@ def run_python(py_args, mount):
     sys.exit(subprocess.run([sys.executable, *mapped]).returncode)
 
 cmd = args[0]
+if cmd == "info":
+    sys.exit(int(os.environ.get("FAKE_INFO_EXIT", "0")))
 if cmd == "inspect":
     if status() is None:
         print("Error: No such object: jerico-crm", file=sys.stderr); sys.exit(1)
@@ -56,6 +58,8 @@ elif cmd == "exec":
     i = args.index("python")
     run_python(args[i + 1:], "/app/crm-data")
 elif cmd == "run":
+    if set(args) & set(os.environ.get("FAKE_RUN_FAIL", "").split(",")):
+        print("docker falso: fallo forzado", file=sys.stderr); sys.exit(1)
     spec = args[args.index("-v") + 1]
     i = args.index("python")
     run_python(args[i + 1:], spec.split(":", 1)[1])
@@ -367,6 +371,17 @@ def test_notify_falls_back_to_smtp(env: Env) -> None:
     assert "To: cto@example.com" in body and "fallo X" in body
 
 
+def test_notify_env_inline_comment_and_quotes(env: Env) -> None:
+    env.env_file.write_text(
+        f'JERICO_CRM_TELEGRAM_BOT_TOKEN="{TOKEN}"  # bot de ventas\n'
+        "JERICO_CRM_SEED_CTO_TELEGRAM_ID=4242 # CTO\n"
+    )
+    assert env.run("notify_cto.sh", "x").returncode == 0
+    (call,) = env.curl_calls()
+    assert f"bot{TOKEN}/sendMessage" in call["stdin"]  # type: ignore[operator]
+    assert "chat_id=4242" in call["argv"]  # type: ignore[operator]
+
+
 def test_notify_fails_when_every_channel_fails(env: Env) -> None:
     result = env.run("notify_cto.sh", "x", FAKE_CURL_FAIL="telegram,smtp")
     assert result.returncode != 0
@@ -468,6 +483,24 @@ def test_backup_retention(
     assert len(_backups(env)) == 2
 
 
+def test_backup_retention_includes_pre_restore(env: Env, live_db: sqlite3.Connection) -> None:
+    env.backup_dir.mkdir(mode=0o700)
+    old = env.backup_dir / _stamp(20).replace("crm-", "pre-restore-")
+    recent = env.backup_dir / _stamp(1).replace("crm-", "pre-restore-")
+    for path in (old, recent):
+        path.write_bytes(AGE_HEADER)
+    assert env.run("backup_crm.sh").returncode == 0
+    assert not old.exists() and recent.exists()
+
+
+def test_backup_unexpected_error_notifies(env: Env, live_db: sqlite3.Connection) -> None:
+    env.backup_dir.mkdir(mode=0o700)
+    (env.backup_dir / ".lock").mkdir()  # no se puede abrir el lock: error inesperado
+    result = env.run("backup_crm.sh")
+    assert result.returncode != 0
+    assert any("backup" in n.lower() for n in env.notices())
+
+
 def test_backup_single_instance(env: Env, live_db: sqlite3.Connection) -> None:
     env.backup_dir.mkdir(mode=0o700)
     lock = env.backup_dir / ".lock"
@@ -531,6 +564,68 @@ def test_restore_apply_replaces_volume(env: Env, live_db: sqlite3.Connection) ->
     restored.close()
     (pre,) = env.backup_dir.glob("pre-restore-*.tar.age")
     assert pre.read_bytes().startswith(AGE_HEADER)
+
+
+def test_restore_apply_pre_restore_keeps_corrupt_db(env: Env, live_db: sqlite3.Connection) -> None:
+    archive = _make_backup(env)
+    live_db.close()
+    (env.volume / "crm.db").write_bytes(b"base corrupta")  # el motivo típico de restaurar
+    result = env.run("restore_crm.sh", "apply", str(archive), str(env.identity), CONFIRM="1")
+    assert result.returncode == 0, result.stderr + result.stdout
+    (pre,) = env.backup_dir.glob("pre-restore-*.tar.age")
+    plain = env.tmp / "pre.tar"
+    plain.write_bytes(pre.read_bytes()[len(AGE_HEADER) :])
+    with tarfile.open(plain) as tar:
+        assert tar.extractfile("./crm.db").read() == b"base corrupta"  # type: ignore[union-attr]
+
+
+def test_restore_apply_aborts_if_pre_restore_fails(env: Env, live_db: sqlite3.Connection) -> None:
+    archive = _make_backup(env)
+    live_db.execute("INSERT INTO crm_leads (name) VALUES ('no se pierde')")
+    live_db.commit()
+    result = env.run(
+        "restore_crm.sh",
+        "apply",
+        str(archive),
+        str(env.identity),
+        CONFIRM="1",
+        FAKE_RUN_FAIL="pack-raw",
+    )
+    assert result.returncode != 0
+    assert env.docker_calls()[-1].startswith("start jerico-crm")  # vuelve a arrancar
+    count = live_db.execute("SELECT count(*) FROM crm_leads").fetchone()
+    assert count == (3,)  # el volumen no se tocó
+    assert list(env.backup_dir.glob("pre-restore-*")) == []
+
+
+def test_restore_apply_reports_failed_unpack(env: Env, live_db: sqlite3.Connection) -> None:
+    archive = _make_backup(env)
+    result = env.run(
+        "restore_crm.sh",
+        "apply",
+        str(archive),
+        str(env.identity),
+        CONFIRM="1",
+        FAKE_RUN_FAIL="unpack",
+    )
+    assert result.returncode != 0
+    assert "pre-restore-" in result.stderr  # dice dónde está la copia previa
+    assert not any(c.startswith("start") for c in env.docker_calls())
+
+
+def test_restore_apply_health_timeout(env: Env, live_db: sqlite3.Connection) -> None:
+    archive = _make_backup(env)
+    result = env.run(
+        "restore_crm.sh",
+        "apply",
+        str(archive),
+        str(env.identity),
+        CONFIRM="1",
+        FAKE_START_STATUS="running unhealthy",
+        HEALTH_WAIT_S="0",
+    )
+    assert result.returncode != 0
+    assert "healthy" in result.stderr
 
 
 @pytest.mark.skipif(shutil.which("age") is None, reason="age real no instalado")

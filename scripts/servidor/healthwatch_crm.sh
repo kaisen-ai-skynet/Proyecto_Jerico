@@ -54,7 +54,9 @@ notify() {
     return 1
 }
 
-if state="$(container_state "$CONTAINER")"; then
+if ! docker info > /dev/null 2>&1; then
+    current="FAIL"; detail="Docker no responde"
+elif state="$(container_state "$CONTAINER")"; then
     case "$state" in
         "running healthy") current="OK" ;;
         "running starting") current="STARTING" ;;
