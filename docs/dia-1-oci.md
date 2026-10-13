@@ -3,7 +3,7 @@ tipo: checklist-operativa
 proyecto: Jericó — Kaisen AI
 estado: lista-para-ejecutar (nada ejecutado contra OCI)
 creado: "11/10/2026 20:20"
-modificado: "13/10/2026 00:29"
+modificado: "13/10/2026 00:37"
 ---
 
 # Día 1 — Oracle Cloud + laptop en una sola sesión
@@ -44,10 +44,17 @@ Instala age y **Docker**, crea la llave SSH y la llave age, comprueba Tailscale 
 
 ## Bloque 3 · Red y VM (30 min) — Partes C y D
 
-> **Estado 13/10/2026:** VCN **sin crear**. El permiso para crearla desde el navegador quedó bloqueado; el CTO decide cómo seguir (a mano en la consola o desbloqueando al orquestador).
+> 🚨 **PENDIENTE CRÍTICO — NO CREAR LA VM HASTA RESOLVERLO (13/10/2026)**
+> La Security List por defecto de `jerico-vcn` **sigue sin ajustar**: **TCP 22 abierto a `0.0.0.0/0`** (todo internet) y **sin la regla UDP 41641**. El orquestador no pudo cambiarla desde el navegador por falta de permisos.
+> Si se crea la VM así, su SSH queda expuesto a internet durante el bootstrap. Antes de crear la VM, el CTO (o el orquestador con el permiso desbloqueado) debe:
+> 1. Editar la regla TCP 22: *Source CIDR* `0.0.0.0/0` → **`<IP_PUBLICA_DEL_CTO>/32`** (`curl -4 ifconfig.me` en la laptop).
+> 2. Añadir la regla **UDP 41641** desde `0.0.0.0/0`.
+> 3. Comprobar que no hay reglas para 5432, 6379 u 8000. Tabla exacta: `docs/oci-valores-dia1.md` §2.1.
 
-- [ ] VCN `jerico-vcn` con el wizard; regla 22 solo desde tu IP `/32`; UDP 41641; nada en 5432/6379/8000 (tabla exacta en `docs/oci-valores-dia1.md`).
-- [ ] VM `jerico-core-oracle-01`: Ubuntu 24.04 aarch64, A1.Flex **2 OCPU / 12 GB**, 100 GB Balanced, llave SSH pública pegada, etiqueta *Always Free-eligible* visible.
+
+- [x] VCN `jerico-vcn` creada con el wizard en `kaisen-jerico`: `10.0.0.0/16`, subred pública `10.0.0.0/24`, privada `10.0.1.0/24`, sin IPv6 (orquestador, 13/10/2026).
+- [ ] 🚨 **Security List ajustada** (bloquea la VM): regla 22 solo desde tu IP `/32` (hoy está abierta a `0.0.0.0/0`), regla UDP 41641 añadida (hoy no existe) y nada en 5432/6379/8000.
+- [ ] VM `jerico-core-oracle-01` (**solo después de la casilla anterior**): Ubuntu 24.04 aarch64, A1.Flex **2 OCPU / 12 GB**, 100 GB Balanced, llave SSH pública pegada, etiqueta *Always Free-eligible* visible.
 - [ ] `RUNNING` e IP pública anotada. *Si sale "Out of host capacity": Plan B de la Parte D (Cloud Shell + `00_retry_launch_a1.sh`) y sigue con el bloque 6 mientras reintenta.*
 
 ## Bloque 4 · VM segura (40 min) — Partes E, F y G
@@ -96,4 +103,4 @@ La prueba de humo del bloque 1 no usa secretos. Para ver el bot funcionando de v
 - [ ] **No dejar la VM ociosa muchos días:** el siguiente paso es desplegar Jericó (runbook §3). Oracle puede recuperar VMs gratis que pasan 7 días casi sin uso.
 
 ---
-> 🕒 **Última modificación:** 13/10/2026 00:29 (Claude Code · Opus 5.5)
+> 🕒 **Última modificación:** 13/10/2026 00:37 (Claude Code · Opus 5.5)
