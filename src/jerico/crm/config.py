@@ -13,7 +13,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class CrmSettings(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="JERICO_CRM_", env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_prefix="JERICO_CRM_", env_file=".env", extra="ignore", env_ignore_empty=True
+    )
 
     # Secretos: sin valor por defecto; `app.py` exige token y clave al arrancar.
     telegram_bot_token: SecretStr | None = None

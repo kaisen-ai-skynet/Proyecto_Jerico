@@ -399,3 +399,20 @@ def test_vcrm148_version_del_aviso_del_paquete_coincide_con_la_configuracion() -
     assert notice is not None
     assert f"Versión {settings.privacy_notice_version}" in notice
     assert "Ley 1581 de 2012" in notice and "BAJA" in notice
+
+
+def test_env_example_loads_with_empty_values(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Un `.env` copiado de `.env.example` (valores vacíos) no rompe la validación."""
+    from jerico.crm.config import CrmSettings
+
+    for name in list(os.environ):
+        if name.startswith("JERICO_CRM_"):
+            monkeypatch.delenv(name)
+    env_file = tmp_path / ".env"
+    env_file.write_text(Path(".env.example").read_text(encoding="utf-8"), encoding="utf-8")
+    settings = CrmSettings(_env_file=env_file)  # type: ignore[call-arg]
+    assert settings.smtp_port is None
+    assert settings.smtp_security is None
+    assert settings.imap_port == 993
