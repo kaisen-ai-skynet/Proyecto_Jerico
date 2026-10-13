@@ -26,6 +26,16 @@ REPO_ROOT="$(git -C "$(dirname "$0")" rev-parse --show-toplevel)"
 SSH_KEY="$HOME/.ssh/id_ed25519_kaisen"
 AGE_KEY="$HOME/.config/kaisen/jerico-backup.agekey"
 
+# Ejecuta docker directo si el usuario ya tiene acceso al daemon; si no (grupo
+# docker recién añadido, sin re-login), con sudo. No depende de `sg`.
+docker_run() {
+    if docker info >/dev/null 2>&1; then
+        docker "$@"
+    else
+        sudo docker "$@"
+    fi
+}
+
 # 1. Paquetes
 info "1/6 Paquetes base..."
 sudo apt-get update -qq
@@ -70,9 +80,10 @@ if [ "${SKIP_DOCKER:-0}" != "1" ]; then
     sudo systemctl enable --now docker
     if ! id -nG "$USER" | grep -qw docker; then
         sudo usermod -aG docker "$USER"
-        warn "Te añadí al grupo docker; en terminales nuevas no hará falta sudo (aquí uso 'sg docker')."
+        warn "Te añadí al grupo docker; en terminales nuevas no hará falta sudo (en esta sesión uso 'sudo docker')."
     fi
-    sg docker -c "docker run --rm hello-world" >/dev/null && ok "Docker funciona (hello-world)."
+    docker_run run --rm hello-world >/dev/null || fail "Docker no pudo correr hello-world."
+    ok "Docker funciona (hello-world)."
 else
     warn "4/6 Docker omitido (SKIP_DOCKER=1)."
 fi
@@ -89,12 +100,12 @@ fi
 if [ "${SKIP_CRM:-0}" != "1" ] && command -v docker >/dev/null; then
     info "6/6 Construyendo la imagen jerico-crm (puede tardar unos minutos)..."
     cd "$REPO_ROOT"
-    sg docker -c "docker build -q --build-arg EXTRAS=crm --build-arg CRM_TOOLS=1 -t jerico-crm:0.2.0 ." >/dev/null
+    docker_run build -q --build-arg EXTRAS=crm --build-arg CRM_TOOLS=1 -t jerico-crm:0.2.0 . >/dev/null
     ok "Imagen jerico-crm:0.2.0 construida."
     # Sin token ni clave HMAC, jerico-crm debe negarse a arrancar con código 2
     # (contrato de spec 001). Prueba que la imagen y el entrypoint están bien sin usar secretos.
     set +e
-    out="$(sg docker -c "docker run --rm --env-file /dev/null jerico-crm:0.2.0 jerico-crm" 2>&1)"
+    out="$(docker_run run --rm --env-file /dev/null jerico-crm:0.2.0 jerico-crm 2>&1)"
     code=$?
     set -e
     if [ "$code" -eq 2 ]; then
