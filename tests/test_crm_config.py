@@ -416,3 +416,39 @@ def test_env_example_loads_with_empty_values(
     assert settings.smtp_port is None
     assert settings.smtp_security is None
     assert settings.imap_port == 993
+
+
+def test_vcrma35_starts_with_openai_variables_present(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Las `OPENAI_*` del servidor (sin prefijo) se leen sin romper nada; el flag sigue apagado."""
+    from jerico.crm.config import CrmSettings
+
+    for name in list(os.environ):
+        if name.startswith(("JERICO_CRM_", "OPENAI_")):
+            monkeypatch.delenv(name)
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-fake")
+    monkeypatch.setenv("OPENAI_MODEL", "gpt-6-luna")
+    monkeypatch.setenv("OPENAI_REASONING_EFFORT", "low")
+    settings = CrmSettings(_env_file=None)  # type: ignore[call-arg]
+    assert settings.assistant_enabled is False
+    assert settings.openai_model == "gpt-6-luna"
+    assert settings.openai_reasoning_effort == "low"
+    assert settings.openai_api_key is not None
+    assert "sk-fake" not in repr(settings)  # VCRM-A34
+    assert settings.assistant_daily_token_cap == 60_000
+
+
+def test_vcrma35_empty_or_unknown_openai_values_do_not_break(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from jerico.crm.config import CrmSettings
+
+    for name in list(os.environ):
+        if name.startswith(("JERICO_CRM_", "OPENAI_")):
+            monkeypatch.delenv(name)
+    monkeypatch.setenv("OPENAI_API_KEY", "")
+    monkeypatch.setenv("OPENAI_REASONING_EFFORT", "turbo")
+    settings = CrmSettings(_env_file=None)  # type: ignore[call-arg]
+    assert settings.openai_api_key is None
+    assert settings.openai_reasoning_effort == "low"

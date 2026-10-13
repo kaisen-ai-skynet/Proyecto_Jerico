@@ -8,7 +8,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Literal
 
-from pydantic import SecretStr
+from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -47,6 +47,27 @@ class CrmSettings(BaseSettings):
     backup_retention_days: int = 30
     outbox_interval_s: float = 5.0
     poll_timeout_s: int = 25
+
+    # --- Asistente comercial con LLM (spec-asistente.md) ---
+    # Apagado por defecto. Las variables OPENAI_* no llevan el prefijo del CRM (VCRM-A35).
+    assistant_enabled: bool = False
+    openai_api_key: SecretStr | None = Field(default=None, validation_alias="OPENAI_API_KEY")
+    openai_model: str = Field(default="gpt-6-luna", validation_alias="OPENAI_MODEL")
+    openai_reasoning_effort: str = Field(default="low", validation_alias="OPENAI_REASONING_EFFORT")
+    assistant_max_output_tokens: int = 600  # se acota a [50, 2000] al usarlo (VCRM-A20)
+    assistant_include_notes: bool = False  # notas libres: apagadas por minimización (VCRM-A11)
+    assistant_daily_token_cap: int = 60_000
+    assistant_daily_cost_cap_usd: float | None = None  # exige tarifas (VCRM-A24)
+    assistant_user_daily_calls: int = 20
+    assistant_price_in_per_mtok: float | None = None
+    assistant_price_out_per_mtok: float | None = None
+
+    @field_validator("openai_reasoning_effort", mode="after")
+    @classmethod
+    def _effort_or_low(cls, value: str) -> str:
+        """Un valor desconocido en el `.env` no tumba el arranque: vuelve al más barato."""
+        value = value.strip().lower()
+        return value if value in {"minimal", "low", "medium", "high"} else "low"
 
     # Festivos extraordinarios: fechas ISO y/o rutas de archivo separadas por comas (VCRM-167).
     extra_holidays: str = ""
