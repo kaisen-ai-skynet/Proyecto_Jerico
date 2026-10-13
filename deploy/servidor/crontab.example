@@ -1,0 +1,13 @@
+# Jericó CRM en kaisen-server (spec 002). Instalar como usuario kaisenai:
+#   crontab -l > /tmp/cron.actual        # copia de lo que hay (vigía de Hermes, Seguros Bolívar...)
+#   cat /tmp/cron.actual ~/jerico/deploy/servidor/crontab.example | crontab -
+#   crontab -l | tail -n 6               # comprobar
+# Las rutas suponen el repo en ~/jerico (runbook, paso 0). cron no carga el perfil:
+# las variables se fijan aquí.
+SHELL=/bin/bash
+PATH=/usr/local/bin:/usr/bin:/bin
+
+# Backup cifrado diario a las 03:45 (el de Seguros Bolívar corre a las 03:30)
+45 3 * * * BACKUP_CONFIG=$HOME/.config/jerico/backup-crm.env $HOME/jerico/scripts/servidor/backup_crm.sh >> $HOME/jerico-backups/backup-crm.log 2>&1
+# Vigía de salud cada 5 minutos (solo escribe si hay aviso o error)
+*/5 * * * * ENV_FILE=$HOME/jerico/.env $HOME/jerico/scripts/servidor/healthwatch_crm.sh >> $HOME/.local/state/jerico/healthwatch.log 2>&1
