@@ -3,7 +3,7 @@ tipo: checklist-operativa
 proyecto: Jericó — Kaisen AI
 estado: lista-para-ejecutar (nada ejecutado contra OCI)
 creado: "11/10/2026 20:20"
-modificado: "11/10/2026 20:20"
+modificado: "13/10/2026 00:30"
 ---
 
 # Día 1 — Oracle Cloud + laptop en una sola sesión
@@ -34,14 +34,16 @@ Instala age y **Docker**, crea la llave SSH y la llave age, comprueba Tailscale 
 
 ## Bloque 2 · Cuenta Oracle (30 min + espera) — Parte B
 
-- [ ] Registro en oracle.com/cloud/free con el correo de empresa y **home region Bogotá** (irreversible: revisa dos veces).
-- [ ] Correo "fully provisioned" recibido. *Si tarda, salta al bloque 6 (CRM) y vuelve después.*
-- [ ] MFA activado · alerta de presupuesto de **1 USD** · compartment `kaisen-jerico` (OCID anotado).
+- [x] Cuenta creada: tenancy `kaisen_cloud`, **home region Bogotá** (20/09/2026; verificado el 13/10/2026).
+- [ ] ⚠️ La cuenta está en **periodo de prueba** (fin aprox. ~20/10/2026): la consola deja crear recursos de pago sin avisar y, al acabar la prueba, lo que no sea Always Free se detiene y se elimina. **Crea solo lo de `docs/oci-valores-dia1.md`** y no pulses "Upgrade". Detalle: guía, sección "Estado real de la cuenta y periodo de prueba".
+- [ ] MFA activado · alerta de presupuesto de **1 USD** sobre el compartment raíz · compartment `kaisen-jerico` (OCID anotado).
+
+> **Reparto acordado:** el orquestador (Claude en Chrome) crea en la consola el presupuesto, el compartment, la VCN y, cuando exista la llave SSH del bloque 1, la VM. Tú aprobarás cada paso; **la llave SSH y la llave age las creas tú** con `dia1_laptop.sh`. Ningún agente las crea ni las lee.
 
 ## Bloque 3 · Red y VM (30 min) — Partes C y D
 
-- [ ] VCN `jerico-vcn` con el wizard; regla 22 solo desde tu IP `/32`; UDP 41641; nada en 5432/6379/8000.
-- [ ] VM `jerico-core-oracle-01`: Ubuntu 24.04 aarch64, A1.Flex **2 OCPU / 12 GB**, 100 GB, llave SSH pública pegada.
+- [ ] VCN `jerico-vcn` con el wizard; regla 22 solo desde tu IP `/32`; UDP 41641; nada en 5432/6379/8000 (tabla exacta en `docs/oci-valores-dia1.md`).
+- [ ] VM `jerico-core-oracle-01`: Ubuntu 24.04 aarch64, A1.Flex **2 OCPU / 12 GB**, 100 GB Balanced, llave SSH pública pegada, etiqueta *Always Free-eligible* visible.
 - [ ] `RUNNING` e IP pública anotada. *Si sale "Out of host capacity": Plan B de la Parte D (Cloud Shell + `00_retry_launch_a1.sh`) y sigue con el bloque 6 mientras reintenta.*
 
 ## Bloque 4 · VM segura (40 min) — Partes E, F y G
@@ -90,4 +92,4 @@ La prueba de humo del bloque 1 no usa secretos. Para ver el bot funcionando de v
 - [ ] **No dejar la VM ociosa muchos días:** el siguiente paso es desplegar Jericó (runbook §3). Oracle puede recuperar VMs gratis que pasan 7 días casi sin uso.
 
 ---
-> 🕒 **Última modificación:** 11/10/2026 20:20 (Claude Code · Opus 5.5)
+> 🕒 **Última modificación:** 13/10/2026 00:30 (Claude Code · Opus 5.5)

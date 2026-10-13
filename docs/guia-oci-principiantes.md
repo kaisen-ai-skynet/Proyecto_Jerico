@@ -3,7 +3,7 @@ tipo: guia-operativa
 proyecto: Jericó — Kaisen AI
 estado: lista-para-ejecutar (nada ejecutado contra OCI)
 creado: "11/10/2026 17:50"
-modificado: "11/10/2026 20:25"
+modificado: "13/10/2026 00:30"
 ---
 
 # Guía OCI para principiantes — preparar Oracle Cloud para Jericó
@@ -19,13 +19,34 @@ modificado: "11/10/2026 20:25"
 
 ---
 
-## ⚠️ Antes de empezar: 5 reglas de oro
+## ⚠️ Antes de empezar: 6 reglas de oro
 
 1. **La región no se cambia nunca.** Al crear la cuenta eliges Bogotá y queda así para siempre. Revísalo dos veces.
 2. **Una sola cuenta.** Oracle prohíbe tener varias cuentas gratis; si te equivocas, no crees otra: escribe a soporte.
 3. **Nada que diga "cobro".** Si la consola muestra un costo distinto de $0 o falta la etiqueta *Always Free-eligible*, detente.
 4. **La VM es de 2 OCPU / 12 GB, no de 4 / 24.** Oracle redujo el Always Free ARM el 21/07/2026 (de 4 OCPU / 24 GB a 2 OCPU / 12 GB). En una cuenta gratis pura, una VM de 4/24 la **detiene Oracle** hasta que la reduzcas. Si algún documento viejo dice 4/24, ignóralo.
 5. **Nunca se abren a internet los puertos 5432 (Postgres), 6379 (Redis) ni 8000 (API).** Todo pasa por Tailscale.
+6. **Periodo de prueba ≠ gratis para todo.** Mientras la cuenta esté en prueba, la consola acepta recursos de pago sin avisar. Ver la sección siguiente.
+
+## 🧪 Estado real de la cuenta y periodo de prueba (verificado por el CTO el 13/10/2026)
+
+| Dato | Valor |
+|---|---|
+| Tenancy | `kaisen_cloud` (creada el 20/09/2026) |
+| Home region | `sa-bogota-1` ✅ (ya fijada) |
+| Tipo de cuenta | **Periodo de prueba (Free Trial)**: créditos de prueba durante ~30 días. Fin aproximado: **~20/10/2026**; la fecha exacta está en *Billing & Cost Management*. |
+| Recursos | Compartment raíz vacío; sin VCN, sin instancias, sin presupuestos |
+
+**Qué cambia por estar en prueba (léelo antes de crear nada):**
+
+1. **La consola te deja crear recursos de pago.** Durante la prueba, Oracle descuenta de los créditos cualquier recurso, aunque no sea Always Free, **sin pedir confirmación de cobro**. Shapes más grandes, discos de más de 200 GB, rendimiento *Higher Performance* o bases de datos no gratuitas se crean sin ninguna advertencia.
+2. **Al terminar la prueba, lo que no sea Always Free se detiene y después se elimina** (salvo que la cuenta pase a pago, cosa que descartó el CTO). Si la VM se crea con más de 2 OCPU / 12 GB "porque la consola lo permitió", **la perderás o tendrás que reducirla** al acabar la prueba.
+3. **Regla práctica:** crea **solo** los valores de `docs/oci-valores-dia1.md`. En cada pantalla de creación, busca la etiqueta **Always Free-eligible**. Si no aparece, **no** crees el recurso.
+4. **No pulses "Upgrade" ni "Pay As You Go"** en los avisos de la prueba. La cuenta pasa sola a Always Free al terminar y conserva los recursos Always Free.
+5. **Presupuesto igualmente:** la alerta de 1 USD también salta con el gasto que cubren los créditos, así que avisa si algo de pago se crea por error durante la prueba.
+6. **Después del fin de la prueba** (~20/10): entra a la consola y comprueba que la VM sigue `RUNNING` y que el costo del mes es $0.
+
+---
 
 ### Glosario mínimo
 
@@ -85,6 +106,8 @@ age-keygen -y ~/.config/kaisen/jerico-backup.agekey    # imprime la PÚBLICA: ag
 
 ## Parte B — Crear la cuenta (30 min + espera de activación)
 
+> **Estado 13/10/2026:** pasos 1–4 **ya hechos** (tenancy `kaisen_cloud`, Bogotá, en periodo de prueba). Queda el paso 5: MFA, presupuesto y compartment. Valores exactos: `docs/oci-valores-dia1.md`.
+
 1. Abre **oracle.com/cloud/free** → *Start for free*.
 2. Datos:
    - **Correo:** `kaisen.ai.santiago.cto@gmail.com` (empresa, no personal).
@@ -95,7 +118,7 @@ age-keygen -y ~/.config/kaisen/jerico-backup.agekey    # imprime la PÚBLICA: ag
 4. Espera el correo **"Your Oracle Cloud account is fully provisioned"**. Hasta entonces muchas pantallas fallan: es normal.
 5. Ya dentro de la consola (cloud.oracle.com):
    - **MFA:** perfil (arriba a la derecha) → *My profile* → *Security* / *Multi-factor authentication* → activar con una app (Google Authenticator, 1Password...).
-   - **Alerta de presupuesto:** menú ☰ → *Billing & Cost Management* → *Budgets* → *Create Budget* → monto **1 USD**, alerta al 100 % al correo de empresa.
+   - **Alerta de presupuesto:** menú ☰ → *Billing & Cost Management* → *Budgets* → *Create Budget* → objetivo: compartment **raíz** (toda la tenancy), monto **1 USD**, alerta al 100 % del gasto real al correo de empresa.
    - **Compartment:** ☰ → *Identity & Security* → *Compartments* → *Create* → nombre `kaisen-jerico`. Copia su **OCID** a un bloc de notas.
 
 ✅ **Listo cuando:** puedes entrar con MFA, la alerta de $1 existe y ves el compartment `kaisen-jerico`.
@@ -310,4 +333,4 @@ Oracle puede **recuperar** VMs Always Free que en 7 días tengan a la vez CPU, r
 - **No probado todavía:** ninguna ejecución real en una VM ni en Cloud Shell, ni `docker compose config` del override de producción (no había Docker en la laptop de revisión). El primer uso real es el Día 1.
 
 ---
-> 🕒 **Última modificación:** 11/10/2026 20:25 (Claude Code · Opus 5.5)
+> 🕒 **Última modificación:** 13/10/2026 00:30 (Claude Code · Opus 5.5)
