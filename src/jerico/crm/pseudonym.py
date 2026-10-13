@@ -11,12 +11,15 @@ from dataclasses import dataclass
 from jerico.crm.model import Lead
 
 _MARKER = re.compile(r"(\[[A-Z_]+\])")
-_URL = re.compile(r"(?i)\b(?:https?://|www\.)\S+")
+_URL = re.compile(r"(?i)\b(?:https?://|www\.)\S+|\b[\w-]+(?:\.[\w-]+)+/\S*")
 _EMAIL = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+")
 _NUMBERISH = re.compile(r"\+?\(?\d[\d\s().\-/]{4,}\d")
 _DATE = re.compile(r"\d{1,4}[-/]\d{1,2}[-/]\d{1,4}")
 _MIN_PART = 3  # las partes de nombre más cortas no se tratan como identificadores aislados
 _MIN_COMPANY_PART = 4
+_SUBSTRING_PART = (
+    5  # partes largas se sustituyen también pegadas a otras letras (camelCase, sufijos)
+)
 _LEGAL_SUFFIXES = frozenset({"ltda", "sas", "s.a.s", "cia", "eirl"})
 _MIN_DIGITS = 6
 
@@ -74,7 +77,11 @@ class Redactor:
         ]
         values = tuple(
             sorted(
-                ((marker, value.strip()) for marker, value in pairs if value and value.strip()),
+                (
+                    (marker, unicodedata.normalize("NFC", value.strip()))
+                    for marker, value in pairs
+                    if value and value.strip()
+                ),
                 key=lambda pair: -len(pair[1]),
             )
         )
@@ -90,7 +97,7 @@ class Redactor:
 
     def scrub(self, text: str) -> str:
         """Texto sin datos personales conocidos ni patrones de contacto/identificación."""
-        segments = _MARKER.split(text)
+        segments = _MARKER.split(unicodedata.normalize("NFC", text))
         for index in range(0, len(segments), 2):  # los marcadores ya puestos no se tocan
             segments[index] = self._scrub_segment(segments[index])
         return "".join(segments)
@@ -99,7 +106,7 @@ class Redactor:
         for marker, value in self.values:
             text = _replace_value(text, value, marker, whole_word=False)
         for marker, word in self.parts:
-            text = _replace_value(text, word, marker, whole_word=True)
+            text = _replace_value(text, word, marker, whole_word=len(word) < _SUBSTRING_PART)
         text = _URL.sub("[ENLACE]", text)
         text = _EMAIL.sub("[CORREO_X]", text)
         return _NUMBERISH.sub(_numberish, text)
