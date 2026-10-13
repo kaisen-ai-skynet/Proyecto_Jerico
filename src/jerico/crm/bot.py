@@ -34,8 +34,8 @@ from jerico.crm.telegram import TelegramApiError
 
 logger = logging.getLogger(__name__)
 
-GENERIC_ERROR = "No se pudo procesar la solicitud. Intente de nuevo."
-UNKNOWN_COMMAND = "Orden no reconocida."
+GENERIC_ERROR = "No se pudo procesar tu solicitud. Por favor, intenta de nuevo en unos momentos."
+UNKNOWN_COMMAND = "Orden no reconocida. Revisa que el comando esté bien escrito."
 INVALID_BUTTON = "Botón no válido o caducado."
 ALREADY_PROCESSED = "Esta confirmación ya fue procesada."
 CANCELLED = "Operación cancelada."

@@ -209,10 +209,10 @@ def test_vcrm017_other_without_text_asks_text_and_does_not_transition(
     lead_id = _lead(db, users["com"], S.CONTACTED)
     run(bot, _cb(COM_TG, build_callback("motivo", str(lead_id), "otro")))
     assert _state(db, lead_id) == S.CONTACTED
-    assert "Escriba el motivo" in tg.sent[-1].text
+    assert "Escribe el motivo" in tg.sent[-1].text
     run(bot, _msg(COM_TG, "   "))
     assert _state(db, lead_id) == S.CONTACTED
-    assert "Escriba el motivo" in tg.sent[-1].text
+    assert "Escribe el motivo" in tg.sent[-1].text
     run(bot, _msg(COM_TG, "Se fue con un familiar"))
     with db.read() as conn:
         lead = repo.get_lead(conn, lead_id)
@@ -230,7 +230,7 @@ def test_vcrm017_direct_other_with_blank_text_sets_pending(
     lead_id = _lead(db, users["com"], S.NEW)
     out = _transition(db, users["com"], lead_id, S.REJECTED, reason="otro", reason_text="  ")
     assert _state(db, lead_id) == S.NEW
-    assert "Escriba el motivo" in out[0].text
+    assert "Escribe el motivo" in out[0].text
     with db.read() as conn:
         pending = repo.get_pending_input(conn, users["com"].id, NOW)
     assert pending is not None

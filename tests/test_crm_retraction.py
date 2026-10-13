@@ -233,7 +233,7 @@ def test_vcrm114_other_without_text_stays_accepted(
 ) -> None:
     lead_id = _lead(db, users["com"])
     _ask_confirmation(bot, tg, "com", lead_id, "Otro")
-    assert "Escriba el motivo de la retractación" in tg.sent[-1].text
+    assert "Escribe el motivo de la retractación" in tg.sent[-1].text
     run(bot, _msg(COM_TG, answer))
     lead = _get(db, lead_id)
     assert (lead.state, lead.rejection_is_retraction) == (S.ACCEPTED, 0)
