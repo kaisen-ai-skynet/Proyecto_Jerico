@@ -1,5 +1,5 @@
 ---
-modificado: "13/10/2026 10:27"
+modificado: "13/10/2026 22:15"
 ---
 
 # Tareas 002 — Captura en sombra del router (Jev P1)
@@ -57,12 +57,11 @@ VIRTUAL_ENV=/home/janty-mr/Kaisen_AI/01_Proyectos/Proyecto_Jerico/.venv ./script
 
 ## C. Almacenamiento
 
-- [ ] **T05 — Escritor de archivos diarios con retención**
-  - **Delegable a Gemini:** SÍ — pieza aislada con pruebas explícitas (el director revisa la concurrencia).
+- [ ] **T05 — Reutilizar el escritor compartido (`shadowlog`)**
+  - **Delegable a Gemini:** NO — es una dependencia entre specs: el escritor se construye una sola vez en la spec `006-jev-crm-consejero` (T01).
   - Requisitos: VRJ-003, VRJ-007, VRJ-008, VRJ-020, VRJ-024, VRJ-040.
-  - **Tests primero:** `tests/test_routing_shadow_jsonl.py`: una línea JSON por registro con `schema_version`; archivo `AAAA-MM-DD.jsonl` según el reloj inyectado; `purge` borra solo archivos más viejos que la retención (en el arranque y al cambiar de día); 20 hilos × 50 líneas sin líneas corruptas ni intercaladas; línea > 4 KB rechazada; falla de disco (directorio sin permiso) lanza `OSError`; **mediana de 100 escrituras reales en `tmp_path` < 5 ms**; el lector de prueba ignora una última línea incompleta.
-  - **Entregable exacto:** `routing_shadow/jsonl.py` (`DailyJsonlWriter` con `append` y `purge`).
-  - **Hecho cuando:** las pruebas pasan sin red y sin dormir tiempo real (reloj falso).
+  - **Entregable exacto:** ninguna pieza nueva de escritura; las pruebas de `tests/test_routing_shadow_jsonl.py` que ya cubre el escritor compartido se sustituyen por una prueba de integración: el registrador usa `DailyJsonlWriter`, una línea por registro, mediana de 100 escrituras reales en `tmp_path` < 5 ms y 20 hilos × 50 líneas sin líneas intercaladas.
+  - **Hecho cuando:** `shadowlog` existe (T01 de la spec 006 hecha) y las pruebas de integración pasan. **Si la spec 006 no se implementa, esta tarea vuelve a construir el escritor** como estaba descrito en la versión anterior de este plan.
 
 ## D. Registrador
 
@@ -160,4 +159,4 @@ VIRTUAL_ENV=/home/janty-mr/Kaisen_AI/01_Proyectos/Proyecto_Jerico/.venv ./script
 | VRJ-041 | T06, T09 |
 | VRJ-050 | T13 (y `verify.sh` en cada tarea) |
 
-> 🕒 **Última modificación:** 13/10/2026 10:27 (Agente Claude Code · Sonnet 5.5)
+> 🕒 **Última modificación:** 13/10/2026 22:15 (Agente Claude Code · Sonnet 5.5)

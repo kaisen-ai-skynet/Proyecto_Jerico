@@ -1,10 +1,10 @@
 ---
-modificado: "13/10/2026 10:27"
+modificado: "13/10/2026 22:15"
 ---
 
 # Spec 002 — Router de niveles L1/L2/L3 con Jev en modo sombra (P1)
 
-- **Estado:** **BORRADOR — pendiente de aprobación del CTO (Gate 1).** No se implementa nada hasta que el CTO apruebe esta spec.
+- **Estado:** **BORRADOR — EN ESPERA (13/10/2026).** El núcleo con el router no está desplegado y no hay tráfico; el Plan maestro dirige a Jev primero hacia el CRM desplegado (spec `006-jev-crm-consejero`). Esta spec se retoma cuando el núcleo se despliegue. No se implementa nada hasta que el CTO apruebe.
 - **Tipo de cambio:** funcionalidad nueva y acotada sobre el núcleo del agente (observación pasiva; no cambia el comportamiento del router).
 - **Fuente:** informe `Proyecto_Jerico_Implementacion_Jev` de la bóveda (caso P1, secciones 8 y 13); decisiones del CTO del 12/10/2026 (primer piloto D1+D2 en la herramienta de la flota; P1 para cuando Jericó esté desplegado; solo categorías y contadores; Jev solo puede pedir más revisión, nunca menos) y mensaje del orquestador del 13/10/2026 que autoriza redactar spec, plan y tareas de P1.
 - **Convención de marcas:** `(decisión CTO 12/10)` — decisión ya tomada por el CTO; `(propuesta)` — valor propuesto por el redactor, el CTO decide; `(supuesto)` — dato no verificado, a confirmar.
@@ -170,4 +170,4 @@ Son **criterios de negocio** para que el CTO decida, no requisitos verificables 
 | VRJ-006, VRJ-040, VRJ-041, VRJ-034 | Ley 1581: sin datos personales hacia el tercero; registro de cada decisión para auditar (lecciones 7 y 8). |
 | Sección 7 | Modo sombra, medir contra la línea base y calibrar la confianza (lecciones 2 y 3). |
 
-> 🕒 **Última modificación:** 13/10/2026 10:27 (Agente Claude Code · Sonnet 5.5)
+> 🕒 **Última modificación:** 13/10/2026 22:15 (Agente Claude Code · Sonnet 5.5)

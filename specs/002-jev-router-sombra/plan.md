@@ -1,5 +1,5 @@
 ---
-modificado: "13/10/2026 10:27"
+modificado: "13/10/2026 22:15"
 ---
 
 # Plan 002 — Captura en sombra del router (Jev P1)
@@ -39,7 +39,7 @@ Todo el código nuevo vive en un paquete nuevo y pequeño: `src/jerico/routing_s
 | `routing_shadow/__init__.py` | Reexporta `ShadowRecorder`, `InvalidShadowState`. | — |
 | `routing_shadow/state.py` | `SCHEMA_VERSION = 1`; topes por campo (`CAPS`); enumeraciones permitidas; `build_state(...)`; `validate_state(state)`; `InvalidShadowState`. | Pura |
 | `routing_shadow/lexicon.py` | `Lexicon` (dataclass inmutable: dinero, cliente_lead, contrato_legal); `Lexicon.from_settings`; `Lexicon.fingerprint()`; `lexicon_flags(text, lexicon)`; `has_code_block(text)`; `has_figures(text)`; `is_question(text)`. | Pura |
-| `routing_shadow/jsonl.py` | `DailyJsonlWriter(directory, prefix, retention_days, clock)` con `append(record)` y `purge()`. | Con efectos (disco), reloj inyectado |
+| `routing_shadow/jsonl.py` | **No se construye aquí:** se reutiliza el escritor `shadowlog` (`DailyJsonlWriter`) que construye la spec `006-jev-crm-consejero` (T01), para no duplicarlo. | — |
 | `routing_shadow/recorder.py` | `ShadowRecorder(enabled, writer, lexicon, clock, monotonic)`; `begin(...) -> TurnObservation \| None`; `TurnObservation.finish(outcome, usage, iterations, user_message_id)`; contadores `written`, `failed_writes`, `invalid_states`. | Con efectos |
 | `routing_shadow/review.py` | `load_review_items(directory, ids, n, seed)`; `ReviewItem`; `record_judgment(writer, item_ref, level, reviewer_role, now)`; `run_review(...)` (interacción con la persona). | Mixta |
 | `router.py` (modificación mínima) | Método nuevo `TokenRouter.signals(prompt) -> RouteSignals`. `RouteSignals` es un dataclass con `is_l0`, `l2_match`, `l3_match`, `l2_exception`. | Pura |
@@ -231,4 +231,4 @@ Verificado: el esquema y las preguntas actuales de la herramienta son de tareas 
 | Las listas iniciales de léxico son pobres | Se versionan por huella; el CTO las ajusta (Q4). |
 | `jerico ask` queda sin observar | Documentado como fuera de alcance. |
 
-> 🕒 **Última modificación:** 13/10/2026 10:27 (Agente Claude Code · Sonnet 5.5)
+> 🕒 **Última modificación:** 13/10/2026 22:15 (Agente Claude Code · Sonnet 5.5)
