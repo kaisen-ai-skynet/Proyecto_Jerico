@@ -1,11 +1,11 @@
 ---
-modificado: "13/10/2026 22:16"
+modificado: "13/10/2026 22:41"
 ---
 
-# Plan 006 — Consejero de seguimiento con Jev en el CRM (instantánea diaria)
+# Plan del módulo CRM-consejero (spec 007) — instantánea diaria
 
-- **Estado:** **BORRADOR — depende de la aprobación de la spec 006 (Gate 1)**. Con la spec aprobada pasa a Gate 2.
-- **Spec que implementa:** `specs/006-jev-crm-consejero/spec.md` (requisitos `VJC-001` a `VJC-040`).
+- **Estado:** **BORRADOR — depende de la aprobación de la módulo CRM-consejero de la spec 007 (Gate 1)**. Con la spec aprobada pasa a Gate 2.
+- **Spec que implementa:** `specs/007-jev-transversal/crm-consejero/spec.md` (requisitos `VJC-001` a `VJC-040`).
 - **Principio rector:** el CRM solo **observa y guarda**, en modo lectura, una instantánea diaria sin texto libre. Todo lo que habla con Jev vive en `Flota_Jev` (`kai-jev`).
 - **Hechos verificados en el código** (rama `crm/asistente-comercial-llm`, commit `d0aeab3`, leída con `git show`; el código no se modificó):
   - Los trabajos periódicos se registran en un único punto, `register_jobs` (`crm/jobs.py`), llamado desde `crm/app.py`; hoy hay `crm-daily` (13:00 UTC = 08:00 Bogotá), `crm-backup` y `crm-followup`.
@@ -190,4 +190,4 @@ Cobertura: los módulos nuevos al 100 % y el total ≥ 89 %.
 | La captura bloquea el bot | `asyncio.to_thread` y trabajo separado de `crm-daily`. |
 | Volumen real nulo | Declarado: cierre «no concluyente» a las 12 semanas. |
 
-> 🕒 **Última modificación:** 13/10/2026 22:16 (Agente Claude Code · Sonnet 5.5)
+> 🕒 **Última modificación:** 13/10/2026 22:41 (Agente Claude Code · Sonnet 5.5)

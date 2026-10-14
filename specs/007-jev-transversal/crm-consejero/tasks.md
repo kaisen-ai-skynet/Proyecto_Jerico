@@ -1,8 +1,8 @@
 ---
-modificado: "13/10/2026 22:16"
+modificado: "13/10/2026 22:41"
 ---
 
-# Tareas 006 — Consejero de seguimiento con Jev en el CRM
+# Tareas del módulo CRM-consejero (spec 007)
 
 - **Estado:** **BORRADOR — no se ejecuta ninguna tarea hasta que el CTO apruebe la spec y el plan.** Una tarea por sesión; TDD estricto (rojo → verde); detención obligatoria al terminar cada una.
 - **Base:** `spec.md` (requisitos `VJC-001` a `VJC-040`) y `plan.md`.
@@ -131,4 +131,4 @@ Se guarda el código de salida real (sin tuberías que lo oculten). Debe pasar r
 | VJC-021 a 024 | T04 |
 | VJC-040 | T09 (y `verify.sh` en cada tarea) |
 
-> 🕒 **Última modificación:** 13/10/2026 22:16 (Agente Claude Code · Sonnet 5.5)
+> 🕒 **Última modificación:** 13/10/2026 22:41 (Agente Claude Code · Sonnet 5.5)

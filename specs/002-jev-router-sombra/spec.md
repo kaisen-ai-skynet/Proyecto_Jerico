@@ -1,5 +1,5 @@
 ---
-modificado: "13/10/2026 22:15"
+modificado: "13/10/2026 22:38"
 ---
 
 # Spec 002 — Router de niveles L1/L2/L3 con Jev en modo sombra (P1)
@@ -170,4 +170,4 @@ Son **criterios de negocio** para que el CTO decida, no requisitos verificables 
 | VRJ-006, VRJ-040, VRJ-041, VRJ-034 | Ley 1581: sin datos personales hacia el tercero; registro de cada decisión para auditar (lecciones 7 y 8). |
 | Sección 7 | Modo sombra, medir contra la línea base y calibrar la confianza (lecciones 2 y 3). |
 
-> 🕒 **Última modificación:** 13/10/2026 22:15 (Agente Claude Code · Sonnet 5.5)
+> 🕒 **Última modificación:** 13/10/2026 22:38 (Agente Claude Code · Sonnet 5.5)

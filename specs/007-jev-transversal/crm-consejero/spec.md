@@ -1,13 +1,14 @@
 ---
-modificado: "13/10/2026 22:16"
+modificado: "13/10/2026 22:41"
 ---
 
-# Spec 006 — Consejero de seguimiento con Jev en el CRM (modo sombra)
+# Módulo CRM-consejero (spec 007) — Consejero de seguimiento con Jev en el CRM (modo sombra)
 
 - **Estado:** **BORRADOR (versión 2, tras la auditoría QA) — pendiente de aprobación del CTO (Gate 1).** No se implementa nada hasta que el CTO apruebe. **Dos preguntas bloquean el Gate 1: Q2 (cuántos leads se esperan) y Q5 (base legal del archivo seudonimizado).**
 - **Tipo de cambio:** funcionalidad nueva, de **solo lectura**, sobre el CRM de ventas ya desplegado.
 - **Fuente:** Plan maestro de Jericó (frente F3, 13/10/2026); informe `Proyecto_Jerico_Implementacion_Jev` (casos P1 y P2 y sección 14); decisiones del CTO del 12/10/2026 (modo sombra, solo categorías y contadores, la IA propone y el código decide, `jev-latest` sin tope diario); hechos verificados en la rama `crm/asistente-comercial-llm` (commit `d0aeab3`).
 - **Convención de marcas:** `(decisión CTO 12/10)` — ya decidido por el CTO; `(propuesta)` — valor propuesto, el CTO decide; `(supuesto)` — no verificado.
+- **Ubicación (13/10/2026 22:30):** antes era la spec `006-jev-crm-consejero`; el número 006 pasó al catálogo de precios (Plan maestro, §1). Es ahora el **módulo CRM-consejero** de la spec `007-jev-transversal`, que lo toma como caso de uso del CRM sobre la capa común de decisión. Sus requisitos `VJC-` y sus preguntas abiertas (Q2 y Q5 bloquean el Gate 1) no cambian.
 - **Relación con otras specs:** la spec `002-jev-router-sombra` (router del núcleo) **queda en espera** hasta que el núcleo se despliegue. Esta spec construye una sola vez el escritor de archivos diarios, que la spec 002 podrá reutilizar cuando se retome.
 - **Alcance de esta spec:** solo el lado del CRM (qué se observa y se guarda). El lado de Jev (consultas, consenso, métricas, informe) pertenece a la herramienta de la flota (`Flota_Jev`, a cargo de `kai-jev`) y aquí se describe únicamente como contrato (sección 6).
 
@@ -131,7 +132,7 @@ No es una tarea para el CRM ni se verifica con pruebas del CRM:
 
 1. **Lectura** de los archivos de instantáneas (VJC-020), ignorando una última línea incompleta y deduplicando por (referencia, día).
 2. **Aplicar los retiros** del archivo de retiros (VJC-024) a todas sus copias y **la misma retención** que el CRM. Los archivos copiados quedan fuera del control del CRM.
-3. **Qué se envía a Jev:** solo los campos del vector de VJC-012. **Nunca** la referencia del lead ni el día de captura (con la antigüedad permitirían reconstruir la fecha de registro).
+3. **Qué se envía a Jev:** solo los campos del vector de VJC-012. **Nunca** la referencia del lead ni el día de captura (con la antigüedad permitirían reconstruir la fecha de registro). Antes de enviar, la herramienta aplica los **rangos** definidos en la política de la spec 007 (VJT-020) en lugar de enteros exactos, y **no envía estados de lead mientras haya menos de 20 leads activos** (VJT-026): con pocos leads, la combinación de rangos puede identificar a un titular.
 4. **Esquema de vector** propio del CRM; el esquema vigente de la flota es de tareas de desarrollo.
 5. **Preguntas a Jev** (propuesta):
    - `urgencia` — tipo `score` ordenado: «baja» (no requiere acción en los próximos 7 días), «moderada» (requiere acción entre 3 y 7 días), «alta» (requiere acción en 48 horas), «critica» (requiere acción hoy: tiene una acción de cadencia vencida, una alerta sin resolver o un plazo por vencer).
@@ -188,4 +189,4 @@ Son **criterios de negocio** para que el CTO decida, no requisitos verificables 
 | VJC-020 a VJC-024 | Registro de cada decisión para auditar y Ley 1581 (lecciones 7 y 8). |
 | Sección 8 | Modo sombra, medir contra la línea base y calibrar (lecciones 2 y 3). |
 
-> 🕒 **Última modificación:** 13/10/2026 22:16 (Agente Claude Code · Sonnet 5.5)
+> 🕒 **Última modificación:** 13/10/2026 22:41 (Agente Claude Code · Sonnet 5.5)
