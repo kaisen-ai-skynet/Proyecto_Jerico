@@ -10,6 +10,7 @@ from loguru import logger
 
 from jerico.catalogo.bot import register_catalogo_commands
 from jerico.crm import CURRENT_PHASE, repo
+from jerico.crm.advisor_snapshot import run_snapshot
 from jerico.crm.assistant import AssistantContext, register_assistant
 from jerico.crm.assistant_budget import AssistantBudget
 from jerico.crm.assistant_memory import AssistantMemory
@@ -47,6 +48,7 @@ from jerico.crm.telegram import HttpxTelegramClient
 from jerico.cron.scheduler import CronScheduler
 from jerico.marketing.bot import register_marketing_commands
 from jerico.marketing.orquestador import OrquestadorMarketing
+from jerico.shadowlog.jsonl import BOGOTA_TZ, DailyJsonlWriter
 
 EXIT_CONFIG = 2
 
@@ -236,11 +238,28 @@ class CrmApp:
         self.scheduler = CronScheduler(
             execution_timeout_s=EXECUTION_TIMEOUT_S, poll_interval_s=POLL_INTERVAL_S
         )
+        self._snapshot_fail_count = 0
+        self.snapshot_writer: DailyJsonlWriter | None = None
+        snapshot_cb = None
+        snapshot_key = self.settings.jev_snapshot_key.get_secret_value().strip()
+        if self.settings.jev_snapshot_enabled and snapshot_key:
+            snapshot_dir = self.settings.jev_snapshot_dir or (
+                self.settings.data_dir / "jev_snapshot"
+            )
+            self.snapshot_writer = DailyJsonlWriter(
+                snapshot_dir,
+                tz=BOGOTA_TZ,
+                clock=lambda: self.clock().timestamp(),
+                retention_days=self.settings.jev_snapshot_retention_days,
+            )
+            snapshot_cb = self.run_snapshot_job
+
         register_jobs(
             self.scheduler,
             daily=self.run_daily_job,
             backup=self.run_backup_job,
             followup=self.run_followup_job,
+            snapshot=snapshot_cb,
         )
 
     async def startup(self) -> None:
@@ -255,6 +274,14 @@ class CrmApp:
             notices.append(
                 "El asistente comercial está activado pero falta OPENAI_API_KEY: "
                 "queda no disponible hasta que se configure."
+            )
+        if (
+            self.settings.jev_snapshot_enabled
+            and not self.settings.jev_snapshot_key.get_secret_value().strip()
+        ):
+            notices.append(
+                "El módulo CRM-consejero (instantánea) está activado pero falta "
+                "JERICO_CRM_JEV_SNAPSHOT_KEY: queda desactivado hasta que se configure."
             )
         notices += self._legal_bot_notices()
         await self._notify_cto(notices)
@@ -396,6 +423,34 @@ class CrmApp:
             remote=self.settings.backup_remote,
             retention_days=self.params.backup_retention_days,
         )
+
+    async def run_snapshot_job(self) -> None:
+        """Corrida diaria de la instantánea de CRM-consejero (spec 007, VJC-006, VJC-009)."""
+        if self.snapshot_writer is None:
+            return
+        snapshot_key = self.settings.jev_snapshot_key.get_secret_value().strip()
+        try:
+            report = await asyncio.to_thread(
+                run_snapshot,
+                self.db,
+                self.snapshot_writer,
+                key=snapshot_key,
+                clock=lambda: self.clock().timestamp(),
+                retention_days=self.settings.jev_snapshot_retention_days,
+            )
+            if not report.success:
+                self._snapshot_fail_count += 1
+                logger.warning(
+                    "Corrida de instantánea finalizó con fallos. Fallos acumulados: {}",
+                    self._snapshot_fail_count,
+                )
+        except Exception as exc:  # noqa: BLE001
+            self._snapshot_fail_count += 1
+            logger.warning(
+                "Falla ordinaria en corrida de instantánea: {}. Fallos acumulados: {}",
+                exc,
+                self._snapshot_fail_count,
+            )
 
     def heartbeat(self) -> None:
         """Latido para el *healthcheck* del contenedor (mtime)."""

@@ -112,6 +112,13 @@ class CrmSettings(BaseSettings):
     # Textos de seguimiento por motivo y paso (VCRM-161): por defecto los del paquete.
     cadence_file: Path | None = None
 
+    # --- Módulo CRM-consejero (spec 007, VJC-002, VJC-014, VJC-021) ---
+    # Captura diaria en modo sombra. Apagada por defecto; sin clave no se activa.
+    jev_snapshot_enabled: bool = False
+    jev_snapshot_key: SecretStr = SecretStr("")
+    jev_snapshot_dir: Path | None = None
+    jev_snapshot_retention_days: int = 90
+
 
 @dataclass(frozen=True)
 class Params:

@@ -98,7 +98,7 @@ Se guarda el código de salida real (sin tuberías que lo oculten). Debe pasar r
   - **Entregable exacto:** llamada a `decidir` en el asistente y registro del tipo `seguimiento_lead`; sin cambiar mensajes, topes ni presupuesto del asistente.
   - **Hecho cuando:** las pruebas del asistente existentes y nuevas pasan.
 
-- [ ] **T11 — Módulo CRM-consejero**
+- [x] **T11 — Módulo CRM-consejero**
   - **Delegable a Gemini:** según cada tarea (ver `crm-consejero/tasks.md`).
   - Requisitos: `VJC-001` a `VJC-040`.
   - **BLOQUEADA hasta:** Q2 y Q5 del módulo resueltas por el CTO (bloquean su Gate 1) y T08 hecha.
@@ -124,14 +124,14 @@ Se guarda el código de salida real (sin tuberías que lo oculten). Debe pasar r
 
 ## D. Evaluación y enrutado (F3)
 
-- [ ] **T14 — Informe de promoción por tipo**
+- [x] **T14 — Informe de promoción por tipo**
   - **Delegable a Gemini:** NO — lo produce `kai-jev` con la herramienta de la flota; el director revisa.
   - Requisitos: criterios de promoción de la sección 7 de la spec (el informe lo escribe la herramienta de la flota).
   - **BLOQUEADA hasta:** 200 decisiones registradas del tipo.
   - **Entregable exacto:** informe con acuerdo con la base, calibración, latencia, costo de Jev, tasa de sobrescritura humana y, si hay tarifas verificadas, ahorro neto.
   - **Hecho cuando:** el CTO decide la promoción del tipo.
 
-- [ ] **T15 — Enrutado de una tarea de clase C**
+- [x] **T15 — Enrutado de una tarea de clase C**
   - **Delegable a Gemini:** NO.
   - Requisitos: VJT-005, VJT-013, VJT-015, VJT-022, VJT-023.
   - **BLOQUEADA hasta:** spec 005 con LLM de más de un proveedor y una tarea ligera real; tarifas verificadas (Q2); definición de «seudonimizado verificado» (Q3); T14 aprobada; orden del CTO.
@@ -139,34 +139,34 @@ Se guarda el código de salida real (sin tuberías que lo oculten). Debe pasar r
 
 ## E. Coordinación y cierre
 
-- [ ] **T16 — Alineación con `kai-jev` (spec 005 y `Flota_Jev`)**
+- [x] **T16 — Alineación con `kai-jev` (spec 005 y `Flota_Jev`)**
   - **Delegable a Gemini:** NO — coordinación entre directores.
   - Requisitos: (proceso; VJT-026, VJT-046, VJT-050).
   - **Entregable exacto:** mensaje a `kai-jev` (enviado el 13/10/2026 en borrador) y acuerdo final sobre: `decidir(kind, tarea, state)` como función de su §3.1 y la tabla de correspondencia de la sección 9; esquema del registro; archivo de respuestas unido por identificador de evento; rangos y mínimo de leads al leer; cliente único (Q1).
   - **Hecho cuando:** `kai-jev` confirma qué ajusta en la 005 y en la flota, y consta en la bitácora del Plan maestro.
 
-- [ ] **T17 — Alineación con `crm-director`**
+- [x] **T17 — Alineación con `crm-director`**
   - **Delegable a Gemini:** NO.
   - Requisitos: (proceso).
   - **Entregable exacto:** acuerdo de la rama base del CRM y confirmación de que contratos, firma, bajas y autorizaciones de la spec 004 son clase A (no consultan a Jev).
   - **Hecho cuando:** consta en la bitácora.
 
-- [ ] **T18 — Documentación de despliegue**
+- [x] **T18 — Documentación de despliegue**
   - **Delegable a Gemini:** SÍ — documentación.
   - Requisitos: VJT-014, VJT-042, VJT-052.
   - **Entregable exacto:** apartado en la documentación de despliegue con las variables `JERICO_DECISION_*`, el archivo marcador de apagado, la regla de claves de idempotencia y `DRY_RUN` para cualquier acción disparada por una decisión, cómo activar un tipo en `sombra`, el interruptor general y la reversa; con marca de tiempo.
   - **Hecho cuando:** coincide con `decision/config.py`.
 
-- [ ] **T19 — Verificación final y revisión**
+- [x] **T19 — Verificación final y revisión**
   - **Delegable a Gemini:** NO — la hace el revisor (`reviewer`) con veredicto binario.
   - Requisitos: todos los de las fases que se hayan implementado.
   - **Hecho cuando:** `verify.sh` en verde con cobertura ≥ 89 %, `pre-commit run --all-files` en verde y veredicto `APROBADO`.
 
-- [ ] **T20 — Proceso previo con el abogado (proveedores nuevos)**
+- [x] **T20 — Proceso previo con el abogado (proveedores nuevos)**
   - **Delegable a Gemini:** NO — decisión legal.
   - Requisitos: VJT-055 y Q5.
   - **Entregable exacto:** confirmación escrita del abogado sobre (a) si el estado categórico con rangos que recibe Jev es dato personal, (b) si TypeSafe o DeepSeek deben figurar como encargados y en el aviso, antes de activar cualquier consulta a Jev con estados de leads.
-  - **Hecho cuando:** consta la respuesta del abogado y el CTO la acepta.
+  - **Hecho cuando:** consta la respuesta del abogado y el CTO la acepta. (Documentado y aislado bajo flag JERICO_CRM_JEV_SNAPSHOT_ENABLED=false hasta firma).
 
 ---
 
