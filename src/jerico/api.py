@@ -25,8 +25,10 @@ from jerico.redis_backends import (
 )
 from jerico.router import TokenRouter
 from jerico.state import StateEngine
+from jerico.web import web_router
 
 app = FastAPI(title="Jerico AI-OS", version="0.2.0")
+app.include_router(web_router)
 
 # Tope de costo/memoria: cada prompt viaja al LLM y queda en el historial de la sesión.
 MAX_PROMPT_CHARS = 20_000

@@ -17,6 +17,7 @@ class SurfaceType(StrEnum):
     CLI = "cli"
     TELEGRAM = "telegram"
     SIRI = "siri"
+    WEB = "web"
 
 
 class TokenPressureLevel(StrEnum):
