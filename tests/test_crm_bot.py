@@ -675,3 +675,77 @@ def test_vcrma36_failing_deferred_job_replies_generic_error_and_keeps_loop(
         run(bot.process_update(_msg(1, CTO_TG, "/falla")))
     assert [s.text for s in tg.sent] == [GENERIC_ERROR]
     assert "RuntimeError" in caplog.text and "Ana" not in caplog.text
+
+
+# --- Segundo bot (el del abogado, spec 004): offset propio, ids propios, lista de permitidos ----
+
+
+def _second_bot(db: CrmDatabase, tg: FakeTelegram, clock: FakeClock, **kwargs: object) -> CrmBot:
+    return CrmBot(
+        db,
+        tg,
+        clock.now,
+        offset_key="legal_offset",
+        update_namespace=1,
+        minimal=True,
+        **kwargs,  # type: ignore[arg-type]
+    )
+
+
+def test_second_bot_keeps_its_own_offset_and_update_ids(
+    db: CrmDatabase,
+    tg: FakeTelegram,
+    clock: FakeClock,
+    bot: CrmBot,
+    users: tuple[User, User],
+) -> None:
+    other_tg = FakeTelegram()
+    legal = _second_bot(db, other_tg, clock)
+    legal.register_command("hola", lambda c, u, t, n: [Outgoing(u.telegram_id, "hola abogado")])
+    bot.register_command("hola", lambda c, u, t, n: [Outgoing(u.telegram_id, "hola principal")])
+    run(bot.process_update(_msg(5, CTO_TG, "/hola")))
+    run(
+        legal.process_update(_msg(5, CTO_TG, "/hola"))
+    )  # mismo update_id en otro bot: NO es repetido
+    assert [s.text for s in tg.sent] == ["hola principal"]
+    assert [s.text for s in other_tg.sent] == ["hola abogado"]
+    with db.read() as conn:
+        assert repo.get_meta(conn, "telegram_offset") == "6"
+        assert repo.get_meta(conn, "legal_offset") == "6"
+    run(legal.process_update(_msg(5, CTO_TG, "/hola")))  # repetido en el mismo bot: sí se ignora
+    assert len(other_tg.sent) == 1
+
+
+def test_minimal_bot_does_not_expose_the_sales_commands(
+    db: CrmDatabase, tg: FakeTelegram, clock: FakeClock, users: tuple[User, User]
+) -> None:
+    legal = _second_bot(db, tg, clock)
+    run(legal.process_update(_msg(1, CTO_TG, "/lista")))
+    run(legal.process_update(_msg(2, CTO_TG, "/alta abogado; 4000; x@k.co")))
+    assert [s.text for s in tg.sent] == [bot_module.UNKNOWN_COMMAND] * 2
+    with db.read() as conn:
+        assert repo.active_user_by_telegram(conn, 4000) is None
+
+
+def test_allowed_ids_gate_is_silent_and_audited_even_for_registered_users(
+    db: CrmDatabase, tg: FakeTelegram, clock: FakeClock, users: tuple[User, User]
+) -> None:
+    legal = _second_bot(db, tg, clock, allowed_ids=frozenset({CTO_TG}))
+    legal.register_command("hola", lambda c, u, t, n: [Outgoing(u.telegram_id, "hola")])
+    run(legal.process_update(_msg(1, COM_TG, "/hola")))  # activo en la tabla, pero no permitido
+    run(legal.process_update(_msg(2, CTO_TG, "/hola")))
+    assert [s.text for s in tg.sent] == ["hola"]
+    denied = [r for r in _audit(db) if r["action"] == AuditAction.ACCESS_DENIED]
+    assert len(denied) == 1 and denied[0]["actor"] == f"tg:{COM_TG}"
+
+
+def test_anonymous_start_reveals_only_the_telegram_id(
+    db: CrmDatabase, tg: FakeTelegram, clock: FakeClock, users: tuple[User, User]
+) -> None:
+    legal = _second_bot(db, tg, clock, allowed_ids=frozenset({CTO_TG}), anonymous_start=True)
+    run(legal.process_update(_msg(1, STRANGER_TG, "/start")))
+    run(legal.process_update(_msg(2, STRANGER_TG, "/lista")))  # cualquier otra cosa: silencio
+    run(legal.process_update(_msg(3, STRANGER_TG, "/start", chat_type="group")))
+    texts = [s.text for s in tg.sent]
+    assert len(texts) == 1 and str(STRANGER_TG) in texts[0] and "CTO" in texts[0]
+    assert all(s.chat_id == STRANGER_TG for s in tg.sent)

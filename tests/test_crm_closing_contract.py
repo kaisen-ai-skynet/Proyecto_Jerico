@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from crm_support import FakeClock, FakeTelegram
+from crm_support import FakeClock, FakeEmailSender, FakeTelegram
 from jerico.crm import closing_repo as crepo
 from jerico.crm import repo
 from jerico.crm.bot import CrmBot
@@ -67,11 +67,14 @@ class Env:
         self.tg = FakeTelegram()
         self.clock = FakeClock(START)
         self.store = LocalFileStore(tmp_path / "files")
+        self.mail = FakeEmailSender()
         self.ctx = ClosingContext(
             dry_run=dry_run,
             files=self.store if files else None,
             signature=signature,  # type: ignore[arg-type]
             validity_days=15,
+            telegram=self.tg,
+            email=self.mail,
             clock=self.clock.now,
         )
         self.bot = CrmBot(self.db, self.tg, self.clock.now, files=self.store)
@@ -209,7 +212,7 @@ def test_vcrmc10_lawyer_uploads_the_contract_and_stakeholders_are_told(make_env)
         assert handle.read() == PDF
     notified = {r["recipient_user_id"] for r in env.outbox("contract_uploaded")}
     assert notified == {env.com.id, env.cto.id}
-    assert digest[:12] in env.texts(LAW_TG)[-1]
+    assert any(digest[:12] in text for text in env.texts(LAW_TG))
 
 
 def test_docx_files_are_accepted_and_other_files_rejected(make_env) -> None:  # type: ignore[no-untyped-def]

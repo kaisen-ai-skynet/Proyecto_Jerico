@@ -621,3 +621,57 @@ def test_spec004_closing_commands_are_registered_in_the_real_app(env: Env) -> No
     asyncio.run(app.startup())
     _command(app, "/oferta")
     assert "Ejemplo" in env.tg.sent[-1].text
+
+
+# --- Bot del abogado (spec 004) -----------------------------------------------------------------
+
+
+def test_legal_bot_is_off_without_a_token_and_on_with_one(env: Env) -> None:
+    assert env.build().legal_bot is None
+    legal_tg = FakeTelegram()
+    app = CrmApp(
+        _settings(env.tmp_path, legal_allowed_ids=""),
+        telegram=env.tg,
+        email=env.mail,
+        runner=env.runner,
+        clock=env.clock.now,
+        legal_telegram=legal_tg,
+    )
+    env.apps.append(app)
+    assert app.legal_bot is not None
+    asyncio.run(app.startup())
+    registration = [s.text for s in env.tg.sent if "modo registro" in s.text]
+    assert len(registration) == 1 and "JERICO_CRM_LEGAL_ALLOWED_IDS" in registration[0]
+
+
+def test_legal_bot_with_ids_and_bad_entries_warns_once(env: Env) -> None:
+    app = CrmApp(
+        _settings(env.tmp_path, legal_allowed_ids="123,abc"),
+        telegram=env.tg,
+        email=env.mail,
+        runner=env.runner,
+        clock=env.clock.now,
+        legal_telegram=FakeTelegram(),
+    )
+    env.apps.append(app)
+    asyncio.run(app.startup())
+    texts = [s.text for s in env.tg.sent]
+    assert any("1 entrada(s)" in t for t in texts) and not any("modo registro" in t for t in texts)
+    assert all("abc" not in t for t in texts)
+
+
+@pytest.mark.asyncio
+async def test_serve_runs_both_pollers(env: Env) -> None:
+    stop = asyncio.Event()
+    legal_tg = FakeTelegram()
+    app = CrmApp(
+        _settings(env.tmp_path, legal_allowed_ids="123"),
+        telegram=StoppingTelegram(stop),
+        email=env.mail,
+        runner=env.runner,
+        clock=env.clock.now,
+        legal_telegram=legal_tg,
+    )
+    env.apps.append(app)
+    await app.serve(stop)
+    assert app.legal_bot is not None

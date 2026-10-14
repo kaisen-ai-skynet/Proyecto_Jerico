@@ -745,3 +745,73 @@ async def test_mail_send_cuerpo_invalido_retorna_error_permanente() -> None:
     assert result.delivered is False
     assert result.permanent is True
     assert result.error == "invalid_header"
+
+
+# ---------------------------------------- Correo con adjunto (spec 004: contrato al cliente)
+
+
+@pytest.mark.asyncio
+async def test_smtp_sends_the_attachment_intact(fake_smtp: type[_FakeSMTP]) -> None:
+    result = await _sender("starttls").send_with_attachment(
+        "cliente@empresa.co",
+        "Contrato L-0042",
+        "Adjunto el contrato.",
+        filename="contrato-L-0042.pdf",
+        content=b"%PDF-1.7 datos",
+        mime="application/pdf",
+    )
+    (msg,) = fake_smtp.instances[0].sent
+    assert result.delivered is True and msg["To"] == "cliente@empresa.co"
+    (attachment,) = list(msg.iter_attachments())
+    assert attachment.get_filename() == "contrato-L-0042.pdf"
+    assert attachment.get_content_type() == "application/pdf"
+    assert attachment.get_payload(decode=True) == b"%PDF-1.7 datos"
+    assert msg.get_body(preferencelist=("plain",)).get_content().strip() == "Adjunto el contrato."  # type: ignore[union-attr]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("to", "subject", "filename"),
+    [
+        ("a@b.co\nBcc: x@y.co", "s", "f.pdf"),
+        ("a@b.co", "s\r\nBcc: x@y.co", "f.pdf"),
+        ("a@b.co", "s", "f.pdf\r\nX: y"),
+        ("a@b.co", "s", ""),
+    ],
+)
+async def test_smtp_attachment_rejects_header_injection(
+    fake_smtp: type[_FakeSMTP], to: str, subject: str, filename: str
+) -> None:
+    result = await _sender("ssl").send_with_attachment(
+        to, subject, "cuerpo", filename=filename, content=b"x", mime="application/pdf"
+    )
+    assert result.delivered is False and result.permanent is True
+    assert not fake_smtp.instances or not fake_smtp.instances[0].sent
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("failure", "error"),
+    [
+        (smtplib.SMTPAuthenticationError(535, b"no"), "auth_failed"),
+        (OSError("down"), "smtp_error:OSError"),
+    ],
+)
+async def test_smtp_attachment_errors_are_not_delivered(
+    fake_smtp: type[_FakeSMTP], failure: Exception, error: str
+) -> None:
+    fake_smtp.raise_on_send = failure
+    result = await _sender("ssl").send_with_attachment(
+        "a@b.co", "s", "c", filename="f.pdf", content=b"x", mime="application/pdf"
+    )
+    assert result.delivered is False and result.error == error
+
+
+@pytest.mark.asyncio
+async def test_unconfigured_sender_refuses_attachments_without_connecting() -> None:
+    from jerico.crm.mail import UnconfiguredEmailSender
+
+    result = await UnconfiguredEmailSender().send_with_attachment(
+        "a@b.co", "s", "c", filename="f.pdf", content=b"x", mime="application/pdf"
+    )
+    assert result.delivered is False and result.permanent is True

@@ -134,3 +134,38 @@ def test_exported_json_schemas_are_in_sync_with_the_models(tmp_path: Path) -> No
         assert json.loads((tmp_path / name).read_text()) == json.loads(
             (committed / name).read_text()
         ), f"schemas/{name} desactualizado: ejecuta export_json_schemas('schemas')"
+
+
+def test_dry_run_sender_redirects_attachments_too() -> None:
+    inner = FakeEmailSender()
+    sender = DryRunEmailSender(inner, "cto@kaisen.co")
+    result = asyncio.run(
+        sender.send_with_attachment(
+            "cliente@empresa.co", "Contrato", "Hola", filename="c.pdf", content=b"%PDF-x"
+        )
+    )
+    assert result.delivered is True
+    (sent,) = inner.attachments
+    assert sent.to == "cto@kaisen.co" and sent.subject.startswith("[DRY_RUN → cliente@empresa.co]")
+    assert sent.content == b"%PDF-x" and "Destinatario original: cliente@empresa.co" in sent.body
+
+
+def test_dry_run_attachment_without_cto_or_support_refuses() -> None:
+    inner = FakeEmailSender()
+    refused = asyncio.run(
+        DryRunEmailSender(inner, "").send_with_attachment(
+            "c@x.co", "s", "b", filename="f", content=b""
+        )
+    )
+    assert refused.delivered is False and inner.attachments == []
+
+    class NoAttachments:
+        async def send(self, to, subject, body, headers=None):  # type: ignore[no-untyped-def]
+            raise AssertionError
+
+    unsupported = asyncio.run(
+        DryRunEmailSender(NoAttachments(), "cto@k.co").send_with_attachment(  # type: ignore[arg-type]
+            "c@x.co", "s", "b", filename="f", content=b""
+        )
+    )
+    assert unsupported.delivered is False

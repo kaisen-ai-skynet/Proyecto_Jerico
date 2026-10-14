@@ -62,6 +62,10 @@ class CrmSettings(BaseSettings):
     docuseal_url: str | None = None
     docuseal_token: SecretStr | None = None
     signature_validity_days: int = 15  # VCRM-C14
+    # Bot propio del abogado (@Jericoo_law_bot): token y lista blanca de IDs de Telegram, solo en
+    # el .env del servidor. Sin token o sin IDs el bot del abogado no arranca.
+    legal_bot_token: SecretStr | None = None
+    legal_allowed_ids: str = ""
     # Candidatos de correo sin registrar caducan a los N días (VCRM-M05).
     mail_candidate_days: int = 30
 
@@ -339,3 +343,18 @@ def f2_missing(settings: CrmSettings) -> list[str]:
 def f2_enabled(settings: CrmSettings) -> bool:
     """La fase 2 solo se activa con buzón, correo de salida, aviso y textos disponibles (D-9)."""
     return not f2_missing(settings)
+
+
+def parse_allowed_ids(raw: str) -> tuple[frozenset[int], tuple[str, ...]]:
+    """IDs de Telegram separados por comas; devuelve (válidos, entradas descartadas)."""
+    valid: set[int] = set()
+    rejected: list[str] = []
+    for part in raw.split(","):
+        item = part.strip()
+        if not item:
+            continue
+        if item.isdigit() and int(item) > 0:
+            valid.add(int(item))
+        else:
+            rejected.append("<entrada no numérica>")  # nunca se repite el valor en logs
+    return frozenset(valid), tuple(rejected)

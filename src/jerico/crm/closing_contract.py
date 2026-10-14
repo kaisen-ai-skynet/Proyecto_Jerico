@@ -6,6 +6,7 @@ La llamada al proveedor ocurre tras el *commit* (patrón `bot.defer`); nada sale
 
 import hashlib
 import re
+import shutil
 import sqlite3
 from collections.abc import Awaitable, Callable
 from datetime import datetime, timedelta
@@ -23,7 +24,11 @@ from jerico.crm.bot import (
     FilePendingHandler,
     deny,
 )
-from jerico.crm.closing_flow import ClosingContext
+from jerico.crm.closing_flow import (
+    ClosingContext,
+    contract_route,
+    rebuild_package,
+)
 from jerico.crm.closing_model import Contract, ContractStatus, PackageStatus
 from jerico.crm.db import CrmDatabase
 from jerico.crm.idempotency import claim, make_key, release
@@ -40,9 +45,10 @@ from jerico.crm.model import (
     User,
 )
 from jerico.crm.outbox import enqueue_critical
+from jerico.crm.package import attachment_name, render_markdown
 from jerico.crm.parsing import build_callback, parse_short_id
 from jerico.crm.permissions import Action, authorize
-from jerico.crm.ports import Update
+from jerico.crm.ports import SendResult, TelegramPort, Update
 from jerico.crm.render import short_id
 from jerico.crm.signature import SignatureError, SignRequest
 from jerico.crm.timeutil import from_iso, to_iso
@@ -54,6 +60,8 @@ POLL_META = "contract_poll_last"
 POLL_EVERY = timedelta(minutes=5)
 MAX_REASON = 300
 PDF_MAGIC = b"%PDF-"
+DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+STALE_PACKAGE = "Los datos del paquete cambiaron. Pídele al comercial que lo genere de nuevo."
 ZIP_MAGIC = b"PK\x03\x04"  # DOCX
 
 ASK_FILE = "Envíame ahora el contrato como documento adjunto (PDF o DOCX)."
@@ -168,7 +176,7 @@ def upload_command(
     return [Outgoing(actor.telegram_id, ASK_FILE)]
 
 
-def _file_handler(ctx: ClosingContext) -> FilePendingHandler:
+def file_handler(ctx: ClosingContext, bot: CrmBot, db: CrmDatabase) -> FilePendingHandler:
     def handler(
         conn: sqlite3.Connection,
         actor: User,
@@ -221,9 +229,153 @@ def _file_handler(ctx: ClosingContext) -> FilePendingHandler:
             digest[:12],
             now,
         )
+        _queue_delivery(conn, ctx, bot, db, lead, contract.id, key, digest, chat, now)
         return [Outgoing(chat, f"Contrato de {short_id(lead.id)} recibido (huella {digest[:12]}).")]
 
     return handler
+
+
+async def _send_document(
+    telegram: TelegramPort, ctx: ClosingContext, chat_id: int, name: str, data: bytes, caption: str
+) -> SendResult:
+    """Escribe el archivo con su nombre neutro en una carpeta temporal 600 y lo envía."""
+    if ctx.files is None:
+        return SendResult(delivered=False, error="no_file_store", permanent=True)
+    folder = ctx.files.new_tmp_path()
+    folder.mkdir(parents=True, exist_ok=True)
+    path = folder / name
+    try:
+        path.write_bytes(data)
+        path.chmod(0o600)
+        return await telegram.send_document(chat_id, path, caption)
+    finally:
+        shutil.rmtree(folder, ignore_errors=True)
+
+
+def _queue_delivery(
+    conn: sqlite3.Connection,
+    ctx: ClosingContext,
+    bot: CrmBot,
+    db: CrmDatabase,
+    lead: Lead,
+    contract_id: int,
+    key: str,
+    digest: str,
+    lawyer_chat: int,
+    now: datetime,
+) -> None:
+    """Al subir el contrato: archivo al comercial y, si la venta lo pide, al cliente por correo.
+
+    Cada destino reserva una clave idempotente (contrato + huella + destino): resubir el mismo
+    archivo no lo reenvía; uno distinto sí. El correo al cliente respeta DRY_RUN (lo redirige el
+    remitente) y exige que el lead siga abierto."""
+    targets = ["commercial"]
+    if (
+        contract_route(conn, lead.id) == "cliente"
+        and _lead_open(lead)
+        and (lead.email or "").strip()
+    ):
+        targets.append("client")
+    claimed = [
+        t
+        for t in targets
+        if claim(conn, make_key("contract_delivery", contract_id, digest[:12], t), now)
+    ]
+    if not claimed:
+        return
+    recipients = permissions.commercial_recipients(lead, repo.active_users(conn))
+    comercial_chat = recipients[0].telegram_id if recipients else None
+    name = contract_filename(lead.id, key)
+    client_email = (lead.email or "").strip()
+
+    async def job() -> list[Outgoing]:
+        assert ctx.files is not None  # noqa: S101 - el contrato se acaba de guardar ahí
+        with ctx.files.open(key) as handle:
+            data = handle.read()
+        notes: list[str] = []
+        if "commercial" in claimed:
+            if ctx.telegram is None or comercial_chat is None:
+                notes.append("no pude entregarlo al comercial (sin canal)")
+                _release(db, contract_id, digest, "commercial")
+            else:
+                sent = await _send_document(
+                    ctx.telegram,
+                    ctx,
+                    comercial_chat,
+                    name,
+                    data,
+                    f"Contrato de {short_id(lead.id)} para entregar al cliente.",
+                )
+                if sent.delivered:
+                    notes.append("enviado al comercial")
+                else:
+                    notes.append("el comercial no recibió el archivo")
+                    _release(db, contract_id, digest, "commercial")
+        if "client" in claimed:
+            sent_mail = (
+                await ctx.email.send_with_attachment(
+                    client_email,
+                    f"Contrato {short_id(lead.id)}",
+                    "Adjuntamos el contrato para su revisión y firma. "
+                    "Responda a este correo si tiene preguntas.",
+                    filename=name,
+                    content=data,
+                    mime="application/pdf" if name.endswith(".pdf") else DOCX_MIME,
+                )
+                if ctx.email is not None
+                else SendResult(delivered=False, error="no_email_channel", permanent=True)
+            )
+            if sent_mail.delivered:
+                notes.append("enviado al cliente por correo")
+            else:
+                notes.append("no pude enviarlo al cliente por correo; entrégalo tú")
+                _release(db, contract_id, digest, "client")
+        return [Outgoing(lawyer_chat, f"Entrega de {short_id(lead.id)}: " + "; ".join(notes) + ".")]
+
+    bot.defer(job)
+
+
+def _release(db: CrmDatabase, contract_id: int, digest: str, target: str) -> None:
+    with db.tx() as tx:
+        release(tx, make_key("contract_delivery", contract_id, digest[:12], target))
+
+
+def download_command(ctx: ClosingContext, bot: CrmBot, telegram: TelegramPort) -> CommandHandler:
+    """`/descargar L-n`: el paquete como archivo Markdown para leerlo o editarlo (VCRM-R02)."""
+
+    def command(conn: sqlite3.Connection, actor: User, text: str, now: datetime) -> list[Outgoing]:
+        chat = actor.telegram_id
+        lead_id = parse_short_id(_args(text))
+        lead = None if lead_id is None else repo.get_lead(conn, lead_id)
+        if lead is None:
+            return [Outgoing(chat, "Indica el caso, por ejemplo: /descargar L-0042")]
+        decision = authorize(actor, Action.PACKAGE_VIEW, lead)
+        if not decision.allowed:
+            return leads.deny_lead(conn, actor, decision, lead.id, now)
+        package = crepo.live_package(conn, lead.id)
+        if package is None or package.status != PackageStatus.SENT:
+            return [Outgoing(chat, "Ese caso no tiene un paquete enviado.")]
+        built = rebuild_package(conn, lead, package, now)
+        if built is None:  # pragma: no cover - la oferta existe por clave foránea
+            return [Outgoing(chat, STALE_PACKAGE)]
+        data = render_markdown(built).encode("utf-8")
+        name = attachment_name(lead.id, package.version)
+
+        async def job() -> list[Outgoing]:
+            sent = await _send_document(
+                telegram,
+                ctx,
+                chat,
+                name,
+                data,
+                f"Paquete de {short_id(lead.id)} (v{package.version}).",
+            )
+            return [] if sent.delivered else [Outgoing(chat, "No pude enviarte el archivo ahora.")]
+
+        bot.defer(job)
+        return [Outgoing(chat, "Preparando el archivo…")]
+
+    return command
 
 
 def return_command(
@@ -592,7 +744,7 @@ async def contract_sweep(db: CrmDatabase, ctx: ClosingContext, now: datetime) ->
 
 def register_contract(bot: CrmBot, db: CrmDatabase, ctx: ClosingContext) -> None:
     bot.register_command("subircontrato", upload_command)
-    bot.register_file_pending(CONTRACT_FILE_KIND, _file_handler(ctx))
+    bot.register_file_pending(CONTRACT_FILE_KIND, file_handler(ctx, bot, db))
     bot.register_command("devolver", return_command)
     bot.register_command("formaespecial", special_form_command)
     bot.register_command("firma", sign_command(ctx))

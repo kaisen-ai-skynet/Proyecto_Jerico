@@ -79,6 +79,21 @@ class EmailSender(Protocol):
     ) -> SendResult: ...
 
 
+class AttachmentEmailSender(EmailSender, Protocol):
+    """Correo con un adjunto (el contrato al cliente, spec 004)."""
+
+    async def send_with_attachment(
+        self,
+        to: str,
+        subject: str,
+        body: str,
+        *,
+        filename: str,
+        content: bytes,
+        mime: str = "application/pdf",
+    ) -> SendResult: ...
+
+
 class InboxError(Exception):
     """Fallo de conexión o credenciales del buzón (VCRM-170).
 

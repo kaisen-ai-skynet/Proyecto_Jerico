@@ -66,6 +66,18 @@ class UnconfiguredEmailSender:
     ) -> SendResult:
         return SendResult(delivered=False, permanent=True, error="mailbox_not_configured")
 
+    async def send_with_attachment(
+        self,
+        to: str,
+        subject: str,
+        body: str,
+        *,
+        filename: str,
+        content: bytes,
+        mime: str = "application/pdf",
+    ) -> SendResult:
+        return SendResult(delivered=False, permanent=True, error="mailbox_not_configured")
+
 
 class SmtpEmailSender:
     def __init__(
@@ -89,7 +101,31 @@ class SmtpEmailSender:
     async def send(
         self, to: str, subject: str, body: str, headers: Mapping[str, str] | None = None
     ) -> SendResult:
-        extra = dict(headers or {})
+        return await self._deliver(to, subject, body, dict(headers or {}), None)
+
+    async def send_with_attachment(
+        self,
+        to: str,
+        subject: str,
+        body: str,
+        *,
+        filename: str,
+        content: bytes,
+        mime: str = "application/pdf",
+    ) -> SendResult:
+        """Un solo adjunto; el nombre y los destinatarios se validan como las cabeceras."""
+        if not filename or _unsafe(filename):
+            return self._failed("invalid_header", permanent=True)
+        return await self._deliver(to, subject, body, {}, (filename, content, mime))
+
+    async def _deliver(
+        self,
+        to: str,
+        subject: str,
+        body: str,
+        extra: dict[str, str],
+        attachment: tuple[str, bytes, str] | None,
+    ) -> SendResult:
         if _unsafe(to) or _unsafe(subject) or not _headers_valid(extra):
             return self._failed("invalid_header", permanent=True)
         msg = EmailMessage()
@@ -101,6 +137,12 @@ class SmtpEmailSender:
             for name, value in extra.items():
                 msg[name] = value
             msg.set_content(body)
+            if attachment is not None:
+                name, content, mime = attachment
+                maintype, _, subtype = mime.partition("/")
+                msg.add_attachment(
+                    content, maintype=maintype, subtype=subtype or "octet-stream", filename=name
+                )
         except ValueError:  # el módulo email rechaza lo que aún así sea ilegal
             return self._failed("invalid_header", permanent=True)
         try:

@@ -36,7 +36,7 @@ from jerico.crm.package import (
 )
 from jerico.crm.parsing import build_callback, parse_short_id
 from jerico.crm.permissions import Action, authorize
-from jerico.crm.ports import FileStore
+from jerico.crm.ports import AttachmentEmailSender, FileStore, TelegramPort
 from jerico.crm.render import short_id
 from jerico.crm.signature import SignaturePort
 from jerico.schemas import PaqueteContrato
@@ -44,8 +44,13 @@ from jerico.schemas import PaqueteContrato
 OFFER_COMMAND = "oferta"
 OFFER_EXAMPLE = (
     "/oferta L-0042; moneda COP; pago 50 % anticipo; linea Chatbot x1 @12000000; "
-    "linea Soporte x1 @500000; vigencia 2026-04-30; condiciones Soporte 8x5"
+    "linea Soporte x1 @500000; vigencia 2026-04-30; condiciones Soporte 8x5; entrega cliente"
 )
+DELIVERIES = ("comercial", "cliente")
+ROUTE_LABEL = {
+    "comercial": "El contrato que suba el abogado te llegará a ti para entregarlo.",
+    "cliente": "El contrato que suba el abogado se enviará también al cliente por correo.",
+}
 PKG_SEND = "pkgok"
 PKG_CANCEL = "pkgno"
 MAX_TELEGRAM_CHARS = 3500
@@ -73,6 +78,8 @@ class ClosingContext:
     files: FileStore | None = None  # contratos y evidencias (spec 004 §5)
     signature: SignaturePort | None = None  # None: no se ofrece firma electrónica
     validity_days: int = 15  # VCRM-C14
+    telegram: TelegramPort | None = None  # bot principal: entrega el contrato al comercial
+    email: AttachmentEmailSender | None = None  # correo con adjunto al cliente (DRY_RUN aplica)
     clock: Callable[[], datetime] = _now
 
 
@@ -84,6 +91,7 @@ class OfferInput:
     lines: tuple[tuple[str, int, int], ...]
     valid_until: str | None
     special_conditions: str | None
+    delivery: str = "comercial"  # quién recibe el contrato que sube el abogado
 
 
 @dataclass(frozen=True)
@@ -106,7 +114,7 @@ def parse_offer(text: str) -> OfferInput | OfferError:
     lead_id = parse_short_id(first)
     if lead_id is None:
         return OfferError(f"Indica el lead al inicio. Ejemplo: {OFFER_EXAMPLE}")
-    currency, payment, valid_until, conditions = "COP", "", None, None
+    currency, payment, valid_until, conditions, delivery = "COP", "", None, None, "comercial"
     lines: list[tuple[str, int, int]] = []
     for segment in rest:
         key, _, value = segment.partition(" ")
@@ -133,13 +141,17 @@ def parse_offer(text: str) -> OfferInput | OfferError:
             valid_until = value
         elif key == "condiciones":
             conditions = value or None
+        elif key == "entrega":
+            if value.lower() not in DELIVERIES:
+                return OfferError("La entrega debe ser «comercial» o «cliente».")
+            delivery = value.lower()
         elif segment:
             return OfferError(f"No entendí «{segment}». Ejemplo: {OFFER_EXAMPLE}")
     if not payment:
         return OfferError(f"Falta la forma de pago (pago ...). Ejemplo: {OFFER_EXAMPLE}")
     if not lines:
         return OfferError(f"Falta al menos una línea (linea ...). Ejemplo: {OFFER_EXAMPLE}")
-    return OfferInput(lead_id, currency, payment, tuple(lines), valid_until, conditions)
+    return OfferInput(lead_id, currency, payment, tuple(lines), valid_until, conditions, delivery)
 
 
 def _audit(
@@ -153,6 +165,16 @@ def _audit(
         at=now,
         lead_id=lead_id,
     )
+
+
+def route_key(lead_id: int) -> str:
+    return f"contract_route:{lead_id}"
+
+
+def contract_route(conn: sqlite3.Connection, lead_id: int) -> str:
+    """Quién recibe el contrato al subirlo: «comercial» (por defecto) o «cliente» (por venta)."""
+    stored = repo.get_meta(conn, route_key(lead_id))
+    return stored if stored in DELIVERIES else "comercial"
 
 
 def lawyer_basis_key(lead_id: int) -> str:
@@ -218,12 +240,14 @@ def offer_command(
     )
     if stored is None:  # pragma: no cover - defensa: el paquete vivo ya se retiró arriba
         return [Outgoing(chat, GATE_CLOSED)]
+    repo.set_meta(conn, route_key(lead.id), parsed.delivery)
     _audit(conn, actor, lead.id, AuditOutcome.OK, now)
     preview = render_markdown(package)[:MAX_TELEGRAM_CHARS]
     return [
         Outgoing(
             chat,
-            f"{preview}\n¿Enviar este paquete al abogado? Contiene datos personales del cliente.",
+            f"{preview}\n{ROUTE_LABEL[parsed.delivery]}\n"
+            "¿Enviar este paquete al abogado? Contiene datos personales del cliente.",
             (
                 (
                     ("✅ Enviar al abogado", build_callback(PKG_SEND, str(stored.id))),
@@ -258,7 +282,7 @@ def cancel_callback(
     return [Outgoing(actor.telegram_id, f"Paquete de {short_id(lead.id)} cancelado.")]
 
 
-def _rebuild(
+def rebuild_package(
     conn: sqlite3.Connection, lead: Lead, package: Package, now: datetime
 ) -> PaqueteContrato | None:
     offer = crepo.get_offer(conn, package.offer_id)
@@ -296,7 +320,7 @@ def send_callback(
         ):
             return [Outgoing(chat, NOT_ACCEPTED)]
         try:
-            rebuilt = _rebuild(conn, lead, package, now)
+            rebuilt = rebuild_package(conn, lead, package, now)
         except (PackageError, ValueError):
             rebuilt = None
         if rebuilt is None or content_hash(rebuilt) != package.content_hash:
@@ -396,7 +420,7 @@ def package_command(
         if actor.role == Role.LAWYER:
             return [Outgoing(chat, "Ese caso no tiene un paquete enviado.")]
         return [Outgoing(chat, "Ese lead no tiene un paquete enviado.")]
-    built = _rebuild(conn, lead, package, now)
+    built = rebuild_package(conn, lead, package, now)
     if built is None:  # pragma: no cover - la oferta existe por clave foránea
         return [Outgoing(chat, STALE)]
     return [Outgoing(chat, render_markdown(built)[:MAX_TELEGRAM_CHARS])]
