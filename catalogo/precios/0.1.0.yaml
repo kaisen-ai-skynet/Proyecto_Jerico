@@ -1,0 +1,43 @@
+# Catálogo de precios de Kaizen — BORRADOR. No cotizar hasta que el CTO lo marque vigente.
+# Dinero: pesos colombianos (COP) enteros, sin IVA. Sin nombres de personas ni datos de clientes.
+version: 0.1.0
+estado: borrador            # borrador | vigente | retirada
+moneda: COP
+iva: excluido               # IVA 19 % se suma al facturar (Introducción)
+vigencia_desde: null
+fuente:
+  archivo: Kaizen_Modelo_Financiero_5A_8.xlsx
+  sha256: 02ac6b48ce1454aff6d5df5abe93c68a5eedc55694732cdcc84ff77b62a961dc
+  extraido: "13/10/2026"
+  estado_modelo: "en pausa por decisión del CTO (13/10/2026)"
+regla_mensualidad:
+  porcentaje_de_implementacion_por_mes: 10      # Introducción!C11
+planes:
+  - id: estandar
+    nombre: Estándar
+    precio_propuesta: 3220000        # Desglose_Precios!G13 (propuesta real sep-2026)
+    precio_formula: 5762939          # Desglose_Precios!E13 (referencia, no se cotiza)
+    margen_objetivo_pct: 15          # Desglose_Precios!D13
+    interno:                         # solo vista cto
+      margen_real_pct: -52.1         # Desglose_Precios!H13
+  - id: unico
+    nombre: Único
+    precio_propuesta: 4320000        # Desglose_Precios!G14
+    precio_formula: 6123123          # Desglose_Precios!E14 (alimenta el P&L)
+    margen_objetivo_pct: 20          # Desglose_Precios!D14
+    interno:
+      margen_real_pct: -13.4         # Desglose_Precios!H14
+  - id: premium
+    nombre: Premium
+    precio_propuesta: 5520000        # Desglose_Precios!G15
+    precio_formula: 6997855          # Desglose_Precios!E15
+    margen_objetivo_pct: 30          # Desglose_Precios!D15
+    interno:
+      margen_real_pct: 11.3          # Desglose_Precios!H15
+interno:                             # solo vista cto
+  costo_directo_por_implementacion: 4898499   # Desglose_Precios!D9
+  capacidad_implementaciones_anio: 12         # Desglose_Precios!D5
+advertencias:
+  - "Planes Estándar y Único se proponen por debajo del costo directo (margen real −52 % y −13 %)."
+  - "El costo por implementación supone 12 implementaciones al año; si la capacidad real es otra, cambia."
+  - "Modelo sin churn (0 %); ICA 'CONFIRMAR con contador'; tarifas RST por validar con el contador."
