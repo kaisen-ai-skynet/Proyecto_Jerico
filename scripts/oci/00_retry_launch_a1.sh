@@ -41,8 +41,10 @@ fail() { echo "[ERROR] $1" >&2; exit 1; }
 log() { echo "[$(date '+%d/%m %H:%M:%S')] $1"; }
 notify() {
     [ -n "${TELEGRAM_BOT_TOKEN:-}" ] && [ -n "${TELEGRAM_CHAT_ID:-}" ] || return 0
-    curl -fsS -m 15 "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
-        --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" --data-urlencode "text=$1" >/dev/null || true
+    # El token va por stdin (-K -): no aparece en `ps`.
+    printf 'url = "https://api.telegram.org/bot%s/sendMessage"\n' "$TELEGRAM_BOT_TOKEN" \
+        | curl -fsS -m 15 -K - --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
+            --data-urlencode "text=$1" >/dev/null || true
 }
 pause() { sleep $(( $1 + RANDOM % 60 )); }
 
@@ -66,11 +68,16 @@ grep -q '^ssh-ed25519 ' "$SSH_PUBKEY_FILE" || fail "$SSH_PUBKEY_FILE no es una l
 [ "$OCPUS" -le 2 ] && [ "$MEMORY_GB" -le 12 ] && [ "$BOOT_GB" -ge 50 ] && [ "$BOOT_GB" -le 200 ] \
     || fail "Fuera del Always Free (máx. 2 OCPU / 12 GB; disco 50–200 GB). Aborto."
 
-existing="$(oci compute instance list --compartment-id "$COMPARTMENT_ID" --display-name "$DISPLAY_NAME" \
-    --query "length(data[?\"lifecycle-state\"!='TERMINATED'])" --raw-output 2>/dev/null || true)"
-if [ -n "$existing" ] && [ "$existing" != "0" ]; then
-    fail "Ya existe una instancia '$DISPLAY_NAME' no terminada. No creo otra."
-fi
+check_existing() {
+    local existing
+    existing="$(oci compute instance list --compartment-id "$COMPARTMENT_ID" --display-name "$DISPLAY_NAME" \
+        --query "length(data[?\"lifecycle-state\"!='TERMINATED'])" --raw-output 2>/dev/null || true)"
+    if [ -n "$existing" ] && [ "$existing" != "0" ]; then
+        notify "ℹ️ Oracle: ya existe '$DISPLAY_NAME'; el reintento se detiene."
+        fail "Ya existe una instancia '$DISPLAY_NAME' no terminada. No creo otra."
+    fi
+}
+check_existing
 
 AD="$(oci iam availability-domain list --compartment-id "$COMPARTMENT_ID" --query 'data[0].name' --raw-output)"
 IMAGE_ID="$(oci compute image list --compartment-id "$COMPARTMENT_ID" \
@@ -120,6 +127,7 @@ while [ "$MAX_ATTEMPTS" -eq 0 ] || [ "$attempt" -lt "$MAX_ATTEMPTS" ]; do
         echo "$out" | tail -n 5
         log "Error transitorio (red o servicio). Reintento."
         pause "$RETRY_SECONDS"
+        check_existing   # por si el launch llegó a crear la VM aunque la respuesta fallara
     fi
 done
 fail "Se agotaron $MAX_ATTEMPTS intentos."
