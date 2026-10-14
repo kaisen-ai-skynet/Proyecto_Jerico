@@ -1,0 +1,59 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "adset_nombre": {
+      "default": "Intereses PYME Colombia",
+      "maxLength": 100,
+      "title": "Adset Nombre",
+      "type": "string"
+    },
+    "call_to_action": {
+      "default": "WHATSAPP_MESSAGE",
+      "maxLength": 50,
+      "title": "Call To Action",
+      "type": "string"
+    },
+    "gasto_autorizado_usd": {
+      "anyOf": [
+        {
+          "minimum": 0.0,
+          "type": "number"
+        },
+        {
+          "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+          "type": "string"
+        }
+      ],
+      "default": "0.00",
+      "title": "Gasto Autorizado Usd"
+    },
+    "objetivo": {
+      "default": "MESSAGES",
+      "maxLength": 50,
+      "title": "Objetivo",
+      "type": "string"
+    },
+    "presupuesto_diario_usd": {
+      "anyOf": [
+        {
+          "minimum": 0.0,
+          "type": "number"
+        },
+        {
+          "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+          "type": "string"
+        }
+      ],
+      "default": "0.00",
+      "title": "Presupuesto Diario Usd"
+    },
+    "status": {
+      "default": "PAUSED",
+      "maxLength": 20,
+      "title": "Status",
+      "type": "string"
+    }
+  },
+  "title": "MetaAdConfig",
+  "type": "object"
+}
