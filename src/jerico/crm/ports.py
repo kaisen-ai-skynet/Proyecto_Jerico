@@ -1,10 +1,10 @@
 """Puertos (`Protocol`s) y tipos de intercambio de los adaptadores del CRM (plan §6)."""
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import BinaryIO, Literal, Protocol
+from typing import Any, BinaryIO, Literal, Protocol
 
 FileKind = Literal["photo", "document", "voice"]
 
@@ -71,6 +71,23 @@ class TelegramPort(Protocol):
     async def download_file(self, file_id: str, dest: Path, max_bytes: int) -> DownloadResult: ...
 
     async def send_document(self, chat_id: int, path: Path, caption: str) -> SendResult: ...
+
+    async def set_my_commands(
+        self,
+        commands: Sequence[Mapping[str, str]],
+        scope: Mapping[str, Any] | None = None,
+    ) -> bool: ...
+
+    async def delete_my_commands(
+        self,
+        scope: Mapping[str, Any] | None = None,
+    ) -> bool: ...
+
+    async def set_chat_menu_button(
+        self,
+        chat_id: int | None = None,
+        menu_button: Mapping[str, Any] | None = None,
+    ) -> bool: ...
 
 
 class EmailSender(Protocol):

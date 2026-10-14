@@ -149,6 +149,49 @@ class HttpxTelegramClient:
         with contextlib.suppress(TelegramApiError):
             await self._call("answerCallbackQuery", json=body)
 
+    async def set_my_commands(
+        self,
+        commands: Any,
+        scope: Any = None,
+    ) -> bool:
+        body: dict[str, Any] = {"commands": [dict(c) for c in commands]}
+        if scope is not None:
+            body["scope"] = dict(scope)
+        try:
+            result = await self._call("setMyCommands", json=body)
+            return bool(result)
+        except TelegramApiError:
+            return False
+
+    async def delete_my_commands(
+        self,
+        scope: Any = None,
+    ) -> bool:
+        body: dict[str, Any] = {}
+        if scope is not None:
+            body["scope"] = dict(scope)
+        try:
+            result = await self._call("deleteMyCommands", json=body)
+            return bool(result)
+        except TelegramApiError:
+            return False
+
+    async def set_chat_menu_button(
+        self,
+        chat_id: int | None = None,
+        menu_button: Any = None,
+    ) -> bool:
+        body: dict[str, Any] = {
+            "menu_button": dict(menu_button) if menu_button else {"type": "commands"}
+        }
+        if chat_id is not None:
+            body["chat_id"] = chat_id
+        try:
+            result = await self._call("setChatMenuButton", json=body)
+            return bool(result)
+        except TelegramApiError:
+            return False
+
     async def send_document(self, chat_id: int, path: Path, caption: str) -> SendResult:
         try:
             with path.open("rb") as fh:

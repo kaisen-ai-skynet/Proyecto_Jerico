@@ -30,7 +30,7 @@ from jerico.crm.closing_flow import (
 from jerico.crm.config import CrmSettings, parse_allowed_ids
 from jerico.crm.db import CrmDatabase
 from jerico.crm.files import LocalFileStore
-from jerico.crm.model import Outgoing, User
+from jerico.crm.model import Outgoing, Role, User
 from jerico.crm.ports import TelegramPort
 
 LEGAL_OFFSET_KEY = "legal_telegram_offset"
@@ -58,15 +58,55 @@ def start_command(
 def register_lawyer_commands(
     bot: CrmBot, db: CrmDatabase, ctx: ClosingContext, telegram: TelegramPort
 ) -> None:
-    bot.register_command("start", start_command)
-    bot.register_command("casos", as_lawyer(ctx, cases_command))
-    bot.register_command("paquete", package_command)
-    bot.register_command("descargar", download_command(ctx, bot, telegram))
-    bot.register_command("basejuridica", as_lawyer(ctx, legal_basis_command))
-    bot.register_command("subircontrato", as_lawyer(ctx, upload_command))
+    bot.register_command(
+        "start",
+        start_command,
+        description="Iniciar y ver ID de Telegram",
+        roles=(Role.LAWYER, Role.CTO),
+    )
+    bot.register_command(
+        "casos",
+        as_lawyer(ctx, cases_command),
+        description="Listar casos con paquete enviado",
+        roles=(Role.LAWYER, Role.CTO),
+    )
+    bot.register_command(
+        "paquete",
+        package_command,
+        description="Consultar paquete de cierre",
+        roles=(Role.LAWYER, Role.CTO),
+    )
+    bot.register_command(
+        "descargar",
+        download_command(ctx, bot, telegram),
+        description="Descargar paquete como archivo",
+        roles=(Role.LAWYER, Role.CTO),
+    )
+    bot.register_command(
+        "basejuridica",
+        as_lawyer(ctx, legal_basis_command),
+        description="Confirmar base legal del contrato",
+        roles=(Role.LAWYER, Role.CTO),
+    )
+    bot.register_command(
+        "subircontrato",
+        as_lawyer(ctx, upload_command),
+        description="Subir contrato final (PDF o DOCX)",
+        roles=(Role.LAWYER, Role.CTO),
+    )
     bot.register_file_pending(CONTRACT_FILE_KIND, as_lawyer_file(ctx, file_handler(ctx, bot, db)))
-    bot.register_command("devolver", as_lawyer(ctx, return_command))
-    bot.register_command("formaespecial", as_lawyer(ctx, special_form_command))
+    bot.register_command(
+        "devolver",
+        as_lawyer(ctx, return_command),
+        description="Devolver paquete al comercial",
+        roles=(Role.LAWYER, Role.CTO),
+    )
+    bot.register_command(
+        "formaespecial",
+        as_lawyer(ctx, special_form_command),
+        description="Marcar forma especial requerida",
+        roles=(Role.LAWYER, Role.CTO),
+    )
 
 
 def build_legal_bot(
