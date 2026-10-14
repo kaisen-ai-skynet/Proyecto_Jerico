@@ -4,13 +4,13 @@ proyecto: Jericó — Kaisen AI
 frente: F1 infraestructura (plan maestro)
 autor: infra-arquitecto (Claude Code · Opus 5.5)
 creado: "13/10/2026 22:03"
-modificado: "13/10/2026 22:03"
+modificado: "13/10/2026 22:25"
 ---
 
 # Nube gratis para Jericó: OCI vs Google Cloud vs AWS (13/10/2026)
 
 **Pregunta del CTO:** ¿hay una nube **gratis de verdad** que alcance para Jericó?
-**Respuesta corta:** solo **OCI Always Free** alcanza y es gratis de forma permanente. Hoy no hay capacidad en Bogotá, así que **seguimos en `kaisen-server`** y con el reintento A1 activo.
+**Respuesta corta (ampliada en la ronda 2, con plan B de pago en §6):** solo **OCI Always Free** alcanza y es gratis de forma permanente. Hoy no hay capacidad en Bogotá, así que **seguimos en `kaisen-server`** y con el reintento A1 activo.
 - **Google Cloud** regala para siempre una sola `e2-micro` (1 GB de RAM, en EE. UU.), pide tarjeta y no alcanza para el núcleo.
 - **AWS**, con el modelo actual, **no tiene ninguna VM gratis para siempre**: da créditos durante 6 meses y después cierra la cuenta del plan gratis.
 
@@ -53,14 +53,50 @@ Las fuentes son oficiales y las consulté el 13/10/2026 entre las 21:58 y las 22
 ## 4. Recomendación
 
 1. **Seguir en `kaisen-server` como producción** (decisión vigente del CTO). Instalar ya los backups y la alerta de salud (runbook `docs/despliegue-servidor-kaisen.md` en `infra/servidor-produccion`, listo para aprobar). Es lo que reduce el riesgo hoy.
-2. **OCI A1 sigue siendo la meta.** El reintento corre 24/7 en `kaisen-server` (tmux `oci-a1`). Cuando consiga 1/6, se migra con `docs/migracion-oci.md` y después se amplía a 2/12 editando la shape.
+2. **OCI A1 sigue siendo la meta.** El reintento está **pausado por el CTO** desde el 13/10 a las 22:21 (tmux cerrado y `@reboot` comentado); se reactiva cuando él lo decida. Cuando consiga 1/6, se migra con `docs/migracion-oci.md` y después se amplía a 2/12 editando la shape.
    - **Antes de que acabe la prueba (~20/10):** comprueba que en la tenancy no haya nada de pago y que Object Storage no supere 20 GB.
    - **Riesgo de que Oracle reclame la VM por inactividad:** un CRM con poco tráfico puede quedar por debajo de los umbrales. Hay que vigilarlo con las métricas de la consola durante la primera semana.
 3. **No usar AWS para producción.** No da VM gratis permanente, y la cuenta gratis se cierra a los 6 meses. Como mucho sirve para pruebas cortas.
 4. **GCP solo como plan C para el CRM aislado** y únicamente con el OK del CTO, porque pide tarjeta. Sería un `e2-micro` en `us-central1` con el CRM y SQLite y backups a GCS (5 GB). El núcleo no cabe.
 5. **Sin gasto en ningún caso:** cualquier opción de pago (OCI Pay-As-You-Go, AWS de pago, GCP más allá del cupo) necesita la aprobación explícita del CTO, con el costo documentado (regla «gratis primero» del plan maestro).
 
-## 5. Fuentes (consultadas el 13/10/2026)
+## 5. Cuota real de A1 Always Free: 2/12, no 4/24 (verificado el 13/10/2026)
+
+La página oficial *Always Free Resources* dice: «the first **1,500 OCPU hours and 9,000 GB hours per month** … equivalent to **2 OCPUs and 12 GB of memory** for Always Free tenancies». Se puede usar todo en una instancia o en hasta dos de 1 OCPU. La página ya no menciona la cifra de 4/24 (3.000 OCPU-h y 18.000 GB-h) que se citaba antes **[el dato histórico no está en la fuente]**. Una VM de 4/24 en una cuenta Always Free excede el cupo (decisión D2, `DECISIONES_CTO.md`).
+
+## 6. Plan B de pago, dentro del presupuesto de 10–25 USD/mes (nada contratado)
+
+Es lo que pide el plan maestro (§6 y §7) si `kaisen-server` deja de servir antes de que OCI tenga capacidad.
+
+| Opción | Arquitectura y recursos | Precio mensual (sin IVA) | IPv4 | Ubicaciones | Disponibilidad hoy |
+|---|---|---|---|---|---|
+| **Hetzner CX23** | x86 (Intel/AMD), 2 vCPU, 4 GB, 40 GB NVMe, 20 TB de tráfico | **5,49 €** (6,49 USD) sin IPv4. Antes valía 3,99 €; el cambio rige desde el 15/06/2026 | **Se cobra aparte:** 0,50 €/mes (0,60 USD). **Total ≈ 5,99 € (≈ 7,09 USD)**. IPv6 gratis | Nuremberg y Helsinki (la línea *cost-optimized* no está en EE. UU.) | La página la marcaba **«currently unavailable»** el 13/10 **[comprobar en la consola antes de decidir]** |
+| **Hetzner CAX11** | **ARM** (Ampere), 2 vCPU, 4 GB, 40 GB NVMe, 20 TB | **5,99 €** (6,99 USD) sin IPv4. Antes valía 4,49 €; el cambio rige desde el 15/06/2026 | 0,50 € aparte. **Total ≈ 6,49 € (≈ 7,59 USD)** | Falkenstein, Nuremberg y Helsinki | También **«currently unavailable»** el 13/10 **[comprobar]** |
+| **Cloudflare R2** (backups `age`) | Almacenamiento de objetos compatible con S3 | **Gratis hasta 10 GB-mes**, 1 M de operaciones clase A y 10 M de clase B. Después, 0,015 USD por GB-mes. **Egreso gratis** | n/a | Global | La página no dice si exige medio de pago para activarlo **[sin verificar; normalmente lo pide]** |
+
+**Latencia medida** desde la laptop del CTO en Colombia, el 13/10/2026 a las 22:25, con `ping -c 5` por Wi-Fi doméstico (es orientativa):
+
+| Destino | Latencia media |
+|---|---|
+| Hillsboro (EE. UU.) | 167 ms |
+| Helsinki | 197 ms |
+| Falkenstein | 203 ms |
+| Nuremberg | 218 ms |
+| Ashburn | 231 ms (con mucha variación) |
+
+Para un bot de Telegram con *polling* ese retraso no se nota; para una interfaz web sí sería perceptible.
+
+**Decisión consultada a Jev** (`jev_decidir.py`, `jev-1.13.0`, 13/10/2026 22:26):
+- Plan B de servidor: **Hetzner CX23**. Es x86 como hoy, así que no hay que reconstruir la imagen, y es la opción más barata.
+- Backups fuera de la máquina: **Cloudflare R2**.
+- Cuándo pagar: **al crecer**, cuando haya comerciales activos y leads reales.
+
+**Mi comentario como director F1:** coincido con Jev en lo del servidor y en lo de cuándo pagar.
+- Para los backups hay una alternativa **sin tarjeta y ya creada**: el bucket de OCI (20 GB Always Free en la cuenta `kaisen_cloud`, que no necesita VM). Si R2 pide medio de pago, el bucket de OCI es mejor primer paso.
+- El costo del plan B sería **≈ 7 USD/mes por el CX23**, más 0 USD de R2 mientras no pase de 10 GB. Así quedan unos 3–18 USD del tope para la voz y el LLM.
+- Para contratarlo hace falta el OK explícito del CTO.
+
+## 7. Fuentes (consultadas el 13/10/2026)
 
 | Nube | Fuente oficial | Fecha de la página |
 |---|---|---|
@@ -71,9 +107,13 @@ Las fuentes son oficiales y las consulté el 13/10/2026 entre las 21:58 y las 22
 | AWS | [Explore AWS services with AWS Free Tier](https://docs.aws.amazon.com/awsaccountbilling/latest/aboutv2/free-tier.html) | sin fecha |
 | AWS | [AWS Free Tier FAQs](https://aws.amazon.com/free/free-tier-faqs/) | sin fecha (menciona un registro nuevo en octubre de 2026) |
 | AWS | [Free compute](https://aws.amazon.com/free/compute/), [Free databases](https://aws.amazon.com/free/database/), [Free Tier antes del 15/07/2025](https://docs.aws.amazon.com/awsaccountbilling/latest/aboutv2/billing-free-tier.html) | sin fecha |
+| Hetzner | [Price Adjustment 15 June 2026](https://docs.hetzner.com/general/infrastructure-and-availability/price-adjustment/) | rige desde el 15/06/2026 |
+| Hetzner | [IP pricing](https://docs.hetzner.com/general/infrastructure-and-availability/ipv4-pricing/) | última modificación 13/04/2023 (© 2026) |
+| Hetzner | [Cost-Optimized (CX23, CAX11)](https://www.hetzner.com/cloud/cost-optimized/) | sin fecha; «currently unavailable» el 13/10/2026 |
+| Cloudflare | [R2 pricing](https://developers.cloudflare.com/r2/pricing/) | actualizada el 01/10/2026 |
 | Propias | `docs/dia-1-oci.md`, plan maestro (§1), `docker-compose.yml` | 13/10/2026 |
 
 > Las páginas de AWS no coinciden del todo en qué ofertas tiene activas el plan gratis (unas hablan solo de «Always Free», otras de EC2 cubierto con créditos). La conclusión no cambia: con AWS no hay VM gratis para siempre.
 
 ---
-> 🕒 **Última modificación:** 13/10/2026 22:03 (Claude Code · Opus 5.5)
+> 🕒 **Última modificación:** 13/10/2026 22:25 (Claude Code · Opus 5.5)
