@@ -96,6 +96,8 @@ class RepositorioCatalogo:
 
         return archivo
 
+    guardar = guardar_version
+
     def marcar_vigente(self, version: str) -> None:
         """Apunta el archivo VIGENTE a la versión indicada."""
         self.cargar_version(version)

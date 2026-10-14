@@ -8,6 +8,7 @@ from pathlib import Path
 
 from loguru import logger
 
+from jerico.catalogo.bot import register_catalogo_commands
 from jerico.crm import CURRENT_PHASE, repo
 from jerico.crm.assistant import AssistantContext, register_assistant
 from jerico.crm.assistant_budget import AssistantBudget
@@ -224,6 +225,7 @@ class CrmApp:
                 kick_delivery=self._kick_delivery,
             ),
         )
+        register_catalogo_commands(self.bot)
         self.scheduler = CronScheduler(
             execution_timeout_s=EXECUTION_TIMEOUT_S, poll_interval_s=POLL_INTERVAL_S
         )
