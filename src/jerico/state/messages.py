@@ -10,6 +10,8 @@ class SessionRecord:
     parent_session_id: str | None
     created_at: str
     updated_at: str
+    user_id: int | None = None
+    role: str | None = None
 
 
 @dataclass(frozen=True)

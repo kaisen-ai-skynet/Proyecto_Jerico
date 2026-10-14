@@ -2,7 +2,7 @@
 
 Una spec hija por fase, cada una con su rama y TDD. Esta rama solo entrega la arquitectura.
 
-- [ ] **T1** Spec hija A1 (núcleo y memoria Postgres, aislamiento por rol). Delegable a Gemini: borrador; revisa Sonnet.
+- [x] **T1** Spec hija A1 (núcleo y memoria SQLite WAL / StateEngine, aislamiento por rol). Delegable a Gemini: borrador; revisa Sonnet.
 - [ ] **T2** Spec hija A2 (4 habilidades de ventas + curador que propone). Gemini.
 - [ ] **T3** Spec hija A5 (PWA: chat, leads, aprobaciones, consumo). Gemini; seguridad la revisa Opus.
 - [ ] **T4** Spec hija A3 (crear_lead y generador de webs en sandbox). Sonnet; Opus revisa el aislamiento.

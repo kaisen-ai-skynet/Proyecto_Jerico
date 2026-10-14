@@ -16,11 +16,14 @@ CREATE TABLE IF NOT EXISTS sessions (
     system_prompt_hash TEXT NOT NULL REFERENCES system_prompts(prompt_hash),
     model TEXT NOT NULL,
     parent_session_id TEXT REFERENCES sessions(session_id) ON DELETE SET NULL,
+    user_id INTEGER,
+    role TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_sessions_parent ON sessions(parent_session_id);
+CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id, role);
 
 CREATE TABLE IF NOT EXISTS messages (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -53,6 +56,15 @@ CREATE TABLE IF NOT EXISTS session_leases (
 );
 
 CREATE INDEX IF NOT EXISTS idx_session_leases_expiry ON session_leases(expires_at);
+
+CREATE TABLE IF NOT EXISTS session_summaries (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id TEXT NOT NULL REFERENCES sessions(session_id) ON DELETE CASCADE,
+    summary TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_session_summaries_session ON session_summaries(session_id);
 """
 
 
@@ -62,5 +74,13 @@ def initialize_schema(connection: sqlite3.Connection) -> None:
     if current > SCHEMA_VERSION:
         raise RuntimeError(f"database schema {current} is newer than supported {SCHEMA_VERSION}")
     connection.executescript(SCHEMA_SQL)
+    # Ensure user_id and role exist on pre-existing sessions tables
+    cursor = connection.execute("PRAGMA table_info(sessions)")
+    existing_cols = {row[1] for row in cursor.fetchall()}
+    if "user_id" not in existing_cols:
+        connection.execute("ALTER TABLE sessions ADD COLUMN user_id INTEGER")
+    if "role" not in existing_cols:
+        connection.execute("ALTER TABLE sessions ADD COLUMN role TEXT")
     initialize_fts(connection)
     connection.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
+

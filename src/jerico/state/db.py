@@ -130,6 +130,8 @@ class StateEngine:
         system_prompt: str,
         model: str,
         parent_session_id: str | None = None,
+        user_id: int | None = None,
+        role: str | None = None,
     ) -> SessionRecord:
         now = _now()
         prompt_hash = hashlib.sha256(system_prompt.encode("utf-8")).hexdigest()
@@ -152,13 +154,33 @@ class StateEngine:
                 )
                 connection.execute(
                     "INSERT INTO sessions(session_id, system_prompt_hash, model, "
-                    "parent_session_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
-                    (session_id, prompt_hash, model, parent_session_id, now, now),
+                    "parent_session_id, user_id, role, created_at, updated_at) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    (session_id, prompt_hash, model, parent_session_id, user_id, role, now, now),
                 )
             result = connection.execute(
                 "SELECT * FROM sessions WHERE session_id = ?", (session_id,)
             ).fetchone()
         return _session_record(result)
+
+    def save_summary(self, session_id: str, summary: str) -> None:
+        now = _now()
+        with self._transaction() as connection:
+            connection.execute(
+                "INSERT INTO session_summaries(session_id, summary, created_at) VALUES (?, ?, ?)",
+                (session_id, summary, now),
+            )
+
+    def get_latest_summary(self, session_id: str) -> str | None:
+        query = (
+            "SELECT summary FROM session_summaries "
+            "WHERE session_id = ? ORDER BY id DESC LIMIT 1"
+        )
+        with self._reader() as connection:
+            row = connection.execute(query, (session_id,)).fetchone()
+        return str(row["summary"]) if row is not None else None
+
+
 
     def append_message(
         self,
@@ -329,6 +351,9 @@ def _now() -> str:
 
 
 def _session_record(row: sqlite3.Row) -> SessionRecord:
+    keys = row.keys()
+    user_id = row["user_id"] if "user_id" in keys else None
+    role = row["role"] if "role" in keys else None
     return SessionRecord(
         session_id=row["session_id"],
         system_prompt_hash=row["system_prompt_hash"],
@@ -336,6 +361,8 @@ def _session_record(row: sqlite3.Row) -> SessionRecord:
         parent_session_id=row["parent_session_id"],
         created_at=row["created_at"],
         updated_at=row["updated_at"],
+        user_id=int(user_id) if user_id is not None else None,
+        role=str(role) if role is not None else None,
     )
 
 

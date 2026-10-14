@@ -11,6 +11,7 @@ from loguru import logger
 from jerico.crm import CURRENT_PHASE, repo
 from jerico.crm.assistant import AssistantContext, register_assistant
 from jerico.crm.assistant_budget import AssistantBudget
+from jerico.crm.assistant_memory import AssistantMemory
 from jerico.crm.backup import SubprocessRunner, run_backup
 from jerico.crm.bot import CrmBot
 from jerico.crm.closing_contract import contract_sweep, register_contract
@@ -169,6 +170,7 @@ class CrmApp:
             files=self.files,
             params=self.params,
         )
+        self.assistant_memory = AssistantMemory(self.data_dir / "assistant_memory.db")
         register_assistant(
             self.bot,
             AssistantContext(
@@ -177,6 +179,7 @@ class CrmApp:
                 client=self.assistant_llm,
                 budget=AssistantBudget(settings),
                 clock=clock,
+                memory=self.assistant_memory,
             ),
         )
         self.closing_ctx = ClosingContext(
@@ -336,6 +339,7 @@ class CrmApp:
             await self.scheduler.stop()
 
     def close(self) -> None:
+        self.assistant_memory.close()
         self.db.close()
 
 

@@ -16,6 +16,7 @@ from loguru import logger
 
 from jerico.crm import leads, permissions, repo
 from jerico.crm.assistant_budget import AssistantBudget
+from jerico.crm.assistant_memory import AssistantMemory
 from jerico.crm.bot import CrmBot, deny
 from jerico.crm.config import CrmSettings
 from jerico.crm.db import CrmDatabase
@@ -93,6 +94,8 @@ class AssistantContext:
     client: LlmPort | None
     budget: AssistantBudget
     clock: Callable[[], datetime]
+    memory: AssistantMemory | None = None
+
 
 
 def _days_ago(iso: str, now: datetime) -> int:
@@ -266,8 +269,14 @@ def _handle(
     }[sub][:MAX_CONTEXT_CHARS]
     lead_id_for_audit = None if lead is None else lead.id
 
+    session_id = (
+        f"crm:user:{user.id}:lead:{lead_id_for_audit}"
+        if lead_id_for_audit is not None
+        else f"crm:user:{user.id}:{sub}"
+    )
+
     async def job() -> list[Outgoing]:
-        return await _run(ctx, user, sub, prompt, red, lead_id_for_audit)
+        return await _run(ctx, user, sub, prompt, red, lead_id_for_audit, session_id=session_id)
 
     bot.defer(job)
     return [Outgoing(chat, WORKING)]
@@ -280,11 +289,21 @@ async def _run(
     prompt: str,
     red: Redactor,
     lead_id: int | None,
+    session_id: str | None = None,
 ) -> list[Outgoing]:
     chat = user.telegram_id
     client = ctx.client
     if client is None:  # el manejador ya lo descarta; defensa ante un cambio de cableado
         return [Outgoing(chat, UNAVAILABLE)]  # pragma: no cover
+    role_str = user.role.value if hasattr(user.role, "value") else str(user.role)
+    if ctx.memory is not None and session_id is not None:
+        ctx.memory.get_or_create_session(
+            session_id=session_id,
+            user_id=user.id,
+            role=role_str,
+            system_prompt=SYSTEM_PROMPTS[sub],
+            model=ctx.settings.openai_model,
+        )
     try:
         result = await client.complete(
             system=SYSTEM_PROMPTS[sub],
@@ -305,6 +324,17 @@ async def _run(
         _audit(tx, user, lead_id, AuditOutcome.OK, now)
         if outcome.cap_reached:
             notice = _cto_notice(tx, ctx, now)
+    if ctx.memory is not None and session_id is not None:
+        ctx.memory.record_turn(
+            session_id=session_id,
+            user_id=user.id,
+            role=role_str,
+            user_prompt=prompt,
+            assistant_response=result.text,
+            model=ctx.settings.openai_model,
+            prompt_tokens=result.input_tokens,
+            completion_tokens=result.output_tokens,
+        )
     cost = "no calculado" if outcome.cost_usd is None else f"{outcome.cost_usd:.4f} USD"
     logger.info(  # A21: sin texto del prompt ni de la respuesta
         "asistente: caso={} usuario={} entrada={} salida={} costo={}",
