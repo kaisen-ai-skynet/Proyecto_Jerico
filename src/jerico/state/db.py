@@ -173,14 +173,11 @@ class StateEngine:
 
     def get_latest_summary(self, session_id: str) -> str | None:
         query = (
-            "SELECT summary FROM session_summaries "
-            "WHERE session_id = ? ORDER BY id DESC LIMIT 1"
+            "SELECT summary FROM session_summaries WHERE session_id = ? ORDER BY id DESC LIMIT 1"
         )
         with self._reader() as connection:
             row = connection.execute(query, (session_id,)).fetchone()
         return str(row["summary"]) if row is not None else None
-
-
 
     def append_message(
         self,

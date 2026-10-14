@@ -153,37 +153,53 @@ def test_strict_mode_all_error_types(policy):
 
     # Clave extra
     with pytest.raises(InvalidState, match="clave_extra"):
-        validate_state(spec, {
-            "dias_sin_contacto": "0",
-            "paso_cadencia": "0",
-            "estado_lead": "nuevo",
-            "intentos_fallidos": "0",
-            "extra": 123,
-        }, strict=True)
+        validate_state(
+            spec,
+            {
+                "dias_sin_contacto": "0",
+                "paso_cadencia": "0",
+                "estado_lead": "nuevo",
+                "intentos_fallidos": "0",
+                "extra": 123,
+            },
+            strict=True,
+        )
 
     # Bool inválido
     with pytest.raises(InvalidState, match="tipo_invalido_bool"):
-        validate_state(spec, {
-            "dias_sin_contacto": True,
-            "paso_cadencia": "0",
-            "estado_lead": "nuevo",
-            "intentos_fallidos": "0",
-        }, strict=True)
+        validate_state(
+            spec,
+            {
+                "dias_sin_contacto": True,
+                "paso_cadencia": "0",
+                "estado_lead": "nuevo",
+                "intentos_fallidos": "0",
+            },
+            strict=True,
+        )
 
     # Entero inválido
     with pytest.raises(InvalidState, match="valor_invalido_entero"):
-        validate_state(spec, {
-            "dias_sin_contacto": 999,
-            "paso_cadencia": "0",
-            "estado_lead": "nuevo",
-            "intentos_fallidos": "0",
-        }, strict=True)
+        validate_state(
+            spec,
+            {
+                "dias_sin_contacto": 999,
+                "paso_cadencia": "0",
+                "estado_lead": "nuevo",
+                "intentos_fallidos": "0",
+            },
+            strict=True,
+        )
 
     # Valor string inválido
     with pytest.raises(InvalidState, match="valor_invalido"):
-        validate_state(spec, {
-            "dias_sin_contacto": "no_existe",
-            "paso_cadencia": "0",
-            "estado_lead": "nuevo",
-            "intentos_fallidos": "0",
-        }, strict=True)
+        validate_state(
+            spec,
+            {
+                "dias_sin_contacto": "no_existe",
+                "paso_cadencia": "0",
+                "estado_lead": "nuevo",
+                "intentos_fallidos": "0",
+            },
+            strict=True,
+        )

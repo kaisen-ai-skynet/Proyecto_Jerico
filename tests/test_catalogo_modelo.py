@@ -111,13 +111,15 @@ def test_rechaza_precio_negativo() -> None:
 def test_rechaza_planes_duplicados() -> None:
     data = _catalogo_valido_dict()
     # Mismo id en dos planes
-    data["planes"].append({
-        "id": "estandar",
-        "nombre": "Otro Estándar",
-        "precio_propuesta": 4000000,
-        "precio_formula": 5000000,
-        "margen_objetivo_pct": 20,
-    })
+    data["planes"].append(
+        {
+            "id": "estandar",
+            "nombre": "Otro Estándar",
+            "precio_propuesta": 4000000,
+            "precio_formula": 5000000,
+            "margen_objetivo_pct": 20,
+        }
+    )
     with pytest.raises(ValidationError, match="duplicado"):
         CatalogoPrecios.model_validate(data)
 

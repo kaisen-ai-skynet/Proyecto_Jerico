@@ -41,13 +41,22 @@ class PerfeccionadorMarketing:
             return ClasificacionCampana.C5
 
         c3_keywords = [
-            "responsabilidad", "quién responde", "quien responde", "alguien responde", "firma"
+            "responsabilidad",
+            "quién responde",
+            "quien responde",
+            "alguien responde",
+            "firma",
         ]
         if any(k in texto for k in c3_keywords):
             return ClasificacionCampana.C3
 
         c2_keywords = [
-            "radar", "vencimiento", "evolución", "evolucion", "versión", "del papel al sistema"
+            "radar",
+            "vencimiento",
+            "evolución",
+            "evolucion",
+            "versión",
+            "del papel al sistema",
         ]
         if any(k in texto for k in c2_keywords):
             return ClasificacionCampana.C2
@@ -125,20 +134,13 @@ class PerfeccionadorMarketing:
         if trato == Trato.USTED:
             if canal == CanalMarketing.CORREO:
                 linea1 = (
-                    "En Kaizen sabemos que antes de programar, "
-                    "lo primero es entender su operación."
+                    "En Kaizen sabemos que antes de programar, lo primero es entender su operación."
                 )
                 linea2 = (
                     "No implementamos herramientas por moda; "
                     "construimos sistemas que su equipo realmente adopte."
                 )
-                return (
-                    f"Estimado/a cliente:\n\n"
-                    f"{linea1}\n\n"
-                    f"{texto_limpio}\n\n"
-                    f"{linea2}\n\n"
-                    f"{TAGLINE}"
-                )
+                return f"Estimado/a cliente:\n\n{linea1}\n\n{texto_limpio}\n\n{linea2}\n\n{TAGLINE}"
             # LinkedIn u otros formales
             linea_lk = (
                 "En Kaizen diseñamos sistemas por etapas "

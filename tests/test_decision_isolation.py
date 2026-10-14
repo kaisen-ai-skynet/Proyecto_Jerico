@@ -25,15 +25,15 @@ def test_no_network_imports_in_decision_package():
             if isinstance(node, ast.Import):
                 for alias in node.names:
                     for prohibited in prohibited_modules:
-                        assert not alias.name.startswith(
-                            prohibited
-                        ), f"Importación de red prohibida '{alias.name}' en {py_file.name}"
+                        assert not alias.name.startswith(prohibited), (
+                            f"Importación de red prohibida '{alias.name}' en {py_file.name}"
+                        )
             elif isinstance(node, ast.ImportFrom):
                 module_name = node.module or ""
                 for prohibited in prohibited_modules:
-                    assert not module_name.startswith(
-                        prohibited
-                    ), f"Importación de red prohibida '{module_name}' en {py_file.name}"
+                    assert not module_name.startswith(prohibited), (
+                        f"Importación de red prohibida '{module_name}' en {py_file.name}"
+                    )
 
 
 def test_pyproject_toml_unchanged():

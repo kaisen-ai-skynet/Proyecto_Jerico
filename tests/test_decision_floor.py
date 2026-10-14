@@ -17,16 +17,19 @@ def test_mas_restrictiva_jerarquia():
     assert mas_restrictiva(DataClass.SIN_DATOS_PERSONALES, DataClass.CON_DATOS_PERSONALES) == (
         DataClass.CON_DATOS_PERSONALES
     )
-    assert mas_restrictiva(
-        DataClass.SEUDONIMIZADO_VERIFICADO, DataClass.SIN_DATOS_PERSONALES
-    ) == DataClass.SEUDONIMIZADO_VERIFICADO
-    assert mas_restrictiva(
-        DataClass.SEUDONIMIZADO_VERIFICADO, DataClass.CON_DATOS_PERSONALES
-    ) == DataClass.CON_DATOS_PERSONALES
+    assert (
+        mas_restrictiva(DataClass.SEUDONIMIZADO_VERIFICADO, DataClass.SIN_DATOS_PERSONALES)
+        == DataClass.SEUDONIMIZADO_VERIFICADO
+    )
+    assert (
+        mas_restrictiva(DataClass.SEUDONIMIZADO_VERIFICADO, DataClass.CON_DATOS_PERSONALES)
+        == DataClass.CON_DATOS_PERSONALES
+    )
 
 
 def test_contexto_sin_marca_sin_texto_libre_es_con_datos_personales():
     """Un contexto sin marca explícita se trata como con_datos_personales (VJT-023)."""
+
     class ContextoSinMarca:
         clase_datos = DataClass.SEUDONIMIZADO_VERIFICADO
         sin_texto_libre = False

@@ -1,9 +1,9 @@
 # Informe de Investigación: Mercado de Asistentes, Agentes IA y CRMs (Octubre 2026)
 
-**Frente:** F4 — Asistente nivel Hermes + Análisis de mercado + Voz, webs y apps  
-**Destino:** `kai-jev` (director de arquitectura)  
-**Autor:** `plan-gemini` (apoyo F4)  
-**Fecha:** 13 de octubre de 2026  
+**Frente:** F4 — Asistente nivel Hermes + Análisis de mercado + Voz, webs y apps
+**Destino:** `kai-jev` (director de arquitectura)
+**Autor:** `plan-gemini` (apoyo F4)
+**Fecha:** 13 de octubre de 2026
 **Estado:** Entregado (para revisión y diseño de fases de arquitectura)
 
 ---

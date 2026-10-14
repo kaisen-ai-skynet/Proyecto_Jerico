@@ -49,9 +49,7 @@ def test_decidir_una_sola_opcion_devuelve_base_una_opcion(tmp_path: Path):
     settings = DecisionSettings(modes={"modelo_asistente": "sombra"}, base_dir=tmp_path)
     state = {"tipo_tarea": "resumen_lead", "longitud_contexto": "corta"}
 
-    decision = decidir(
-        "modelo_asistente", state, tarea="resumen_lead", settings=settings
-    )
+    decision = decidir("modelo_asistente", state, tarea="resumen_lead", settings=settings)
 
     assert decision.option == "gpt-6-luna"
     assert decision.source == "base"
@@ -149,6 +147,7 @@ def test_decidir_empate_resuelve_a_base(tmp_path: Path):
 
 def test_decidir_nunca_lanza_excepcion(tmp_path: Path):
     """decidir nunca lanza excepciones ante fallos catastróficos inyectados (VJT-030)."""
+
     # Simulamos un objeto que falla en get
     class BrokenCache:
         def get(self, *args):

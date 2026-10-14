@@ -109,9 +109,7 @@ class Policy:
 
         # Reglas de Clase B: orden_exigencia obligatorio
         if clase == "B":
-            orden = conf.get("orden_exigencia") or (
-                padre.get("orden_exigencia") if padre else None
-            )
+            orden = conf.get("orden_exigencia") or (padre.get("orden_exigencia") if padre else None)
             if not orden:
                 raise PolicyValidationError(f"Clase B exige orden_exigencia en '{identificador}'")
             if base not in orden:

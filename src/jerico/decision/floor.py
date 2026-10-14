@@ -44,8 +44,10 @@ def allowed_options(
     spec: PolicyKind, ctx: Any = None, data_class: DataClass | str | None = None
 ) -> list[str]:
     """Calcula el conjunto de opciones permitidas según política, contexto y privacidad."""
-    dc = mas_restrictiva(data_class or spec.clase_datos, ctx) if ctx else _extract_data_class(
-        data_class or spec.clase_datos
+    dc = (
+        mas_restrictiva(data_class or spec.clase_datos, ctx)
+        if ctx
+        else _extract_data_class(data_class or spec.clase_datos)
     )
 
     if spec.clase == "A" and not spec.asesor:

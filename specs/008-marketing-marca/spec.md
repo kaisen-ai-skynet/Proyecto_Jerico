@@ -120,6 +120,7 @@ class CanalMarketing(str, Enum):
     FACEBOOK = "facebook"
     META_ADS = "meta_ads"
 
+
 class CampanaMarketing(BaseModel):
     id: str  # CAMP-YYYYMMDD-XXXX
     nombre: str

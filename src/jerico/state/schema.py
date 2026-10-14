@@ -83,4 +83,3 @@ def initialize_schema(connection: sqlite3.Connection) -> None:
         connection.execute("ALTER TABLE sessions ADD COLUMN role TEXT")
     initialize_fts(connection)
     connection.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
-

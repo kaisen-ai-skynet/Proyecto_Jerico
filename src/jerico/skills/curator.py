@@ -34,9 +34,7 @@ def format_cto_report(summary: CuratorRunSummary) -> str:
     ]
     for t in summary.transitions:
         detalle = t.reason if t.reason else f"inactiva durante {t.days_inactive:.1f} días"
-        lines.append(
-            f"• `{t.name}`: transicionar de `{t.previous}` a `{t.target}` ({detalle})."
-        )
+        lines.append(f"• `{t.name}`: transicionar de `{t.previous}` a `{t.target}` ({detalle}).")
     lines.append(
         "\n⚠️ Acción requerida: Requiere aprobación explícita del CTO "
         "antes de aplicar cualquier cambio en disco."

@@ -58,9 +58,7 @@ class RepositorioCatalogo:
         """Carga y valida un catálogo por su identificador semver."""
         archivo = self.directorio / f"{version}.yaml"
         if not archivo.is_file():
-            raise VersionCatalogoNoEncontradaError(
-                f"no existe la versión '{version}' del catálogo"
-            )
+            raise VersionCatalogoNoEncontradaError(f"no existe la versión '{version}' del catálogo")
 
         with open(archivo, encoding="utf-8") as f:
             datos = yaml.safe_load(f)

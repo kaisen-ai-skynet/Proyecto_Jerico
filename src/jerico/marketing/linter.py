@@ -40,17 +40,62 @@ _NOMBRES_PROHIBIDOS = [
 ]
 
 _TOKENS_TU = {
-    "tu", "tus", "tuyo", "tuya", "tuyos", "tuyas", "te", "ti", "contigo",
-    "quieres", "tienes", "puedes", "haces", "ves", "sabes", "entiendes",
-    "escribeme", "escríbeme", "cuentame", "cuéntame", "avisame", "avísame",
-    "mira", "busca", "entra",
+    "tu",
+    "tus",
+    "tuyo",
+    "tuya",
+    "tuyos",
+    "tuyas",
+    "te",
+    "ti",
+    "contigo",
+    "quieres",
+    "tienes",
+    "puedes",
+    "haces",
+    "ves",
+    "sabes",
+    "entiendes",
+    "escribeme",
+    "escríbeme",
+    "cuentame",
+    "cuéntame",
+    "avisame",
+    "avísame",
+    "mira",
+    "busca",
+    "entra",
 }
 
 _TOKENS_USTED = {
-    "su", "sus", "suyo", "suya", "suyos", "suyas", "le", "les", "usted", "ustedes",
-    "estimado", "estimada", "quiere", "tiene", "puede", "hace", "ve", "sabe",
-    "entiende", "escribame", "escríbame", "cuenteme", "cuénteme", "aviseme",
-    "avíseme", "mire", "busque", "ingrese",
+    "su",
+    "sus",
+    "suyo",
+    "suya",
+    "suyos",
+    "suyas",
+    "le",
+    "les",
+    "usted",
+    "ustedes",
+    "estimado",
+    "estimada",
+    "quiere",
+    "tiene",
+    "puede",
+    "hace",
+    "ve",
+    "sabe",
+    "entiende",
+    "escribame",
+    "escríbame",
+    "cuenteme",
+    "cuénteme",
+    "aviseme",
+    "avíseme",
+    "mire",
+    "busque",
+    "ingrese",
 }
 
 # Fondos claros donde oxido_vivo (#CD7041) y oro (#B8862B) tienen contraste < 4.5
@@ -111,8 +156,7 @@ class LinterMarcaKaizen:
         if tiene_variacion and not tiene_exacto:
             tagline_valido = False
             msg = (
-                "El tagline no se conjuga ni se varía. "
-                f"Debe ser exactamente: '{TAGLINE_OFICIAL}'."
+                f"El tagline no se conjuga ni se varía. Debe ser exactamente: '{TAGLINE_OFICIAL}'."
             )
             errores.append(LinterViolation(regla="tagline_invariable", mensaje=msg))
 
@@ -135,8 +179,7 @@ class LinterMarcaKaizen:
         elif puntuacion_tu > 0 and puntuacion_usted > 0:
             trato_detectado = "mezcla"
             msg = (
-                "Se detectó mezcla de 'tú' y 'usted' en la misma pieza. "
-                "El trato debe ser uniforme."
+                "Se detectó mezcla de 'tú' y 'usted' en la misma pieza. El trato debe ser uniforme."
             )
             errores.append(LinterViolation(regla="mezcla_trato", mensaje=msg))
 

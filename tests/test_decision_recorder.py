@@ -111,13 +111,11 @@ def test_recorder_does_not_raise_on_disk_error(tmp_path: Path, monkeypatch):
 def test_recorder_prunes_retention(tmp_path: Path):
     """Archivos con antigüedad mayor a retention_days se eliminan (VJT-043)."""
     current_time = 1700000000.0  # Base
-    recorder = DecisionRecorder(
-        dir_path=tmp_path, retention_days=90, clock=lambda: current_time
-    )
+    recorder = DecisionRecorder(dir_path=tmp_path, retention_days=90, clock=lambda: current_time)
 
     # Crear archivo viejo (hace 100 días: 100 * 86400 = 8640000 s)
     old_file = tmp_path / "decision-2023-01-01.jsonl"
-    old_file.write_text("{\"old\": true}\n", encoding="utf-8")
+    old_file.write_text('{"old": true}\n', encoding="utf-8")
     import os
 
     old_mtime = current_time - (100 * 86400)
@@ -125,7 +123,7 @@ def test_recorder_prunes_retention(tmp_path: Path):
 
     # Crear archivo reciente (hace 10 días)
     new_file = tmp_path / "decision-2023-11-01.jsonl"
-    new_file.write_text("{\"new\": true}\n", encoding="utf-8")
+    new_file.write_text('{"new": true}\n', encoding="utf-8")
     new_mtime = current_time - (10 * 86400)
     os.utime(new_file, (new_mtime, new_mtime))
 

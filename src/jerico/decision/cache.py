@@ -21,9 +21,7 @@ def _get_next_seq() -> int:
         return _global_seq
 
 
-def decision_key(
-    kind: str, tarea: str | None, state: dict[str, Any], policy_version: str
-) -> str:
+def decision_key(kind: str, tarea: str | None, state: dict[str, Any], policy_version: str) -> str:
     """Genera una clave determinista de (tipo, tarea, estado, version) (VJT-041)."""
     canonical_state = json.dumps(state, sort_keys=True, separators=(",", ":"))
     raw = f"{kind}:{tarea or ''}:{canonical_state}:{policy_version}"

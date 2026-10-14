@@ -25,7 +25,6 @@ def _run_deferred(bot: CrmBot) -> list[Outgoing]:
     return asyncio.run(coro)
 
 
-
 @pytest.fixture
 def fake_now() -> datetime:
     return datetime(2026, 10, 14, 12, 0, tzinfo=UTC)
@@ -206,7 +205,6 @@ def test_multiple_turns_and_isolation_across_commercials(
     with db.tx() as tx:
         cmd(tx, u2, "/asistente pregunta ¿cómo va mi meta?", fake_now)
     _run_deferred(bot)
-
 
     # Comercial 1 debe tener 4 mensajes (2 turnos) en su sesión
     t1 = mem.get_transcript("crm:user:10:pregunta", user_id=10, role="commercial")
@@ -461,4 +459,3 @@ def test_assistant_handles_user_role_change_gracefully(tmp_path: Path, fake_now:
     )
     assert session.role == "cto"
     mem.close()
-

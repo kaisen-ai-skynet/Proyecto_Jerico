@@ -58,8 +58,7 @@ def _crear_campana_prueba(
         canal=canal,
         trato=Trato.USTED,
         copy_principal=(
-            "Optimice sus flujos operativos sin fricción técnica. "
-            "Da el paso. Nosotros respondemos."
+            "Optimice sus flujos operativos sin fricción técnica. Da el paso. Nosotros respondemos."
         ),
         presupuesto_estimado_usd=presupuesto,
         gasto_autorizado_usd=presupuesto if aprobado else Decimal("0.00"),
