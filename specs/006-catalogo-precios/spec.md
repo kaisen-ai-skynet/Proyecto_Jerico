@@ -1,8 +1,8 @@
-# Spec 003 — Catálogo versionado de precios y estructuras para Jericó (F6)
+# Spec 006 — Catálogo versionado de precios y estructuras para Jericó (F6)
 
 - **Estado:** BORRADOR para revisión del CTO (13/10/2026). Rama `finanzas/f6-catalogo-precios`. Sin código de producción.
 - **Fuente:** modelo financiero `Kaizen_Modelo_Financiero_5A_8.xlsx` (8 hojas) y su desglose en la bóveda (`02_Proyectos/Finanzas/Modelo_Financiero_5A_Desglose.md`). Plan maestro: frente F6.
-- **Numeración:** se toma 003 porque `main` solo tiene 001 y las ramas usan 002 (`002-servidor-kaisen`, `002-jev-router-sombra`). Reconfirmar con `git branch -a` antes de integrar.
+- **Numeración:** 006, decidida con Jev el 13/10/2026 (plan maestro §1: 001 ventas-crm · 002 jev-router · 003 servidor · 004 cierre-contrato · 005 asistente · 006 catálogo). Renumerada desde 003.
 - **Aviso del CTO (13/10/2026):** el modelo financiero está **en pausa** hasta que haya ingresos. El catálogo nace en estado `borrador`; nada se cotiza con él hasta que el CTO lo marque `vigente`.
 
 ## 1. Problema
@@ -29,6 +29,7 @@ Fuera: cambiar precios, decidir cuál es el precio oficial, editar el Excel, toc
 - **R11** IF una cotización pide un plan inexistente, THEN SHALL responder error explícito con los planes válidos; nunca aproximar.
 - **R12** WHEN el estado de la versión no sea `vigente`, la respuesta SHALL llevar la marca «BORRADOR — no cotizar».
 - **R13** El catálogo SHALL registrar las advertencias del modelo (precio real bajo el costo, capacidad de 12 implementaciones al año, churn 0 %, ICA «CONFIRMAR con contador») para que el CTO las vea al aprobar.
+- **R14** La cotización que devuelve la herramienta SHALL usar el esquema compartido `Cotizacion` del directorio `schemas/` (plan maestro §4), el mismo que consumen F2 y F4; el LLM NO SHALL calcular precios (R4) y la herramienta es determinista y sin efectos (no requiere `idempotency_key`).
 
 ## 4. Formato propuesto (resumen; detalle en `plan.md`)
 

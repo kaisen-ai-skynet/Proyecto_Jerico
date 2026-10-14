@@ -1,4 +1,4 @@
-# Plan 003 — Catálogo de precios (F6)
+# Plan 006 — Catálogo de precios (F6)
 
 ## Ubicación en el repo
 ```

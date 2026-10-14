@@ -1,4 +1,4 @@
-# Tareas 003 — Catálogo de precios (F6)
+# Tareas 006 — Catálogo de precios (F6)
 
 Delegables a Gemini: SÍ en C1–C4 (con tests primero); C5–C6 las revisa el director.
 
