@@ -11,7 +11,7 @@ modificado: "13/10/2026 10:36"
 **Encargo:** el orquestador, con autorización del CTO, pidió endurecer la operación de Jericó CRM en `kaisen-server`.
 **Rama:** `infra/servidor-produccion`, trabajada en un worktree aparte (`~/Kaisen_AI/01_Proyectos/worktrees/Proyecto_Jerico/infra-servidor-produccion`) para no tocar la rama de crm-director. Los commits son locales, con la identidad de empresa y **sin push**.
 
-## Entregado (spec 002: `specs/002-servidor-kaisen/`)
+## Entregado (spec 003: `specs/003-servidor-kaisen/`)
 
 | Entregable | Archivos | Estado |
 |---|---|---|
@@ -20,7 +20,7 @@ modificado: "13/10/2026 10:36"
 | c) Runbook: actualizar versión, rotar el token, rollback y logs | `docs/despliegue-servidor-kaisen.md`, `deploy/servidor/docker-compose.servidor.yml` (rotación de logs) | hecho |
 | d) Plan de migración a OCI con lo que ya está creado | `docs/migracion-oci.md` | hecho |
 
-- **SDD:** spec, plan y tareas están en `specs/002-servidor-kaisen/`. plan-gemini hizo la investigación (`research.md`) por contrato con herdr; la revisé por muestreo y no volví a abrir sus URL. La implementación siguió TDD: los tests se escribieron primero y fallaron en rojo antes de implementar.
+- **SDD:** spec, plan y tareas están en `specs/003-servidor-kaisen/`. plan-gemini hizo la investigación (`research.md`) por contrato con herdr; la revisé por muestreo y no volví a abrir sus URL. La implementación siguió TDD: los tests se escribieron primero y fallaron en rojo antes de implementar.
 - **Revisión (reviewer):** la ronda 1 dio CAMBIOS NECESARIOS, con 8 defectos (4 de severidad media y 4 de severidad baja), y los corregí todos. **La ronda 2 dio APROBADO:** los 8 defectos están corregidos y no hay regresiones. El reviewer avisa de que la spec sigue en BORRADOR y que los cambios en SRV-06, SRV-08 y SRV-11 los tiene que aprobar el CTO.
 - **Verificado en la laptop:**
   - `./scripts/verify.sh`: 1581 tests pasan, 37 de ellos nuevos.

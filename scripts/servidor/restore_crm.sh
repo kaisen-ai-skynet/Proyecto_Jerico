@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# Prueba de restauración y restauración real de Jericó CRM (spec 002, SRV-10, SRV-11).
+# Prueba de restauración y restauración real de Jericó CRM (spec 003, SRV-10, SRV-11).
 #
 #   restore_crm.sh verify <backup.tar.age> <identidad>
 #       En la laptop del CTO (donde está la llave privada): descifra en un temporal,

@@ -3,7 +3,7 @@ tipo: plan-de-migracion
 proyecto: Jericó — Kaisen AI
 estado: futuro (sin fecha; depende de la capacidad A1)
 creado: "13/10/2026 10:26"
-modificado: "13/10/2026 10:34"
+modificado: "13/10/2026 22:00"
 ---
 
 # Plan de migración de Jericó CRM: kaisen-server → OCI (A1 Always Free)
@@ -49,7 +49,7 @@ docker compose -p jerico -f docker-compose.yml -f deploy/servidor/docker-compose
 #   crea el contenedor y el volumen jerico_crm_data SIN arrancar el bot (no puede hacer polling en dos sitios)
 docker image inspect jerico-crm:0.2.0 -f '{{.Architecture}}'   # arm64
 ```
-- La imagen **no** se copia desde el servidor (x86_64): en ARM daría `exec format error`. Ver `specs/002-servidor-kaisen/research.md` §7.
+- La imagen **no** se copia desde el servidor (x86_64): en ARM daría `exec format error`. Ver `specs/003-servidor-kaisen/research.md` §7.
 - La base SQLite **sí** es portable entre arquitecturas: el backup del servidor se restaura tal cual.
 - Configura en la VM `~/.config/jerico/backup-crm.env` y `backup-recipients.txt`, como en el runbook §1, con estas rutas: `ENV_FILE=/opt/jerico/app/.env` y `BACKUP_DIR=/opt/jerico/backups/crm`.
 
@@ -87,4 +87,4 @@ docker image inspect jerico-crm:0.2.0 -f '{{.Architecture}}'   # arm64
 - Actualiza `docs/despliegue-servidor-kaisen.md` (servidor → VM) y la nota de Jericó en la bóveda.
 
 ---
-> 🕒 **Última modificación:** 13/10/2026 10:34 (Claude Code · Opus 5.5)
+> 🕒 **Última modificación:** 13/10/2026 22:00 (Claude Code · Opus 5.5)

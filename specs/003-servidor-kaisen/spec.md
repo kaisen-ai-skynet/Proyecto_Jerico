@@ -3,10 +3,10 @@ tipo: spec
 proyecto: Jericó — Kaisen AI
 estado: borrador para aprobación del CTO
 creado: "13/10/2026 10:15"
-modificado: "13/10/2026 10:34"
+modificado: "13/10/2026 22:00"
 ---
 
-# Spec 002 — Endurecer la operación de Jericó CRM en kaisen-server
+# Spec 003 — Endurecer la operación de Jericó CRM en kaisen-server
 
 - **Estado:** BORRADOR. Pendiente de la aprobación del CTO, que también ejecuta en el servidor todo lo que aquí se entrega.
 - **Tipo de cambio:** operación e infraestructura. No cambia el código del CRM (`src/jerico/crm` y `specs/001` pertenecen a crm-director).
@@ -104,7 +104,8 @@ Que el CTO pueda aprobar y ejecutar, sin improvisar, cuatro cosas:
 
 ## 4. Riesgos y supuestos
 
-- **[SUPUESTO]** `~/jerico` contiene `docker-compose.yml` y `.env`, y el proyecto compose se llama `jerico`, según la nota del orquestador. El paso 0 del runbook lo comprueba antes de instalar nada.
+- **[VERIFICADO 13/10/2026 22:00, solo lectura]** `~/jerico` contiene `docker-compose.yml` y `.env` (600). No es un repo git: es una copia de archivos con `DEPLOYED_COMMIT` = `d0aeab3`. `age` no está instalado y el vigía de Hermes no vigila `jerico-crm`. Detalle en el runbook, paso 0.
+- **Renumeración:** esta spec nació como `002-servidor-kaisen`. Se renumeró a `003` el 13/10/2026 porque `jev/p1-router-spec` creó antes `specs/002-jev-router-sombra` (10:27 frente a 10:28).
 - **[SUPUESTO]** cron corre en el WSL2 del servidor, porque el vigía de Hermes ya lo usa.
 - **Riesgo:** el backup se queda en el mismo disco que el servidor. Protege frente a errores de datos, pero no frente a la pérdida de la máquina. La mitigación está en §5.
 - **Riesgo:** si el problema es el propio token de Telegram (por ejemplo, revocado), la alerta solo llega si el correo está configurado.
@@ -115,4 +116,4 @@ Que el CTO pueda aprobar y ejecutar, sin improvisar, cuatro cosas:
 - Integrar la alerta en el vigía de Hermes, que es ajeno a este repo.
 
 ---
-> 🕒 **Última modificación:** 13/10/2026 10:34 (Claude Code · Opus 5.5)
+> 🕒 **Última modificación:** 13/10/2026 22:00 (Claude Code · Opus 5.5)

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# Aviso al CTO (spec 002, SRV-14 y SRV-15): Telegram (sendMessage) y, si falla,
+# Aviso al CTO (spec 003, SRV-14 y SRV-15): Telegram (sendMessage) y, si falla,
 # correo SMTP. Usa las credenciales del .env del despliegue, que se lee SIN
 # ejecutarlo (nunca `source`). El token y la clave SMTP van a curl por stdin
 # (-K -): no aparecen en `ps` ni en los logs.

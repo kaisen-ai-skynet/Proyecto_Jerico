@@ -1,4 +1,4 @@
-"""Scripts de operación de kaisen-server (spec 002, SRV-01..SRV-15).
+"""Scripts de operación de kaisen-server (spec 003, SRV-01..SRV-15).
 
 Corren los scripts reales de `scripts/servidor/` con `docker`, `age` y `curl` falsos
 en el PATH: ningún test toca Docker, la red ni secretos reales.

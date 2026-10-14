@@ -1,4 +1,4 @@
-# Override de kaisen-server (spec 002, SRV-18): límite de logs de jerico-crm.
+# Override de kaisen-server (spec 003, SRV-18): límite de logs de jerico-crm.
 # Sin esto, el driver json-file crece sin tope. Uso (desde ~/jerico):
 #   docker compose -p jerico -f docker-compose.yml -f deploy/servidor/docker-compose.servidor.yml up -d jerico-crm
 services:

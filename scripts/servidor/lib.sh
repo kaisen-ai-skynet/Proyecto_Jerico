@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Funciones comunes de scripts/servidor (spec 002). Se carga con `. lib.sh`; no se ejecuta.
+# Funciones comunes de scripts/servidor (spec 003). Se carga con `. lib.sh`; no se ejecuta.
 
 # Formato único de estado: "<State.Status> <Health.Status|none>", p. ej. "running healthy".
 STATE_FORMAT='{{.State.Status}} {{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}'

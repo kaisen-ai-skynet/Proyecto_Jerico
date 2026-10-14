@@ -3,10 +3,10 @@ tipo: tareas
 proyecto: Jericó — Kaisen AI
 estado: completas T01–T09 (revisión APROBADO en la ronda 2); falta la aprobación del CTO
 creado: "13/10/2026 10:22"
-modificado: "13/10/2026 10:36"
+modificado: "13/10/2026 22:00"
 ---
 
-# Tareas 002
+# Tareas 003
 
 | # | Tarea | Requisitos | Verificación |
 |---|---|---|---|
@@ -37,4 +37,4 @@ modificado: "13/10/2026 10:36"
 - **No verificado:** nada de esto se ha probado contra Docker real, porque esta laptop no tiene acceso al socket sin sudo. Se verifica en el servidor con el paso 0 y el §1 del runbook.
 
 ---
-> 🕒 **Última modificación:** 13/10/2026 10:36 (Claude Code · Opus 5.5)
+> 🕒 **Última modificación:** 13/10/2026 22:00 (Claude Code · Opus 5.5)

@@ -3,10 +3,10 @@ tipo: plan
 proyecto: Jericó — Kaisen AI
 estado: borrador para aprobación del CTO
 creado: "13/10/2026 10:22"
-modificado: "13/10/2026 10:34"
+modificado: "13/10/2026 22:00"
 ---
 
-# Plan 002 — Endurecer la operación en kaisen-server
+# Plan 003 — Endurecer la operación en kaisen-server
 
 Este plan implementa `spec.md` (SRV-01 a SRV-19). La investigación de apoyo está en `research.md`, que entrega plan-gemini.
 
@@ -57,4 +57,4 @@ tests/test_servidor_scripts.py  # pytest con docker/age/curl falsos
 - `filter="data"` (PEP 706) existe en Python 3.12+ y en los parches 3.10.12+/3.11.4+. La imagen (3.12) y la laptop lo cumplen; en el servidor se comprueba en el paso 0. Si falta, `crm_volume.py` se detiene con un mensaje claro.
 
 ---
-> 🕒 **Última modificación:** 13/10/2026 10:34 (Claude Code · Opus 5.5)
+> 🕒 **Última modificación:** 13/10/2026 22:00 (Claude Code · Opus 5.5)

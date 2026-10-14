@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# Backup cifrado del volumen jerico_crm_data en kaisen-server (spec 002, SRV-01..09).
+# Backup cifrado del volumen jerico_crm_data en kaisen-server (spec 003, SRV-01..09).
 #
 #   1. Instantánea consistente de crm.db con la API de backup de SQLite, dentro
 #      del contenedor vivo (crm_volume.py pack), más el resto del volumen.

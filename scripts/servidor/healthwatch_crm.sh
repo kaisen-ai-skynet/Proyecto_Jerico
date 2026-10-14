@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# Vigía de salud de jerico-crm (spec 002, SRV-12, SRV-13). Corre desde cron cada 5 min.
+# Vigía de salud de jerico-crm (spec 003, SRV-12, SRV-13). Corre desde cron cada 5 min.
 #
 #   OK         healthy
 #   ARRANCANDO starting (fallo solo si dura más de STARTING_GRACE_MIN)

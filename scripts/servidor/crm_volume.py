@@ -1,4 +1,4 @@
-"""Empaqueta, restaura y verifica los datos de Jericó CRM (spec 002: SRV-01, 02, 04, 10, 11).
+"""Empaqueta, restaura y verifica los datos de Jericó CRM (spec 003: SRV-01, 02, 04, 10, 11).
 
 Solo biblioteca estándar (Python con el filtro `data` de tarfile, PEP 706). Se pasa con
 `python -c` al intérprete que tenga acceso al volumen, sin copiar nada a la imagen

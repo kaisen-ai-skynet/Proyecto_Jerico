@@ -1,4 +1,4 @@
-# Jericó CRM en kaisen-server (spec 002). Instalar como usuario kaisenai:
+# Jericó CRM en kaisen-server (spec 003). Instalar como usuario kaisenai:
 #   crontab -l > /tmp/cron.actual        # copia de lo que hay (vigía de Hermes, Seguros Bolívar...)
 #   cat /tmp/cron.actual ~/jerico/deploy/servidor/crontab.example | crontab -
 #   crontab -l | tail -n 6               # comprobar

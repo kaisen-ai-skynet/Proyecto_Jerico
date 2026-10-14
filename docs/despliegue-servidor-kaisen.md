@@ -3,14 +3,14 @@ tipo: runbook
 proyecto: Jericó — Kaisen AI
 estado: listo para aprobación del CTO (nada ejecutado en el servidor)
 creado: "13/10/2026 10:25"
-modificado: "13/10/2026 10:34"
+modificado: "13/10/2026 22:00"
 ---
 
 # Runbook — Jericó CRM en kaisen-server
 
 **Servidor:** `kaisen-server` (`DESKTOP-8F1B898`, Ubuntu sobre WSL2, Tailscale `100.79.169.121`), usuario `kaisenai`.
 **Despliegue:** `~/jerico`, proyecto compose `jerico`, solo el servicio `jerico-crm`, con el volumen `jerico_crm_data`.
-**Spec:** `specs/002-servidor-kaisen/`. **Quién ejecuta:** el CTO, con cada paso aprobado. Ningún agente ejecuta este runbook en el servidor.
+**Spec:** `specs/003-servidor-kaisen/`. **Quién ejecuta:** el CTO, con cada paso aprobado. Ningún agente ejecuta este runbook en el servidor.
 
 > Desde la laptop se entra con `ssh kaisen-server` (alias de la guía de la bóveda *Guia_Despliegue_SSH_Servidor*). Si no tienes el alias, usa `ssh kaisenai@100.79.169.121`.
 > En el servidor, todos los comandos `docker compose` usan este atajo (pégalo en cada sesión o añádelo a `~/.bashrc`):
@@ -20,32 +20,44 @@ modificado: "13/10/2026 10:34"
 
 ## 0. Inspección (solo lectura, antes de todo)
 
-Confirma los supuestos de la spec (§4) sin cambiar nada:
+> **Estado comprobado el 13/10/2026 a las 22:0x** (infra-arquitecto, solo lectura, contra el despliegue `d0aeab3`):
+> - `~/jerico` **no** es un repo git: es una copia de archivos con `DEPLOYED_COMMIT` = `d0aeab3`.
+> - `.env` está en 600 y existe una copia `.env.bak-20261013-2127`, también en 600.
+> - `jerico-crm` está `running healthy` con la imagen `jerico-crm:0.2.0`. La anterior se guardó como `jerico-crm:prev-5f4cd5d`.
+> - Los logs usan `json-file` **sin límite**.
+> - `scripts/servidor/` **no está** en el servidor.
+> - **`age` no está instalado.** `flock`, `curl` y Python con el filtro PEP 706 sí están.
+> - El vigía de Hermes **no** menciona `jerico` (`grep -c jerico ~/hermes/vigia.py` = 0), así que no interfiere con una restauración.
+> - Disco: 3 % usado.
+>
+> Repite la inspección justo antes de instalar, por si algo cambió.
 
 ```bash
 ssh kaisen-server
-ls -la ~/jerico | head -n 20                    # docker-compose.yml, .env (600), ¿scripts/? ¿.deployed_rev?
-cat ~/jerico/.deployed_rev 2>/dev/null          # revisión desplegada, si se usó sync_repo_to_vps.sh
-stat -c '%a %U' ~/jerico/.env                   # debe ser 600 kaisenai
-docker ps --filter name=jerico --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}'
-docker inspect -f '{{.State.Status}} {{.State.Health.Status}}' jerico-crm   # running healthy
-docker volume inspect jerico_crm_data -f '{{.Mountpoint}}'
-docker image ls jerico-crm
-crontab -l                                      # lo que ya hay: vigía de Hermes, Seguros Bolívar...
+cat ~/jerico/DEPLOYED_COMMIT                    # commit desplegado (hoy d0aeab3)
+stat -c '%a %U' ~/jerico/.env                   # 600 kaisenai
+docker inspect -f '{{.State.Status}} {{.State.Health.Status}} {{.Config.Image}}' jerico-crm   # running healthy jerico-crm:0.2.0
+docker image ls jerico-crm                      # 0.2.0 y prev-<commit anterior>
+ls ~/jerico/scripts/servidor 2>/dev/null || echo "faltan los scripts (paso 1.0)"
+crontab -l                                      # lo que ya hay: vigía de Hermes, Seguros Bolívar, @reboot de oci-a1...
 which age flock curl python3 || echo "falta algo"
 python3 -c "import tarfile; tarfile.data_filter" && echo "python3 OK"   # filtro PEP 706
+grep -c jerico ~/hermes/vigia.py                # 0 = el vigía de Hermes no toca jerico-crm
 df -h ~ | tail -n 1
 ```
 
-- [ ] `~/jerico` existe con `docker-compose.yml` y `.env` en 600. Si `scripts/servidor/` **no** está, primero haz el paso 2.1 (copiar el repo) **sin** reconstruir.
-- [ ] `jerico-crm` está `running healthy`.
+- [ ] `jerico-crm` está `running healthy` y `DEPLOYED_COMMIT` es el que esperas.
 - [ ] Anotaste qué hay en `crontab -l`, porque lo vas a ampliar sin borrar nada.
-- [ ] Si falta `age`: `sudo apt-get install -y age`.
-
-> ⚠️ El vigía de Hermes (`~/hermes/vigia.py`) **reinicia contenedores caídos**. Si vigila `jerico-crm`, puede arrancarlo en mitad de una restauración (§4.2). Antes de restaurar, comprueba si lo incluye con `grep -n jerico ~/hermes/vigia.py`.
+- [ ] Si falta `age`, instálalo (necesita tu sudo): `sudo apt-get install -y age`.
 
 ## 1. Instalar el backup y la alerta (una vez)
 
+0. **Copiar solo los scripts** desde la laptop, una vez aprobada la rama `infra/servidor-produccion`. Se copian **únicamente** `scripts/servidor` y `deploy/servidor`. No se sincroniza el repo completo: esta rama no contiene el código del CRM desplegado (`d0aeab3`), y sobrescribir `~/jerico` con ella dejaría el código fuente desfasado para el siguiente build.
+   ```bash
+   cd ~/Kaisen_AI/01_Proyectos/Proyecto_Jerico
+   git archive infra/servidor-produccion scripts/servidor deploy/servidor | ssh kaisen-server 'tar -x -C ~/jerico'
+   ssh kaisen-server 'ls ~/jerico/scripts/servidor ~/jerico/deploy/servidor'
+   ```
 1. **Llave pública age:** usa la misma de la laptop (`~/.config/kaisen/jerico-backup.agekey`). En la laptop, `age-keygen -y ~/.config/kaisen/jerico-backup.agekey` imprime la línea `age1...`, que es **pública**. En el servidor:
    ```bash
    mkdir -p ~/.config/jerico ~/jerico-backups ~/.local/state/jerico && chmod 700 ~/.config/jerico ~/jerico-backups
@@ -83,18 +95,21 @@ df -h ~ | tail -n 1
 
 ## 2. Actualizar la versión
 
-> En `docker-compose.yml` la etiqueta de la imagen es fija (`jerico-crm:0.2.0`), así que cada build la **sobrescribe**. Por eso, antes de construir, se guarda la imagen actual como `jerico-crm:rollback`.
+> En `docker-compose.yml` la etiqueta de la imagen es fija (`jerico-crm:0.2.0`), así que cada build la **sobrescribe**. Antes de construir, se guarda la imagen actual con la convención que ya se usa en el servidor: `jerico-crm:prev-<commit desplegado>` (hoy existe `prev-5f4cd5d`).
 
-1. **Copiar el repo** (desde la laptop, rama y commit aprobados): copia `HEAD` con `git archive`. No toca `.env` y escribe `.deployed_rev`:
+1. **Copiar el código** del commit aprobado (desde la laptop). No toca `.env` y actualiza `DEPLOYED_COMMIT`:
    ```bash
-   cd ~/Kaisen_AI/01_Proyectos/Proyecto_Jerico && git status --short && git log --oneline -1
-   REMOTE_DIR=/home/kaisenai/jerico scripts/oci/sync_repo_to_vps.sh kaisen-server
+   cd ~/Kaisen_AI/01_Proyectos/Proyecto_Jerico
+   REV=$(git rev-parse --short <commit aprobado>)   # p. ej. el HEAD de la rama del CRM que aprobó el CTO
+   git archive "$REV" | ssh kaisen-server 'tar -x -C ~/jerico'
+   ssh kaisen-server "cp ~/jerico/DEPLOYED_COMMIT ~/jerico/DEPLOYED_COMMIT.anterior && echo $REV > ~/jerico/DEPLOYED_COMMIT && cat ~/jerico/DEPLOYED_COMMIT"
    ```
-   Los archivos que se borraron en el repo **no** se borran en el servidor. Si hace falta, se limpian a mano.
+   Los archivos que se borraron en el repo **no** se borran en el servidor; si hace falta, se limpian a mano. Hazlo siempre con el commit **del CRM** (la rama que contiene `src/jerico/crm` al día), nunca con una rama de infraestructura sola.
 2. **En el servidor:**
    ```bash
    ~/jerico/scripts/servidor/backup_crm.sh                       # backup justo antes del cambio
-   docker tag jerico-crm:0.2.0 jerico-crm:rollback               # imagen actual → rollback
+   PREV=$(cat ~/jerico/DEPLOYED_COMMIT.anterior)                 # lo guardó el paso 1
+   docker tag jerico-crm:0.2.0 "jerico-crm:prev-$PREV"           # imagen actual → prev-<commit>
    jcs build jerico-crm
    jcs up -d jerico-crm
    ```
@@ -127,17 +142,25 @@ Hazlo si el token se filtró, si alguien del equipo deja de tener acceso o como 
    ```
 5. Si el bot corría también en otro sitio (por ejemplo, una prueba en la laptop), ese sitio queda sin servicio. Es lo esperado.
 
+### 3.b Rotar la llave del asistente (`OPENAI_API_KEY`)
+
+Desde `d0aeab3`, el asistente `/asistente` usa `OPENAI_API_KEY`, `OPENAI_MODEL` y `OPENAI_REASONING_EFFORT` del mismo `.env` (`specs/001-ventas-crm/asistente-despliegue.md`).
+1. Crea la llave nueva en el panel del proveedor y **revoca la vieja**.
+2. Edita la línea `OPENAI_API_KEY=` de `~/jerico/.env` a mano y vuelve a dejarlo en `chmod 600`.
+3. Ejecuta `jcs up -d --force-recreate jerico-crm` y prueba `/asistente pregunta cómo va el pipeline`. En `docker logs`, la línea de uso aparece sin errores.
+4. Las copias `~/jerico/.env.bak-*` guardan la llave vieja: bórralas con `shred -u` cuando ya no hagan falta.
+
 ## 4. Rollback
 
 ### 4.1 Volver a la imagen anterior (sin tocar los datos)
 
 ```bash
-docker image ls jerico-crm                                       # debe existir jerico-crm:rollback
-docker tag jerico-crm:rollback jerico-crm:0.2.0
+docker image ls jerico-crm                                       # elige la prev-<commit> buena (hoy: prev-5f4cd5d)
+docker tag jerico-crm:prev-<commit> jerico-crm:0.2.0
 jcs up -d --no-build --force-recreate jerico-crm
 jcs ps jerico-crm && docker logs --tail 25 jerico-crm
 ```
-Esto supone que `docker-compose.yml` sigue usando la etiqueta `jerico-crm:0.2.0`. Si la versión nueva la cambió (por ejemplo, a `0.3.0`), el rollback es volver a desplegar el commit anterior (§2.1) con `jcs up -d --no-build --force-recreate jerico-crm`, después de `docker tag jerico-crm:rollback jerico-crm:0.2.0`.
+Esto supone que `docker-compose.yml` sigue usando la etiqueta `jerico-crm:0.2.0`. Si la versión nueva la cambió (por ejemplo, a `0.3.0`), el rollback es volver a copiar el código del commit anterior (§2.1) y después correr `docker tag jerico-crm:prev-<commit> jerico-crm:0.2.0` y `jcs up -d --no-build --force-recreate jerico-crm`. Si vuelves a otro commit, actualiza también `DEPLOYED_COMMIT`.
 Sirve si la versión nueva **no** cambió el esquema. Si lo cambió, la imagen vieja puede fallar con la base nueva: aplica también el §4.2 con el backup de antes de actualizar.
 
 ### 4.2 Volver a un backup (datos)
@@ -200,4 +223,4 @@ cat ~/.local/state/jerico/healthwatch.state          # estado del vigía (status
 Si no llega ningún aviso pero sospechas un problema: `cat ~/.local/state/jerico/healthwatch.state` y `crontab -l`.
 
 ---
-> 🕒 **Última modificación:** 13/10/2026 10:34 (Claude Code · Opus 5.5)
+> 🕒 **Última modificación:** 13/10/2026 22:00 (Claude Code · Opus 5.5)
