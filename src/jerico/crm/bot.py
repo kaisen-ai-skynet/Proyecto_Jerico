@@ -54,6 +54,10 @@ CallbackHandler = Callable[
 PendingHandler = Callable[
     [sqlite3.Connection, User, PendingInput, Update, datetime], list[Outgoing]
 ]
+FilePendingHandler = Callable[
+    [sqlite3.Connection, User, PendingInput, Update, "leads.Prefetched | None", datetime],
+    list[Outgoing],
+]
 ConfirmationHandler = Callable[
     [sqlite3.Connection, User, Confirmation, bool, datetime], list[Outgoing]
 ]
@@ -204,6 +208,7 @@ class CrmBot:
         self._export_margin = export_margin
         self._params = params or default_params()
         self._export_jobs: list[compliance.ExportJob] = []  # se envían tras el *commit*
+        self._file_pending: dict[str, FilePendingHandler] = {}
         self._deferred: list[DeferredJob] = []  # trabajos de red tras el *commit* (asistente)
         self._commands: dict[str, CommandHandler] = {
             "alta": team.add_user,
@@ -251,6 +256,10 @@ class CrmBot:
     def defer(self, job: DeferredJob) -> None:
         """Encola un trabajo asíncrono que corre tras el *commit*, fuera de la transacción."""
         self._deferred.append(job)
+
+    def register_file_pending(self, kind: str, handler: FilePendingHandler) -> None:
+        """Entrada pendiente que espera un archivo (el contrato del abogado, spec 004)."""
+        self._file_pending[kind] = handler
 
     def register_command(self, name: str, handler: CommandHandler) -> None:
         self._commands[name] = handler
@@ -359,6 +368,9 @@ class CrmBot:
                 return compliance.answer_evidence(
                     conn, user, pending, u, prefetch, self._files, now
                 )
+            file_handler = None if pending is None else self._file_pending.get(pending.kind)
+            if pending is not None and file_handler is not None:
+                return file_handler(conn, user, pending, u, prefetch, now)
             pending_handler = None if pending is None else self._pending.get(pending.kind)
             if pending is not None and pending_handler is not None:
                 return pending_handler(conn, user, pending, u, now)

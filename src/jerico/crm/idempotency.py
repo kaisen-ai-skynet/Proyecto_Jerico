@@ -24,3 +24,8 @@ def claim(conn: sqlite3.Connection, key: str, now: datetime) -> bool:
         (key, scope, to_iso(now)),
     ).fetchone()
     return row is not None
+
+
+def release(conn: sqlite3.Connection, key: str) -> None:
+    """Libera una reserva cuando la acción externa NO llegó a ocurrir (para poder reintentar)."""
+    conn.execute("DELETE FROM crm_idempotency WHERE key = ?", (key,))

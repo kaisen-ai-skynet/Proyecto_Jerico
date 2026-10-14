@@ -494,3 +494,20 @@ def purge_expired_candidates(conn: sqlite3.Connection, now: datetime) -> int:
         (now_iso,),
     )
     return deleted_count
+
+
+def next_package_version(conn: sqlite3.Connection, lead_id: int) -> int:
+    """Versión que asignará `insert_package` (máximo + 1), para armar el hash con la misma."""
+    row = conn.execute(
+        "SELECT COALESCE(MAX(version), 0) + 1 FROM crm_packages WHERE lead_id = ?", (lead_id,)
+    ).fetchone()
+    return int(row[0])
+
+
+def signature_for_contract(conn: sqlite3.Connection, contract_id: int) -> Signature | None:
+    """Firma más reciente del contrato (puede haberse reintentado)."""
+    row = conn.execute(
+        "SELECT * FROM crm_signatures WHERE contract_id = ? ORDER BY id DESC LIMIT 1",
+        (contract_id,),
+    ).fetchone()
+    return None if row is None else Signature(**dict(row))

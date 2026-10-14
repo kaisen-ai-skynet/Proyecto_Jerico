@@ -13,6 +13,7 @@ from jerico.crm.assistant import AssistantContext, register_assistant
 from jerico.crm.assistant_budget import AssistantBudget
 from jerico.crm.backup import SubprocessRunner, run_backup
 from jerico.crm.bot import CrmBot
+from jerico.crm.closing_contract import contract_sweep, register_contract
 from jerico.crm.closing_flow import ClosingContext, register_closing
 from jerico.crm.config import (
     ConfigWarning,
@@ -34,6 +35,7 @@ from jerico.crm.model import Role
 from jerico.crm.outbox import OutboxWorker, escalate
 from jerico.crm.ports import CommandRunner, EmailSender, InboxPort, TelegramPort
 from jerico.crm.retention import daily_sweep
+from jerico.crm.signature import DocuSealClient, DryRunSignature, SignaturePort
 from jerico.crm.sweep import SweepContext, deliver_now, followup_sweep
 from jerico.crm.team import seed_cto
 from jerico.crm.telegram import HttpxTelegramClient
@@ -64,6 +66,17 @@ def outbound_email(settings: CrmSettings) -> EmailSender:
     if dry_run_active(settings):
         return DryRunEmailSender(sender, settings.seed_cto_email)
     return sender
+
+
+def build_signature(settings: CrmSettings) -> SignaturePort | None:
+    """DocuSeal real; con DRY_RUN (por defecto) un doble que nunca sale a terceros."""
+    token = _secret(settings.docuseal_token)
+    real = (
+        DocuSealClient(base_url=settings.docuseal_url, token=token)
+        if settings.docuseal_url and token
+        else None
+    )
+    return DryRunSignature(real) if dry_run_active(settings) else real
 
 
 def build_assistant_llm(settings: CrmSettings) -> LlmPort | None:
@@ -161,7 +174,15 @@ class CrmApp:
                 clock=clock,
             ),
         )
-        register_closing(self.bot, ClosingContext(dry_run=dry_run_active(settings)))
+        self.closing_ctx = ClosingContext(
+            dry_run=dry_run_active(settings),
+            files=self.files,
+            signature=build_signature(settings),
+            validity_days=settings.signature_validity_days,
+            clock=clock,
+        )
+        register_closing(self.bot, self.closing_ctx)
+        register_contract(self.bot, self.db, self.closing_ctx)
         register_f2(
             self.bot,
             F2Context(
@@ -239,6 +260,7 @@ class CrmApp:
     async def run_followup_job(self) -> None:
         """Barrido único de F2 (cada minuto): buzón, expiración, generación y entrega."""
         await followup_sweep(self._sweep_context(), self.clock())
+        await contract_sweep(self.db, self.closing_ctx, self.clock())  # spec 004 §5
 
     def _kick_delivery(self) -> None:
         """Primer intento de envío en línea tras un ✅ dentro de franja y cupo (D-3)."""
@@ -342,6 +364,7 @@ __all__ = [
     "EXIT_MIGRATION",
     "STARTUP_NOTICE_KIND",
     "build_assistant_llm",
+    "build_signature",
     "outbound_email",
     "CrmApp",
     "fingerprint_keys",

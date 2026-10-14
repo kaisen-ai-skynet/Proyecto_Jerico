@@ -58,6 +58,13 @@ class CrmSettings(BaseSettings):
         default=True, validation_alias="JERICO_EXTERNAL_COMMS_DRY_RUN"
     )
 
+    # --- Spec 004: firma electrónica (DocuSeal autoalojado; sin proveedor = no se ofrece firma) ---
+    docuseal_url: str | None = None
+    docuseal_token: SecretStr | None = None
+    signature_validity_days: int = 15  # VCRM-C14
+    # Candidatos de correo sin registrar caducan a los N días (VCRM-M05).
+    mail_candidate_days: int = 30
+
     # --- Asistente comercial con LLM (spec-asistente.md) ---
     # Apagado por defecto. Las variables OPENAI_* no llevan el prefijo del CRM (VCRM-A35).
     assistant_enabled: bool = False

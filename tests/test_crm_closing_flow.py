@@ -536,3 +536,22 @@ def test_cases_skip_packages_of_leads_that_never_were_accepted(
         tx.execute("UPDATE crm_leads SET ever_accepted=0 WHERE id=?", (lead_id,))
     _say(bot, LAW_TG, "/casos")
     assert _texts(tg, LAW_TG)[-1] == "No tienes casos con paquete enviado."
+
+
+def test_new_offer_after_a_cancelled_draft_still_sends(
+    db: CrmDatabase, tg: FakeTelegram, users: dict[str, User]
+) -> None:
+    """La versión que se arma debe coincidir con la que asigna el repositorio."""
+    lead_id = _lead(db, users["com"])
+    bot = _bot(db, tg, dry_run=False)
+    first = _draft(db, tg, bot, lead_id)
+    _press(bot, COM_TG, build_callback(PKG_CANCEL, str(first)))
+    second = _draft(db, tg, bot, lead_id)
+    _press(bot, COM_TG, build_callback(PKG_SEND, str(second)))
+    with db.read() as conn:
+        pkg = crepo.get_package(conn, second)
+    assert pkg is not None and pkg.status == "sent" and pkg.version == 2
+
+
+def test_default_clock_is_timezone_aware() -> None:
+    assert ClosingContext().clock().tzinfo is not None

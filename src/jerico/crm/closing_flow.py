@@ -7,7 +7,7 @@ import re
 import sqlite3
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 
 from jerico.crm import closing_repo as crepo
 from jerico.crm import leads, repo
@@ -36,7 +36,9 @@ from jerico.crm.package import (
 )
 from jerico.crm.parsing import build_callback, parse_short_id
 from jerico.crm.permissions import Action, authorize
+from jerico.crm.ports import FileStore
 from jerico.crm.render import short_id
+from jerico.crm.signature import SignaturePort
 from jerico.schemas import PaqueteContrato
 
 OFFER_COMMAND = "oferta"
@@ -61,9 +63,17 @@ STALE = "Los datos del cliente o de la oferta cambiaron. Genera el paquete de nu
 GATE_CLOSED = "Esa propuesta ya no está pendiente."
 
 
+def _now() -> datetime:
+    return datetime.now(UTC)
+
+
 @dataclass(frozen=True)
 class ClosingContext:
     dry_run: bool = True  # Plan Maestro §4: lo externo se redirige al CTO
+    files: FileStore | None = None  # contratos y evidencias (spec 004 §5)
+    signature: SignaturePort | None = None  # None: no se ofrece firma electrónica
+    validity_days: int = 15  # VCRM-C14
+    clock: Callable[[], datetime] = _now
 
 
 @dataclass(frozen=True)
@@ -192,7 +202,7 @@ def offer_command(
         now=now,
         lines=parsed.lines,
     )
-    version = (live.version + 1) if live is not None else 1
+    version = crepo.next_package_version(conn, lead.id)
     try:
         package = build_package(lead, offer, version=version, legal_basis=basis, now=now)
     except (PackageError, ValueError) as exc:
