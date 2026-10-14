@@ -1,5 +1,5 @@
 ---
-modificado: "13/10/2026 22:15"
+modificado: "13/10/2026 22:16"
 ---
 
 # Plan 006 — Consejero de seguimiento con Jev en el CRM (instantánea diaria)
@@ -9,7 +9,8 @@ modificado: "13/10/2026 22:15"
 - **Principio rector:** el CRM solo **observa y guarda**, en modo lectura, una instantánea diaria sin texto libre. Todo lo que habla con Jev vive en `Flota_Jev` (`kai-jev`).
 - **Hechos verificados en el código** (rama `crm/asistente-comercial-llm`, commit `d0aeab3`, leída con `git show`; el código no se modificó):
   - Los trabajos periódicos se registran en un único punto, `register_jobs` (`crm/jobs.py`), llamado desde `crm/app.py`; hoy hay `crm-daily` (13:00 UTC = 08:00 Bogotá), `crm-backup` y `crm-followup`.
-  - `CrmDatabase` (`crm/db.py`) ofrece `read()` (conexión de lectura) y `tx()` (transacción de escritura).
+  - `CrmDatabase` (`crm/db.py`) ofrece `read()` y `tx()`. `read()` **no abre una transacción**: toma el cerrojo de la conexión y entrega esa misma conexión en modo de confirmación automática; la consistencia viene de que `tx()` no puede ejecutarse mientras dura `read()`.
+  - `repo.pending_proposals(conn, now)` devuelve solo las pendientes vencidas y no recibe `lead_id`; por eso la prueba de equivalencia usa SQL directo por lead.
   - `CrmSettings` (`crm/config.py`) usa el prefijo `JERICO_CRM_`, `env_ignore_empty=True` y ya tiene `data_dir` (en producción `/app/crm-data`, volumen persistente `jerico_crm_data`).
   - `timeutil.local_date(dt)` devuelve el día calendario en hora de Bogotá.
   - `repo.py` expone `all_leads`, `lead_events`, `lead_notes`, `get_cadence`, `pending_proposals`, `open_alerts`, `open_titular_requests`; `handoff.missing_handoff_fields(lead)` devuelve los campos faltantes.
@@ -26,8 +27,8 @@ modificado: "13/10/2026 22:15"
 | **P-1** | **Archivos JSONL diarios** en el directorio de datos del CRM. | Tabla nueva en la base del CRM: obliga a una migración del esquema (`migrate.py` ya cargó la migración v1→v2) y roza la integridad de datos; borrarla por supresión sería más pesado. Mantener todo en memoria: no sirve para comparar días. |
 | **P-2** | **Trabajo propio** `crm-jev-snapshot` (cron `30 13 * * *` = 08:30 Bogotá, 30 minutos después del barrido legal), registrado solo si la funcionalidad está activa; **no** se ejecuta al arrancar (VJC-009). | Colgarlo de `crm-daily`: un fallo o una demora afectaría al barrido legal diario (VJC-006). Ejecutarlo al arrancar: duplicaría corridas en cada reinicio. |
 | **P-3** | **Reconciliación de supresión al comienzo de cada corrida**: se calculan las referencias (HMAC) de los leads con `suppressed_at`, en estado `opted_out` o ausentes, y se quitan de todos los archivos antes de escribir; si un archivo no puede reescribirse se elimina entero; las referencias retiradas se anotan en un archivo de retiros. | Engancharse a `compliance.execute_suppression`: es código legal crítico; no se toca para algo opcional. Detectar la supresión por «fila ausente»: los leads nunca se borran. |
-| **P-4** | **Idempotencia por archivo del día:** antes de escribir se leen los números de lead ya presentes en el archivo de hoy y se omiten. | Un archivo marcador aparte: puede desincronizarse del contenido. |
-| **P-5** | **Consultas en bloque** (una consulta por tipo de dato, agrupada por lead), en **una sola transacción de lectura**, con un máximo de 12 sentencias por corrida independientemente del número de leads (VJC-005, VJC-008). | Llamar a `lead_events`, `get_cadence`, etc. por cada lead (N+1). Medir el tiempo en pruebas: depende del equipo y no es determinista, por eso se cuentan sentencias. |
+| **P-4** | **Idempotencia por archivo del día:** antes de escribir se leen las referencias ya presentes en el archivo de hoy y se omiten. | Un archivo marcador aparte: puede desincronizarse del contenido. |
+| **P-5** | **Consultas en bloque** (una consulta por tipo de dato, con `GROUP BY` por lead y sin listas `IN` de ids, para no chocar con el límite de variables de SQLite), todas dentro de **una sola sección `read()`**, con un máximo de 12 sentencias por corrida —incluida la lista de leads— independientemente del número de leads (VJC-005, VJC-008). | Llamar a `lead_events`, `get_cadence`, etc. por cada lead (N+1). Medir el tiempo en pruebas: depende del equipo y no es determinista, por eso se cuentan sentencias. |
 | **P-6** | **Escritor de archivos compartido** `shadowlog` (`DailyJsonlWriter` con `append`, `purge` y `rewrite_without`), construido **una sola vez** aquí y reutilizado por la spec 002 (router) cuando se despierte. | Duplicar el escritor en cada spec (el CTO pidió no duplicar). |
 | **P-7** | **Referencia del lead = HMAC-SHA-256 del número interno** con una clave propia (`JERICO_CRM_JEV_SNAPSHOT_KEY`, secreto solo en el `.env` del servidor), acortada a 16 caracteres. Sin clave no se activa. | Guardar el número interno secuencial: es reidentificable desde el CRM (auditoría QA). Un hash sin clave: invertible por fuerza bruta sobre números pequeños. |
 | **P-8** | **Sin dependencias nuevas** (`pyproject.toml` no cambia). | — |
@@ -39,9 +40,9 @@ modificado: "13/10/2026 22:15"
 | Archivo | Contenido | Pura / con efectos |
 |---|---|---|
 | `src/jerico/shadowlog/__init__.py` | Reexporta `DailyJsonlWriter`. | — |
-| `src/jerico/shadowlog/jsonl.py` | `DailyJsonlWriter(directory, prefix, retention_days, clock)` con `append(record)` (una línea, ≤ 4 KB), `read_day(day)` (ignora líneas incompletas o ilegibles), `purge()` (borra por fecha) y `rewrite_without(predicate)` (reescribe con archivo temporal y reemplazo atómico; si no puede, elimina el archivo y lo informa). | Con efectos (disco); reloj inyectado; solo biblioteca estándar |
+| `src/jerico/shadowlog/jsonl.py` | `DailyJsonlWriter(directory, prefix, retention_days, clock)` con `append(record)` (una línea, ≤ 4 KB), `read_day(day)` (ignora líneas incompletas o ilegibles), `append` (si el archivo no termina en salto de línea, lo añade antes de escribir, para no pegar un registro a una línea parcial), `purge()` (borra por fecha) y `rewrite_without(predicate)` (reescribe con archivo temporal y reemplazo atómico; si no puede, elimina el archivo y lo informa). | Con efectos (disco); reloj inyectado; solo biblioteca estándar |
 | `src/jerico/crm/advisor_state.py` | `SCHEMA_VERSION = 1`; `CAPS`; enumeraciones permitidas; `lead_ref(key, lead_id)`; `is_eligible(lead)`; `build_vector(lead, ctx, today, key)`; `validate_vector(vector)`; `InvalidVector`. | Pura |
-| `src/jerico/crm/advisor_queries.py` | `load_context(conn, lead_ids, now)`: consultas de solo lectura agrupadas por lead (eventos de cambio de etapa, de campo y de reasignación de los últimos 30 días y fecha del último cambio de etapa, notas contadas, cadencia, propuestas pendientes, alertas sin resolver del lead, solicitudes de titular no atendidas), todas en una sola transacción de lectura. | Con efectos (lectura) |
+| `src/jerico/crm/advisor_queries.py` | `load_context(conn, lead_ids, now)`: consultas de solo lectura agrupadas por lead (eventos de cambio de etapa, de campo y de reasignación de los últimos 30 días y fecha del último cambio de etapa, notas contadas, cadencia, propuestas pendientes, alertas sin resolver del lead, solicitudes de titular no atendidas), todas dentro de una sola sección `read()`; las propuestas pendientes cuentan todas las de estado pendiente (de seguimiento y de solicitud de autorización) con `GROUP BY` por lead. | Con efectos (lectura) |
 | `src/jerico/crm/advisor_snapshot.py` | `run_snapshot(db, writer, retiros, key, now) -> SnapshotReport`: aplica retención, reconcilia supresiones y retiros, lee leads, filtra elegibles, construye y valida, y escribe omitiendo los ya presentes. Contadores de omitidos y de fallos (en memoria). | Con efectos |
 | `src/jerico/crm/config.py` (modificación mínima) | `jev_snapshot_enabled: bool = False`, `jev_snapshot_key: str = ""`, `jev_snapshot_dir: Path \| None = None` (por defecto `data_dir/jev_snapshot`), `jev_snapshot_retention_days: int = 90`; la activación efectiva exige clave no vacía (VJC-014), como el patrón de `f2_missing`. | — |
 | `src/jerico/crm/jobs.py` (modificación mínima) | Constantes `SNAPSHOT_JOB`, `SNAPSHOT_CRON`; parámetro opcional `snapshot` en `register_jobs`. | — |
@@ -89,15 +90,15 @@ build_vector(lead, ctx, today, key):           # today = día calendario en Bogo
 ```
 run_snapshot(db, writer, retiros, key, now):
     today = local_date(now)
-    writer.purge(); retiros.purge()                                  # VJC-021
-    with db.read() as conn:                                          # una sola transacción de lectura (VJC-005)
+    writer.purge(); retiros.purge(retention_days=30)                 # VJC-021
+    with db.read() as conn:                                          # una sola sección de lectura (VJC-005)
         leads = all_leads(conn, exclude_suppressed=False)
         eligible = [l for l in leads if is_eligible(l)]
         ctx = load_context(conn, [l.id for l in eligible], now)      # <= 12 sentencias (VJC-008)
     vivos = {lead_ref(key, l.id) for l in eligible}                  # referencias que SÍ pueden estar
     retirar = lambda rec: rec["lead_ref"] not in vivos               # suprimidos, opted_out o ausentes
     quitadas = writer.rewrite_without(retirar)                       # VJC-022 / VJC-023
-    retiros.append_all({"lead_ref": r, "day": today} for r in quitadas)   # VJC-024
+    retiros.append_all({"lead_ref": r, "day": today} for r in quitadas)   # VJC-024 (retiros-AAAA-MM-DD, 30 días)
     if writer.last_rewrite_failed: report.blocked = True; return     # no escribe hoy (VJC-023)
     hechos = {rec["lead_ref"] for rec in writer.read_day(today)}     # VJC-004
     for lead in eligible:
@@ -112,14 +113,15 @@ Notas: no se escribe en la base (VJC-005); si la lectura falla, no se escribe na
 ### 3.3 Cableado (`app.py`)
 
 ```
-if settings.jev_snapshot_enabled:
+if settings.jev_snapshot_enabled and settings.jev_snapshot_key:
     writer = DailyJsonlWriter(dir, "crm_snapshot", retention_days, clock)
+    retiros = DailyJsonlWriter(dir, "crm_retiros", 30, clock)
     register snapshot job (SNAPSHOT_CRON) -> async wrapper:
-        try: report = await asyncio.to_thread(run_snapshot, db, writer, clock())
+        try: report = await asyncio.to_thread(run_snapshot, db, writer, retiros, key, clock())
         except Exception: failures += 1; log aviso sin datos de leads (+ contador)
 ```
 
-La corrida usa `asyncio.to_thread` para no bloquear el procesamiento de mensajes de Telegram. El envoltorio atrapa `Exception` (no la cancelación), incrementa un contador en memoria y escribe el aviso sin datos de leads (VJC-006). No se llama al iniciar el proceso (VJC-009).
+La corrida usa `asyncio.to_thread` para no bloquear el procesamiento de mensajes de Telegram. El envoltorio atrapa `Exception` (no la cancelación), incrementa un contador en memoria y escribe el aviso sin datos de leads (VJC-006); al final de cada corrida escribe un resumen sin datos de leads con escritas, omitidas y retiradas (VJC-007). Sin clave, el aviso al CTO usa el mecanismo de avisos de configuración que ya ejecuta el arranque del CRM (VJC-014). No se llama al iniciar el proceso (VJC-009).
 
 ## 4. Configuración
 
@@ -173,7 +175,7 @@ Cobertura: los módulos nuevos al 100 % y el total ≥ 89 %.
 
 - **Entrega apagada:** con `JERICO_CRM_JEV_SNAPSHOT_ENABLED=false` el CRM se comporta como hoy.
 - **Activación:** solo con la orden del CTO, añadiendo la variable al `.env` del servidor (lo hace el orquestador con el CTO; esta spec no toca el servidor).
-- **Reversa:** apagar la variable; borrar la carpeta de instantáneas. No hay migración de datos.
+- **Reversa:** apagar la variable **y borrar la carpeta de instantáneas ese mismo día** (apagada, el CRM no retira ni purga nada). No hay migración de datos.
 - **Respaldos:** el volumen del CRM entra en los respaldos cifrados (retención de 30 días); las instantáneas viajarían ahí. Es un dato seudonimizado, no anónimo; se anota para la revisión legal (Q5 de la spec, que bloquea el Gate 1).
 - **Clave:** la clave de la referencia la coloca el CTO en el `.env` del servidor (`chmod 600`); nunca en el repositorio.
 
@@ -182,9 +184,10 @@ Cobertura: los módulos nuevos al 100 % y el total ≥ 89 %.
 | Riesgo | Mitigación |
 |---|---|
 | Choque de `config.py`/`app.py` con la rama del asistente | Implementar sobre la base que ya contiene `d0aeab3`; coordinar con `crm-director`. |
-| Consultas lentas con muchos leads | Consultas en bloque y prueba de 1 000 leads en < 2 s. |
+| Consultas lentas con muchos leads | Consultas en bloque y prueba que cuenta sentencias (≤ 12, igual con 10 y con 1 000 leads). |
 | Reescritura de archivos por supresión | Archivo temporal con reemplazo atómico y prueba de fallo intermedio. |
+| Un cambio de clave retira todo el historial (queda declarado en VJC-014) | No cambiar la clave durante el piloto; si cambia, se reinicia el piloto. |
 | La captura bloquea el bot | `asyncio.to_thread` y trabajo separado de `crm-daily`. |
 | Volumen real nulo | Declarado: cierre «no concluyente» a las 12 semanas. |
 
-> 🕒 **Última modificación:** 13/10/2026 22:15 (Agente Claude Code · Sonnet 5.5)
+> 🕒 **Última modificación:** 13/10/2026 22:16 (Agente Claude Code · Sonnet 5.5)

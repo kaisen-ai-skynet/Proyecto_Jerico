@@ -1,5 +1,5 @@
 ---
-modificado: "13/10/2026 22:15"
+modificado: "13/10/2026 22:16"
 ---
 
 # Tareas 006 — Consejero de seguimiento con Jev en el CRM
@@ -29,7 +29,7 @@ Se guarda el código de salida real (sin tuberías que lo oculten). Debe pasar r
 - [ ] **T01 — Escritor de archivos diarios (`shadowlog`)**
   - **Delegable a Gemini:** SÍ — pieza aislada con pruebas explícitas (el director revisa la atomicidad del reemplazo y la concurrencia).
   - Requisitos: VJC-020, VJC-021, VJC-022, VJC-023.
-  - **Tests primero:** `tests/test_shadowlog_jsonl.py`: línea JSON por registro; archivo `AAAA-MM-DD.jsonl` según el reloj inyectado; `read_day` devuelve los registros y descarta líneas incompletas o ilegibles; `purge` borra solo archivos más viejos que la retención; `rewrite_without` quita registros por predicado, devuelve lo quitado y es atómico (un fallo a mitad no deja un archivo parcial; si no puede reescribir, elimina el archivo y lo informa); 20 hilos × 50 líneas sin líneas corruptas ni intercaladas; línea > 4 KB rechazada con error; falla de disco lanza `OSError`.
+  - **Tests primero:** `tests/test_shadowlog_jsonl.py`: línea JSON por registro; un `append` tras un archivo que termina en una línea parcial no pega el registro nuevo (añade el salto de línea antes); archivo `AAAA-MM-DD.jsonl` según el reloj inyectado; `read_day` devuelve los registros y descarta líneas incompletas o ilegibles; `purge` borra solo archivos más viejos que la retención; `rewrite_without` quita registros por predicado, devuelve lo quitado y es atómico (un fallo a mitad no deja un archivo parcial; si no puede reescribir, elimina el archivo y lo informa); 20 hilos × 50 líneas sin líneas corruptas ni intercaladas; línea > 4 KB rechazada con error; falla de disco lanza `OSError`.
   - **Entregable exacto:** `src/jerico/shadowlog/__init__.py` y `jsonl.py` (`DailyJsonlWriter`).
   - **Hecho cuando:** las pruebas pasan sin red y sin esperas reales (reloj falso).
 
@@ -40,12 +40,12 @@ Se guarda el código de salida real (sin tuberías que lo oculten). Debe pasar r
   - Requisitos: VJC-007, VJC-011, VJC-012, VJC-013, VJC-014, VJC-015, VJC-016.
   - **Tests primero:** `tests/test_crm_advisor_state.py`: elegibilidad (suprimido, `opted_out` y autorización revocada fuera; estados finales dentro); cada campo con casos de borde (sin eventos, valores nulos, cadencia vencida, fechas futuras); topes; la referencia (HMAC) es estable, de 16 caracteres, cambia con otra clave y no contiene el número del lead; `client_type` y `reject_reason` desconocidos se mapean a `ninguno` y `otro`; alertas sin lead no cuentan y solicitudes vencidas sí; `validate_vector` rechaza clave extra o faltante, tipo erróneo (un `bool` no vale como entero), entero fuera de tope y cadena fuera del enumerado; **prueba de privacidad**: con leads cuyos textos son marcadores únicos (nombre, empresa, correo, teléfono, documento, valor pactado, notas), ningún marcador aparece en el vector serializado.
   - **Entregable exacto:** `src/jerico/crm/advisor_state.py` (`SCHEMA_VERSION`, `CAPS`, `lead_ref`, `is_eligible`, `build_vector`, `validate_vector`, `InvalidVector`), con un contexto de entrada simple (sin acceso a base) para mantenerlo puro.
-  - **Hecho cuando:** las pruebas pasan y el vector contiene exactamente los campos de VJC-011.
+  - **Hecho cuando:** las pruebas pasan y el vector contiene exactamente los campos de VJC-012.
 
 - [ ] **T03 — Consultas de solo lectura en bloque**
   - **Delegable a Gemini:** SÍ — consultas acotadas con una prueba de equivalencia (el director revisa que todas sean `SELECT`).
   - Requisitos: VJC-005, VJC-008, VJC-012.
-  - **Tests primero:** `tests/test_crm_advisor_queries.py`: en una base con casos variados (leads con y sin eventos, con y sin cadencia, propuestas, alertas y solicitudes), el contexto en bloque coincide con lo que dan `lead_events`, `lead_notes`, `get_cadence`, `pending_proposals`, `open_alerts` y `open_titular_requests` lead por lead; con 1 000 leads se ejecutan como máximo 12 sentencias (conteo con la traza de SQLite), todas de lectura y dentro de una sola transacción.
+  - **Tests primero:** `tests/test_crm_advisor_queries.py`: en una base con casos variados (leads con y sin eventos, con y sin cadencia, propuestas de seguimiento y de solicitud de autorización, alertas con y sin lead, solicitudes abiertas, vencidas y atendidas), el contexto en bloque coincide con lo que dan `lead_events`, `lead_notes`, `get_cadence`, `open_alerts(lead_id=…)`, `open_titular_requests` y un conteo directo por lead de propuestas pendientes de cualquier tipo (`pending_proposals` no sirve como referencia: solo devuelve las vencidas); el conteo de sentencias con la traza de SQLite (incluida la lista de leads) es ≤ 12 e igual con 10 y con 1 000 leads; todas son lecturas, se ejecutan dentro de una sola sección `read()` y no usan listas `IN` de ids.
   - **Entregable exacto:** `src/jerico/crm/advisor_queries.py` (`load_context`).
   - **Hecho cuando:** las pruebas pasan y el análisis estático confirma que no hay `INSERT`, `UPDATE`, `DELETE` ni `PRAGMA` de escritura.
 
@@ -54,7 +54,7 @@ Se guarda el código de salida real (sin tuberías que lo oculten). Debe pasar r
 - [ ] **T04 — Corrida de la instantánea**
   - **Delegable a Gemini:** NO — integra elegibilidad, idempotencia y supresión (privacidad y borrado).
   - Requisitos: VJC-003, VJC-004, VJC-005, VJC-006, VJC-007, VJC-010, VJC-021, VJC-022, VJC-023, VJC-024.
-  - **Tests primero:** `tests/test_crm_advisor_snapshot.py`: una línea por lead elegible; dos corridas el mismo día no duplican (también tras un reinicio y con una línea parcial); el cambio de día se decide en hora de Bogotá (23:30 y 00:30 locales); **la base queda idéntica** (volcado antes y después); un lead inválido se omite y se cuenta; tras marcar `suppressed_at`, pasar a `opted_out` o quitar la fila, la corrida borra sus líneas de todos los archivos **antes** de escribir y anota el retiro en el archivo de retiros; un archivo que no se puede reescribir se elimina y ese día no se escribe; cero leads elegibles no escribe pero aplica retención y retiros; un fallo de lectura no escribe nada.
+  - **Tests primero:** `tests/test_crm_advisor_snapshot.py`: una línea por lead elegible; dos corridas el mismo día no duplican (también tras un reinicio y con una línea parcial); el cambio de día se decide en hora de Bogotá (23:30 y 00:30 locales); **la base queda idéntica** (volcado antes y después); un lead inválido se omite y se cuenta; tras marcar `suppressed_at`, pasar a `opted_out` o quitar la fila, la corrida borra sus líneas de todos los archivos **antes** de escribir y anota el retiro (referencia y día) en el archivo de retiros `retiros-AAAA-MM-DD` con retención de 30 días; un cambio de clave retira las líneas de la clave anterior; una autorización revocada también las retira; un archivo que no se puede reescribir se elimina y ese día no se escribe; cero leads elegibles no escribe pero aplica retención y retiros; un fallo de lectura no escribe nada.
   - **Entregable exacto:** `src/jerico/crm/advisor_snapshot.py` (`run_snapshot`, `SnapshotReport`) y el archivo de retiros.
   - **Hecho cuando:** las pruebas pasan y la huella de la base no cambia.
 
@@ -85,7 +85,7 @@ Se guarda el código de salida real (sin tuberías que lo oculten). Debe pasar r
 - [ ] **T08 — Documentación de despliegue**
   - **Delegable a Gemini:** SÍ — documentación.
   - Requisitos: VJC-002, VJC-014, VJC-021, VJC-022.
-  - **Entregable exacto:** apartado en la documentación de despliegue del CRM con las variables nuevas, dónde y quién coloca la clave, el volumen, la retención, el archivo de retiros, cómo activar y apagar, y la nota sobre respaldos. Con marca de tiempo.
+  - **Entregable exacto:** apartado en la documentación de despliegue del CRM con las variables nuevas, dónde y quién coloca la clave, el volumen, la retención, el archivo de retiros, cómo activar y apagar, la nota sobre respaldos y el procedimiento de apagado (apagar exige borrar la carpeta de instantáneas el mismo día). Con marca de tiempo.
   - **Hecho cuando:** el apartado existe y coincide con `config.py`.
 
 - [ ] **T09 — Verificación final y revisión**
@@ -131,4 +131,4 @@ Se guarda el código de salida real (sin tuberías que lo oculten). Debe pasar r
 | VJC-021 a 024 | T04 |
 | VJC-040 | T09 (y `verify.sh` en cada tarea) |
 
-> 🕒 **Última modificación:** 13/10/2026 22:15 (Agente Claude Code · Sonnet 5.5)
+> 🕒 **Última modificación:** 13/10/2026 22:16 (Agente Claude Code · Sonnet 5.5)

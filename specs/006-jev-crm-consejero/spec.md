@@ -1,5 +1,5 @@
 ---
-modificado: "13/10/2026 22:15"
+modificado: "13/10/2026 22:16"
 ---
 
 # Spec 006 — Consejero de seguimiento con Jev en el CRM (modo sombra)
@@ -80,10 +80,10 @@ Prefijo `VJC-`. Definiciones:
 - **VJC-002** MIENTRAS la instantánea esté desactivada (valor por defecto), EL SISTEMA no escribe ningún archivo de instantánea y el CRM se comporta exactamente igual que sin esta funcionalidad.
 - **VJC-003** CUANDO la instantánea está activada y llega su corrida diaria, EL SISTEMA escribe una línea por cada lead elegible con su vector (6.2), el día de captura y la versión del esquema.
 - **VJC-004** SI la corrida se ejecuta más de una vez en el mismo día de captura (reinicio del contenedor o reintento), ENTONCES EL SISTEMA no duplica las líneas de los leads ya registrados ese día, y SI el archivo del día tiene una línea incompleta o ilegible, ENTONCES la descarta al leerlo y escribe los leads que falten.
-- **VJC-005** EL SISTEMA no escribe en la base del CRM durante la captura y realiza todas sus lecturas dentro de una única transacción de lectura, de modo que ve un estado consistente aunque otros trabajos del CRM estén escribiendo.
+- **VJC-005** EL SISTEMA no escribe en la base del CRM durante la captura y realiza todas sus lecturas dentro de una única sección de lectura de la conexión del CRM, que excluye las escrituras de otros trabajos mientras dura, de modo que ve un estado consistente.
 - **VJC-006** SI la captura falla por una falla ordinaria, ENTONCES EL SISTEMA continúa con los demás trabajos del CRM, anota en el registro de la aplicación un aviso sin datos de leads (sin referencias, ni números internos, ni valores del vector) que incluye el contador de fallos desde el arranque, y reintenta en la siguiente corrida; el contador vive en memoria y se reinicia con el proceso.
-- **VJC-007** SI el vector de un lead no cumple la validación de 6.2, ENTONCES EL SISTEMA omite a ese lead, cuenta la omisión y continúa con los demás.
-- **VJC-008** EL SISTEMA obtiene los datos de todos los leads con un número de sentencias de lectura que no depende del número de leads (como máximo 12 sentencias por corrida, verificable contando sentencias en una prueba con 1 000 leads).
+- **VJC-007** SI el vector de un lead no cumple la validación de 6.2, ENTONCES EL SISTEMA omite a ese lead, cuenta la omisión, la informa en el resumen sin datos de leads que escribe al final de cada corrida en el registro de la aplicación y continúa con los demás.
+- **VJC-008** EL SISTEMA obtiene los datos de todos los leads, incluida la lista de leads, con un número de sentencias de lectura que no depende del número de leads (como máximo 12 sentencias por corrida, verificable contando sentencias en una prueba con 1 000 leads y con 10 leads, que deben dar el mismo número).
 - **VJC-009** EL SISTEMA programa la corrida diaria de la instantánea 30 minutos después del barrido legal diario del CRM, y no la ejecuta al arrancar el proceso.
 - **VJC-010** SI no hay ningún lead elegible, ENTONCES EL SISTEMA no escribe líneas ese día y aun así aplica la retención y los retiros (6.3).
 
@@ -98,22 +98,22 @@ Prefijo `VJC-`. Definiciones:
   - **Motivo de rechazo**: `precio`, `momento`, `proveedor`, `no_interesado` u `otro` (cualquier valor fuera de esa lista cuenta como `otro`) o `ninguno` si está vacío.
   - **Autorización**: `unauthorized` o `authorized` (la revocada no es elegible).
   - **Campos faltantes del handoff**: número que devuelve la regla vigente de completitud del handoff (0 a 9).
-  - **Actividad**: número de eventos del lead de tipo cambio de etapa, cambio de campo o reasignación en los últimos 30 días; número de notas (solo el conteo).
-  - **Cadencia**: estado (`active`, `paused`, `completed`, `stopped`, o `ninguna` si el lead no tiene cadencia), pasos hechos, pasos totales, envíos hechos, si tiene fecha de próxima acción, y días hasta esa acción (negativo si está vencida; 0 si no tiene fecha).
-  - **Pendientes**: número de propuestas en estado pendiente, de alertas sin resolver del lead (las alertas sin lead no cuentan) y de solicitudes de titular no atendidas del lead (abiertas o vencidas).
+  - **Actividad**: número de eventos del lead de tipo cambio de etapa, cambio de campo o reasignación ocurridos en los 30 días calendario de Bogotá anteriores al día de captura (el día de captura incluido); número de notas (solo el conteo).
+  - **Cadencia**: estado (`active`, `paused`, `completed`, `stopped`, o `ninguna` si el lead no tiene cadencia), pasos hechos, pasos totales, envíos hechos, si tiene fecha de próxima acción, y días calendario de Bogotá hasta esa acción (negativo si está vencida; 0 si no tiene fecha).
+  - **Pendientes**: número de propuestas del lead en estado pendiente (de cualquier tipo, incluidas las de solicitud de autorización), de alertas sin resolver del lead (las alertas sin lead no cuentan) y de solicitudes de titular no atendidas del lead (abiertas o vencidas).
   - **Día de la semana** del día de captura (0 a 6).
 - **VJC-013** EL SISTEMA aplica a cada entero un tope fijo (propuesta: 365 días, 50 eventos, 50 notas, 50 envíos, 50 pendientes, ±365 días hasta la próxima acción), de modo que un valor mayor se registra como el tope.
-- **VJC-014** EL SISTEMA identifica a cada lead en los archivos únicamente con su referencia (VJC-016 define la clave) y no guarda el número interno; SI no hay clave configurada, ENTONCES EL SISTEMA no activa la instantánea y avisa una vez al CTO al arrancar.
+- **VJC-014** EL SISTEMA identifica a cada lead en los archivos únicamente con su referencia (VJC-016 define la clave) y no guarda el número interno; SI no hay clave configurada, ENTONCES EL SISTEMA no activa la instantánea y avisa al CTO por Telegram una vez por arranque, con el mismo mecanismo que usa para los demás avisos de configuración. Cambiar la clave equivale a reiniciar el piloto: las líneas con referencias de la clave anterior no pueden reconciliarse y se retiran (VJC-022).
 - **VJC-015** EL SISTEMA no guarda en el vector ni nombre, empresa, representante, correo, teléfono, documento, notas, motivo escrito, texto del valor pactado o del servicio, ni el texto de ningún mensaje: esos campos solo se miran para saber si están vacíos.
 - **VJC-016** EL SISTEMA calcula la referencia con un código de autenticación de mensaje (HMAC-SHA-256) del número interno con una clave secreta propia de esta funcionalidad, guardada solo en la configuración del servidor, y la acorta a 16 caracteres hexadecimales.
 
 ### 6.3 Archivos, retención, supresión y retiros
 
 - **VJC-020** EL SISTEMA escribe las instantáneas en líneas independientes, con versión de esquema, en un archivo por día de captura (nombre con la fecha) dentro del directorio de datos persistente del CRM, de modo que la herramienta de la flota pueda leerlas sin código del CRM e ignorar una última línea incompleta.
-- **VJC-021** EL SISTEMA elimina los archivos de instantáneas y de retiros con fecha anterior al número de días de retención configurado (propuesta: 90) al comienzo de cada corrida; si se reduce la retención, se aplica en la siguiente corrida.
-- **VJC-022** CUANDO comienza una corrida, ANTES de escribir, EL SISTEMA elimina de todos los archivos de instantáneas las líneas cuya referencia corresponda a un lead suprimido, en estado «baja» o inexistente en la base (este último caso solo por robustez, porque la supresión actual no borra filas).
+- **VJC-021** EL SISTEMA elimina los archivos de instantáneas con fecha anterior al número de días de retención configurado (propuesta: 90), y los de retiros con fecha anterior a 30 días, al comienzo de cada corrida; si se reduce la retención, se aplica en la siguiente corrida.
+- **VJC-022** CUANDO comienza una corrida, ANTES de escribir, EL SISTEMA elimina de todos los archivos de instantáneas las líneas cuya referencia no corresponda a un lead elegible, es decir, la de un lead suprimido, en estado «baja», con autorización revocada o inexistente en la base (este último caso solo por robustez, porque la supresión actual no borra filas), y las de una clave anterior (VJC-014).
 - **VJC-023** SI EL SISTEMA no puede reescribir un archivo para quitar líneas (VJC-022), ENTONCES elimina ese archivo completo, avisa sin datos de leads y no escribe las líneas nuevas del día hasta resolverlo.
-- **VJC-024** CUANDO elimina líneas por VJC-022, EL SISTEMA añade las referencias retiradas (y solo ellas) a un archivo de retiros con la misma retención, para que la herramienta de la flota retire sus copias.
+- **VJC-024** CUANDO elimina líneas por VJC-022, EL SISTEMA anota cada referencia retirada y el día del retiro (y nada más) en un archivo de retiros por día, con nombre que lleva la fecha, en el mismo directorio y con una retención de 30 días (propuesta), para que la herramienta de la flota retire sus copias.
 
 ### 6.4 Aislamiento y dependencias
 
@@ -146,7 +146,7 @@ No es una tarea para el CRM ni se verifica con pruebas del CRM:
 
 Son **criterios de negocio** para que el CTO decida, no requisitos verificables con pruebas del CRM. Todos los umbrales son una **propuesta**.
 
-- **Etiquetas (propuesta):** `avance_14d` = en los 14 días siguientes hubo interacción nueva (punto 7 de la sección 7) o el lead pasó a una etapa posterior; `desenlace_30d` = a los 30 días el lead está en `won`, `lost` o sigue abierto.
+- **Etiquetas (propuesta):** `avance_14d` = en los 14 días siguientes hubo interacción nueva (punto 7 de la sección 7) o el lead avanzó en el orden `new` < `contacted` < `accepted` < `won` (pasar a `rejected`, `lost`, `nurturing`, `paused` o `reactivated` no cuenta como avance); `desenlace_30d` = a los 30 días el lead está en `won`, `lost` o sigue abierto.
 - **Línea base:** el orden actual por última interacción. Referencia de comparación: entre el 20 % de leads que cada orden pone primero, la proporción que tiene `avance_14d`.
 - **Muestra mínima:** al menos 30 leads distintos y 100 pares (lead, día) con la ventana de 14 días completa, durante al menos 8 semanas, con un máximo de 12. Si pasado ese máximo no se alcanza, se declara «no concluyente» y se cierra.
 - **Éxito indicativo (continuar a una spec posterior que muestre la sugerencia al comercial):** Jev supera a la línea base en 15 puntos porcentuales o más en la métrica anterior, y su probabilidad de avance tiene un Brier menor que el de predecir siempre la tasa base.
@@ -156,8 +156,8 @@ Son **criterios de negocio** para que el CTO decida, no requisitos verificables 
 ## 9. Preguntas abiertas para el CTO
 
 **Bloquean el Gate 1:**
-- **Q2 — Cuántos leads esperas en las próximas 8 semanas.** Si son menos de unos 20 activos, el piloto se declara no viable desde el inicio y no vale la pena implementar nada.
-- **Q5 — Base legal del archivo seudonimizado.** El archivo contiene datos estructurados de un titular identificados por una referencia; es **seudonimización, no anonimización** (con pocos leads, la combinación de etapa, antigüedad y fechas puede ser casi única para quien conoce la cartera). El aviso de privacidad cubre el tratamiento comercial; no consta que cubra un piloto de evaluación con un tercero. El flujo a Jev no lleva referencia ni fecha, pero el CTO y el abogado deben confirmar la base legal y la finalidad antes de implementar.
+- **Q2 — Cuántos leads distintos esperas en las próximas 12 semanas.** Si son menos de 30 (el mínimo de la sección 8), el piloto se declara no viable desde el inicio y no vale la pena implementar nada.
+- **Q5 — Base legal de los archivos seudonimizados.** Tanto el archivo de instantáneas como el de retiros contienen una referencia que el CRM puede reidentificar con su clave (el de retiros, además, revela que ese titular fue dado de baja o suprimido, durante 30 días). El de instantáneas contiene datos estructurados de un titular identificados por esa referencia; es **seudonimización, no anonimización** (con pocos leads, la combinación de etapa, antigüedad y fechas puede ser casi única para quien conoce la cartera). El aviso de privacidad cubre el tratamiento comercial; no consta que cubra un piloto de evaluación con un tercero. El flujo a Jev no lleva referencia ni fecha, pero el CTO y el abogado deben confirmar la base legal y la finalidad antes de implementar.
 
 **No bloquean:**
 - **Q1 — Traslado de archivos.** Opciones: (a) copia manual periódica autorizada por el CTO; (b) ejecutar la herramienta en el servidor (implicaría poner la llave de TypeSafe allí); (c) un comando del CRM que exporte los archivos. Esta spec propone (a) para el piloto.
@@ -174,6 +174,8 @@ Son **criterios de negocio** para que el CTO decida, no requisitos verificables 
 | La captura afecta al CRM | Apagada por defecto, solo lectura, aislada de los demás trabajos, tolerante a fallos (VJC-002, VJC-005, VJC-006). |
 | Fuga de datos personales al archivo o a Jev | Lista cerrada de campos, referencia con clave en vez del número interno, prueba de privacidad; la referencia y el día nunca van a Jev (VJC-012, VJC-014 a VJC-016 y sección 7). |
 | Datos derivados de un lead suprimido quedan en los archivos o en copias | Reconciliación al comienzo de cada corrida y archivo de retiros que la flota debe aplicar (VJC-022 a VJC-024). Los respaldos del CRM conservan datos hasta 30 días por política vigente. |
+| Apagar la funcionalidad deja líneas sin reconciliar | Apagarla exige borrar la carpeta de instantáneas ese mismo día (procedimiento de despliegue); apagada, el CRM no retira ni purga nada. |
+| Ventana de hasta 24 horas entre una supresión y el retiro de sus líneas (también si el barrido legal se reintenta después de la corrida) | Aceptada y declarada: el retiro ocurre al comienzo de la siguiente corrida diaria. |
 | Que alguien trate la sugerencia de Jev como una decisión | Fuera de alcance mostrarla; solo opciones prudentes; regla permanente (sección 8). |
 | Confianza de Jev sin calibrar | Se mide y se exige mejora del Brier antes de cualquier uso. |
 
@@ -186,4 +188,4 @@ Son **criterios de negocio** para que el CTO decida, no requisitos verificables 
 | VJC-020 a VJC-024 | Registro de cada decisión para auditar y Ley 1581 (lecciones 7 y 8). |
 | Sección 8 | Modo sombra, medir contra la línea base y calibrar (lecciones 2 y 3). |
 
-> 🕒 **Última modificación:** 13/10/2026 22:15 (Agente Claude Code · Sonnet 5.5)
+> 🕒 **Última modificación:** 13/10/2026 22:16 (Agente Claude Code · Sonnet 5.5)
