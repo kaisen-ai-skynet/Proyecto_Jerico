@@ -21,6 +21,8 @@ from jerico.crm.closing_contract import (
 )
 from jerico.crm.closing_flow import (
     ClosingContext,
+    as_lawyer,
+    as_lawyer_file,
     cases_command,
     legal_basis_command,
     package_command,
@@ -57,14 +59,14 @@ def register_lawyer_commands(
     bot: CrmBot, db: CrmDatabase, ctx: ClosingContext, telegram: TelegramPort
 ) -> None:
     bot.register_command("start", start_command)
-    bot.register_command("casos", cases_command)
+    bot.register_command("casos", as_lawyer(ctx, cases_command))
     bot.register_command("paquete", package_command)
     bot.register_command("descargar", download_command(ctx, bot, telegram))
-    bot.register_command("basejuridica", legal_basis_command)
-    bot.register_command("subircontrato", upload_command)
-    bot.register_file_pending(CONTRACT_FILE_KIND, file_handler(ctx, bot, db))
-    bot.register_command("devolver", return_command)
-    bot.register_command("formaespecial", special_form_command)
+    bot.register_command("basejuridica", as_lawyer(ctx, legal_basis_command))
+    bot.register_command("subircontrato", as_lawyer(ctx, upload_command))
+    bot.register_file_pending(CONTRACT_FILE_KIND, as_lawyer_file(ctx, file_handler(ctx, bot, db)))
+    bot.register_command("devolver", as_lawyer(ctx, return_command))
+    bot.register_command("formaespecial", as_lawyer(ctx, special_form_command))
 
 
 def build_legal_bot(

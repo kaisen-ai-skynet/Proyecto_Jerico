@@ -3,6 +3,7 @@
 Todo lo que lleva datos del cliente a un tercero (el abogado) exige ✅ del comercial o del CTO
 (VCRM-C03). Las acciones externas son idempotentes (clave determinista) y respetan DRY_RUN."""
 
+import dataclasses
 import re
 import sqlite3
 from collections.abc import Callable
@@ -11,10 +12,11 @@ from datetime import UTC, date, datetime
 
 from jerico.crm import closing_repo as crepo
 from jerico.crm import leads, repo
-from jerico.crm.bot import CrmBot, deny
+from jerico.crm.bot import CommandHandler, CrmBot, FilePendingHandler, deny
 from jerico.crm.closing_model import ContractStatus, LegalBasis, Package, PackageStatus
 from jerico.crm.handoff import missing_handoff_fields
 from jerico.crm.idempotency import claim, make_key
+from jerico.crm.leads import Prefetched
 from jerico.crm.model import (
     AuditAction,
     AuditOutcome,
@@ -22,6 +24,7 @@ from jerico.crm.model import (
     Lead,
     LeadState,
     Outgoing,
+    PendingInput,
     Role,
     User,
 )
@@ -36,7 +39,7 @@ from jerico.crm.package import (
 )
 from jerico.crm.parsing import build_callback, parse_short_id
 from jerico.crm.permissions import Action, authorize
-from jerico.crm.ports import AttachmentEmailSender, FileStore, TelegramPort
+from jerico.crm.ports import AttachmentEmailSender, FileStore, TelegramPort, Update
 from jerico.crm.render import short_id
 from jerico.crm.signature import SignaturePort
 from jerico.schemas import PaqueteContrato
@@ -446,10 +449,55 @@ def legal_basis_command(
     ]
 
 
+def _acting_as_lawyer(
+    conn: sqlite3.Connection, ctx: ClosingContext, actor: User, now: datetime
+) -> User:
+    """El CTO actúa como abogado SOLO con DRY_RUN activo; cada uso queda auditado.
+
+    Con DRY_RUN apagado (producción real) no se sustituye nada y rige la matriz de permisos."""
+    if actor.role != Role.CTO or not ctx.dry_run:
+        return actor
+    repo.audit(
+        conn,
+        actor=f"user:{actor.id}",
+        action=AuditAction.CTO_LAWYER_USE,
+        outcome=AuditOutcome.OK,
+        at=now,
+    )
+    return dataclasses.replace(actor, role=Role.LAWYER.value)
+
+
+def as_lawyer(ctx: ClosingContext, handler: CommandHandler) -> CommandHandler:
+    """Comando del abogado que el CTO puede usar mientras `ctx.dry_run` sea verdadero."""
+
+    def wrapped(conn: sqlite3.Connection, actor: User, text: str, now: datetime) -> list[Outgoing]:
+        return handler(conn, _acting_as_lawyer(conn, ctx, actor, now), text, now)
+
+    return wrapped
+
+
+def as_lawyer_file(ctx: ClosingContext, handler: FilePendingHandler) -> FilePendingHandler:
+    """Igual que `as_lawyer` para la recepción del archivo del contrato."""
+
+    def wrapped(
+        conn: sqlite3.Connection,
+        actor: User,
+        pending: PendingInput,
+        update: Update,
+        prefetch: Prefetched | None,
+        now: datetime,
+    ) -> list[Outgoing]:
+        return handler(
+            conn, _acting_as_lawyer(conn, ctx, actor, now), pending, update, prefetch, now
+        )
+
+    return wrapped
+
+
 def register_closing(bot: CrmBot, ctx: ClosingContext) -> None:
     bot.register_command(OFFER_COMMAND, offer_command)
     bot.register_callback(PKG_SEND, send_callback(ctx))
     bot.register_callback(PKG_CANCEL, cancel_callback)
-    bot.register_command("casos", cases_command)
+    bot.register_command("casos", as_lawyer(ctx, cases_command))
     bot.register_command("paquete", package_command)
-    bot.register_command("basejuridica", legal_basis_command)
+    bot.register_command("basejuridica", as_lawyer(ctx, legal_basis_command))

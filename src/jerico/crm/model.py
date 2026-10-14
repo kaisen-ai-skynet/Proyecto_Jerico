@@ -74,6 +74,7 @@ class AuditAction(StrEnum):
     CONTRACT_EVENT = "contract_event"  # spec 004: subida, devolución, aprobación, vencimiento
     SIGNATURE_EVENT = "signature_event"  # spec 004: envío a firma y resultado
     MAILBOX_EVENT = "mailbox_event"  # spec 004: consulta de buzón y candidatos
+    CTO_LAWYER_USE = "cto_lawyer_use"  # spec 004: el CTO usa un comando del abogado (solo DRY_RUN)
 
 
 class AuditOutcome(StrEnum):

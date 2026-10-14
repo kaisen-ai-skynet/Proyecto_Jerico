@@ -26,6 +26,8 @@ from jerico.crm.bot import (
 )
 from jerico.crm.closing_flow import (
     ClosingContext,
+    as_lawyer,
+    as_lawyer_file,
     contract_route,
     rebuild_package,
 )
@@ -743,10 +745,10 @@ async def contract_sweep(db: CrmDatabase, ctx: ClosingContext, now: datetime) ->
 
 
 def register_contract(bot: CrmBot, db: CrmDatabase, ctx: ClosingContext) -> None:
-    bot.register_command("subircontrato", upload_command)
-    bot.register_file_pending(CONTRACT_FILE_KIND, file_handler(ctx, bot, db))
-    bot.register_command("devolver", return_command)
-    bot.register_command("formaespecial", special_form_command)
+    bot.register_command("subircontrato", as_lawyer(ctx, upload_command))
+    bot.register_file_pending(CONTRACT_FILE_KIND, as_lawyer_file(ctx, file_handler(ctx, bot, db)))
+    bot.register_command("devolver", as_lawyer(ctx, return_command))
+    bot.register_command("formaespecial", as_lawyer(ctx, special_form_command))
     bot.register_command("firma", sign_command(ctx))
     bot.register_callback(SIGN_OK, send_sign_callback(ctx, bot, db))
     bot.register_callback(SIGN_NO, cancel_sign_callback)
