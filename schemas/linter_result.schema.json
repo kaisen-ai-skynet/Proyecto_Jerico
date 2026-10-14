@@ -1,0 +1,81 @@
+{
+  "$defs": {
+    "LinterViolation": {
+      "additionalProperties": false,
+      "properties": {
+        "mensaje": {
+          "title": "Mensaje",
+          "type": "string"
+        },
+        "regla": {
+          "title": "Regla",
+          "type": "string"
+        },
+        "severidad": {
+          "default": "error",
+          "title": "Severidad",
+          "type": "string"
+        }
+      },
+      "required": [
+        "regla",
+        "mensaje"
+      ],
+      "title": "LinterViolation",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "advertencias": {
+      "items": {
+        "$ref": "#/$defs/LinterViolation"
+      },
+      "title": "Advertencias",
+      "type": "array"
+    },
+    "errores": {
+      "items": {
+        "$ref": "#/$defs/LinterViolation"
+      },
+      "title": "Errores",
+      "type": "array"
+    },
+    "nombre_valido": {
+      "default": true,
+      "title": "Nombre Valido",
+      "type": "boolean"
+    },
+    "tagline_valido": {
+      "default": true,
+      "title": "Tagline Valido",
+      "type": "boolean"
+    },
+    "tokens_validos": {
+      "default": true,
+      "title": "Tokens Validos",
+      "type": "boolean"
+    },
+    "trato_detectado": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Trato Detectado"
+    },
+    "valido": {
+      "title": "Valido",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "valido"
+  ],
+  "title": "LinterResult",
+  "type": "object"
+}

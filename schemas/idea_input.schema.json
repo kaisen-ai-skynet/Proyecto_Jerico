@@ -1,0 +1,39 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "autor": {
+      "default": "cto",
+      "maxLength": 50,
+      "title": "Autor",
+      "type": "string"
+    },
+    "creado_en": {
+      "format": "date-time",
+      "title": "Creado En",
+      "type": "string"
+    },
+    "id": {
+      "maxLength": 100,
+      "minLength": 3,
+      "title": "Id",
+      "type": "string"
+    },
+    "origen": {
+      "default": "telegram",
+      "maxLength": 50,
+      "title": "Origen",
+      "type": "string"
+    },
+    "texto": {
+      "minLength": 1,
+      "title": "Texto",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "texto"
+  ],
+  "title": "IdeaInput",
+  "type": "object"
+}

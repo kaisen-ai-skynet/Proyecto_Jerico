@@ -1,0 +1,234 @@
+{
+  "$defs": {
+    "CanalMarketing": {
+      "enum": [
+        "correo",
+        "whatsapp_oficial",
+        "instagram",
+        "facebook",
+        "meta_ads"
+      ],
+      "title": "CanalMarketing",
+      "type": "string"
+    },
+    "ClasificacionCampana": {
+      "enum": [
+        "C1",
+        "C2",
+        "C3",
+        "C4",
+        "C5"
+      ],
+      "title": "ClasificacionCampana",
+      "type": "string"
+    },
+    "EstadoCampana": {
+      "enum": [
+        "borrador",
+        "en_revision",
+        "aprobada",
+        "rechazada",
+        "despachada"
+      ],
+      "title": "EstadoCampana",
+      "type": "string"
+    },
+    "MetaAdConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "adset_nombre": {
+          "default": "Intereses PYME Colombia",
+          "maxLength": 100,
+          "title": "Adset Nombre",
+          "type": "string"
+        },
+        "call_to_action": {
+          "default": "WHATSAPP_MESSAGE",
+          "maxLength": 50,
+          "title": "Call To Action",
+          "type": "string"
+        },
+        "gasto_autorizado_usd": {
+          "anyOf": [
+            {
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ],
+          "default": "0.00",
+          "title": "Gasto Autorizado Usd"
+        },
+        "objetivo": {
+          "default": "MESSAGES",
+          "maxLength": 50,
+          "title": "Objetivo",
+          "type": "string"
+        },
+        "presupuesto_diario_usd": {
+          "anyOf": [
+            {
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ],
+          "default": "0.00",
+          "title": "Presupuesto Diario Usd"
+        },
+        "status": {
+          "default": "PAUSED",
+          "maxLength": 20,
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "title": "MetaAdConfig",
+      "type": "object"
+    },
+    "Trato": {
+      "enum": [
+        "tu",
+        "usted"
+      ],
+      "title": "Trato",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "activo_multimedia_uri": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Activo Multimedia Uri"
+    },
+    "aprobado_por": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Aprobado Por"
+    },
+    "canal": {
+      "$ref": "#/$defs/CanalMarketing"
+    },
+    "clasificacion_campana": {
+      "$ref": "#/$defs/ClasificacionCampana"
+    },
+    "copy_principal": {
+      "minLength": 1,
+      "title": "Copy Principal",
+      "type": "string"
+    },
+    "dry_run": {
+      "default": true,
+      "title": "Dry Run",
+      "type": "boolean"
+    },
+    "estado": {
+      "$ref": "#/$defs/EstadoCampana",
+      "default": "borrador"
+    },
+    "fecha_aprobacion": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Fecha Aprobacion"
+    },
+    "gasto_autorizado_usd": {
+      "anyOf": [
+        {
+          "minimum": 0.0,
+          "type": "number"
+        },
+        {
+          "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+          "type": "string"
+        }
+      ],
+      "default": "0.00",
+      "title": "Gasto Autorizado Usd"
+    },
+    "id": {
+      "maxLength": 100,
+      "minLength": 3,
+      "title": "Id",
+      "type": "string"
+    },
+    "idempotency_key": {
+      "minLength": 8,
+      "title": "Idempotency Key",
+      "type": "string"
+    },
+    "meta_ad_config": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/MetaAdConfig"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "nombre": {
+      "maxLength": 200,
+      "minLength": 1,
+      "title": "Nombre",
+      "type": "string"
+    },
+    "presupuesto_estimado_usd": {
+      "anyOf": [
+        {
+          "minimum": 0.0,
+          "type": "number"
+        },
+        {
+          "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+          "type": "string"
+        }
+      ],
+      "default": "0.00",
+      "title": "Presupuesto Estimado Usd"
+    },
+    "trato": {
+      "$ref": "#/$defs/Trato"
+    }
+  },
+  "required": [
+    "id",
+    "nombre",
+    "clasificacion_campana",
+    "canal",
+    "trato",
+    "copy_principal",
+    "idempotency_key"
+  ],
+  "title": "CampanaMarketing",
+  "type": "object"
+}
