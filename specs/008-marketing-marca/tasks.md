@@ -7,7 +7,7 @@ Delegables a Gemini: SÍ en M1–M5 (aplicando TDD estricto con tests primero); 
 - [x] **M3** Test + `src/jerico/marketing/perfeccionador.py`: Ingesta de ideas en audio/texto, categorización en campañas C1–C5 y generación de copies adaptados por canal mediante prompts inmutables y mock de `gpt-6-luna`. (R1, R2, R3, R11).
 - [x] **M4** Test + `src/jerico/marketing/adaptadores/`: Implementar interfaz base y adaptadores para Email, WhatsApp Cloud API oficial de Meta (plantillas HSM) y Meta Ads (con campañas en estado PAUSED). Todo con soporte `DRY_RUN` e `idempotency_key` SHA-256. (R9, R10, R12, R13, R15, R18).
 - [x] **M5** Test + `src/jerico/marketing/orquestador.py`: Orquestador de la máquina de estados. Garantiza que ninguna emisión salga a la red si `aprobado_por` es nulo o si el gasto excede el presupuesto Lean mensual del Plan Maestro §6. (R14, R16, R17).
-- [ ] **M6** Herramientas de bot en `src/jerico/tools/marketing.py`: Comandos `/proponer_campana`, `/aprobar <id>` y `/rechazar <id> <motivo>` expuestos para `@Jericoo_bot` con verificación de rol `cto`. (R16, R17).
+- [x] **M6** Herramientas de bot en `src/jerico/tools/marketing.py`: Comandos `/proponer_campana`, `/aprobar <id>` y `/rechazar <id> <motivo>` expuestos para `@Jericoo_bot` con verificación de rol `cto`. (R16, R17).
 
 **Criterios de Verificación:**
 - Tests herméticos sin llamadas vivas a la red (mocks completos de APIs de Meta, WhatsApp y Resend).
@@ -16,4 +16,4 @@ Delegables a Gemini: SÍ en M1–M5 (aplicando TDD estricto con tests primero); 
 - `./scripts/verify.sh` en verde.
 
 ---
-> 🕒 **Última modificación:** 14/10/2026 07:54 (Agente Antigravity · kz-marca · F5)
+> 🕒 **Última modificación:** 14/10/2026 08:25 (Agente Antigravity · kz-marca · F5)

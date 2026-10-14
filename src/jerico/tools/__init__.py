@@ -1,10 +1,11 @@
 from jerico.tools.base import BaseTool
 from jerico.tools.docker import DOCKER_TOOLS
+from jerico.tools.marketing import MARKETING_TOOLS
 from jerico.tools.notion import NOTION_TOOLS
 from jerico.tools.youtrack import YOUTRACK_TOOLS
 
 REGISTRY: dict[str, BaseTool] = {
-    tool.name: tool for tool in [*YOUTRACK_TOOLS, *NOTION_TOOLS, *DOCKER_TOOLS]
+    tool.name: tool for tool in [*YOUTRACK_TOOLS, *NOTION_TOOLS, *DOCKER_TOOLS, *MARKETING_TOOLS]
 }
 
 
