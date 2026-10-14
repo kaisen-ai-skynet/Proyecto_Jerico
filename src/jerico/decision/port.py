@@ -35,6 +35,14 @@ def _get_default_cache() -> DecisionCache:
     return _global_cache
 
 
+def reset_global_cache() -> None:
+    """Restablece la caché global de decisiones (útil en pruebas y reinicio)."""
+    global _global_cache
+    if _global_cache is not None:
+        _global_cache.clear()
+    _global_cache = None
+
+
 class Mode(StrEnum):
     """Modos de operación para cada tipo de decisión (VJT-010)."""
 
@@ -171,6 +179,23 @@ def decidir(
             suggested = cached_opt if (modo == "sugerencia" and user_role == "cto") else None
             if modo == "sugerencia":
                 aplicada = spec.base
+            if modo != "apagado":
+                active_recorder.record(
+                    {
+                        "event_id": event_id,
+                        "decision_key": dkey,
+                        "kind": kind,
+                        "tarea": tarea,
+                        "mode": modo,
+                        "state": state,
+                        "base_option": spec.base,
+                        "applied_option": aplicada,
+                        "suggested_option": cached_opt if modo == "sugerencia" else None,
+                        "source": "cache",
+                        "reason": motivo_piso,
+                        "policy_version": active_policy.version,
+                    }
+                )
             return Decision(
                 option=aplicada,
                 source="cache",
@@ -190,8 +215,22 @@ def decidir(
                 decision_key=dkey,
             )
 
-        # Sin cliente en línea (Nivel 1)
-        if client is None:
+        # Resolución de cliente en línea (Nivel 2 o respaldo de Nivel 1)
+        active_client = client
+        if active_client is None and active_settings.online:
+            try:
+                from jerico.decision.jev_client import JevClient
+
+                active_client = JevClient(
+                    api_key=active_settings.api_key,
+                    endpoint=active_settings.endpoint,
+                    model=active_settings.model,
+                    timeout_s=active_settings.timeout_s,
+                )
+            except Exception:
+                active_client = None
+
+        if active_client is None:
             return Decision(
                 option=spec.base,
                 source="respaldo",
@@ -200,9 +239,18 @@ def decidir(
                 decision_key=dkey,
             )
 
+        if hasattr(active_client, "enabled") and not active_client.enabled:
+            return Decision(
+                option=spec.base,
+                source="respaldo",
+                reason="sin_llave",
+                event_id=event_id,
+                decision_key=dkey,
+            )
+
         # Consulta con un solo vuelo
         def _call() -> Any:
-            return client.consultar(spec, state)
+            return active_client.consultar(spec, state)
 
         try:
             answer = _global_single_flight.run(dkey, _call)
@@ -242,22 +290,34 @@ def decidir(
         if modo == "sugerencia":
             aplicada = spec.base
 
-        active_recorder.record(
-            {
-                "event_id": event_id,
-                "decision_key": dkey,
-                "kind": kind,
-                "tarea": tarea,
-                "mode": modo,
-                "state": state,
-                "base_option": spec.base,
-                "applied_option": aplicada,
-                "suggested_option": jev_option,
-                "source": "jev",
-                "reason": motivo_piso,
-                "policy_version": active_policy.version,
+        record_payload = {
+            "event_id": event_id,
+            "decision_key": dkey,
+            "kind": kind,
+            "tarea": tarea,
+            "mode": modo,
+            "state": state,
+            "base_option": spec.base,
+            "applied_option": aplicada,
+            "suggested_option": jev_option if (modo == "sugerencia" or modo == "sombra") else None,
+            "source": "jev",
+            "reason": motivo_piso,
+            "policy_version": active_policy.version,
+        }
+        if isinstance(answer, dict):
+            record_payload["jev_response"] = {
+                "option": jev_option,
+                "confidence": answer.get("confidence"),
+                "probabilities": answer.get("probabilities"),
             }
-        )
+            if answer.get("model_version") or answer.get("model"):
+                record_payload["model_version"] = answer.get("model_version") or answer.get("model")
+            if answer.get("latencia_ms") is not None:
+                record_payload["latency_ms"] = answer.get("latencia_ms")
+            if answer.get("tokens_in") is not None:
+                record_payload["tokens_in"] = answer.get("tokens_in")
+
+        active_recorder.record(record_payload)
 
         return Decision(
             option=aplicada,
