@@ -1,0 +1,139 @@
+{
+  "version": "1.0.0",
+  "tipos": {
+    "modelo_asistente": {
+      "clase": "C",
+      "base": "gpt-6-luna",
+      "opciones": ["deepseek-chat", "gemini-3.8-flash", "gpt-6-luna", "claude-opus-5.5"],
+      "modo_defecto": "apagado",
+      "clase_datos": "con_datos_personales",
+      "modelos_aptos_datos_personales": ["gpt-6-luna"],
+      "esquema_estado": {
+        "tipo_tarea": ["resumen_lead", "cifras_agregadas", "borrador", "clasificar_notas", "generar_web_app"],
+        "longitud_contexto": ["corta", "media", "larga"]
+      },
+      "tareas": {
+        "resumen_lead": {
+          "clase": "C",
+          "clase_datos": "con_datos_personales",
+          "base": "gpt-6-luna"
+        },
+        "cifras_agregadas": {
+          "clase": "C",
+          "clase_datos": "con_datos_personales",
+          "base": "gpt-6-luna"
+        },
+        "borrador": {
+          "clase": "B",
+          "clase_datos": "con_datos_personales",
+          "base": "gpt-6-luna",
+          "orden_exigencia": ["deepseek-chat", "gemini-3.8-flash", "gpt-6-luna", "claude-opus-5.5"]
+        },
+        "clasificar_notas": {
+          "clase": "C",
+          "clase_datos": "con_datos_personales",
+          "base": "gpt-6-luna"
+        },
+        "generar_web_app": {
+          "clase": "C",
+          "clase_datos": "sin_datos_personales",
+          "base": "gpt-6-luna"
+        }
+      }
+    },
+    "seguimiento_lead": {
+      "clase": "A",
+      "asesor": true,
+      "base": "mantener_orden",
+      "opciones": ["mantener_orden", "contactar_hoy", "esperar_cadencia", "pedir_autorizacion", "marcar_inactivo"],
+      "modo_defecto": "apagado",
+      "clase_datos": "sin_datos_personales",
+      "esquema_estado": {
+        "dias_sin_contacto": ["0", "1-2", "3-7", "8-14", "15-30", "31-90", "mas_de_90"],
+        "paso_cadencia": ["0", "1", "2", "3", "4"],
+        "estado_lead": ["nuevo", "en_contacto", "propuesta", "esperando_cliente", "pausado"],
+        "intentos_fallidos": ["0", "1-2", "3-5", "mas_de_5"]
+      }
+    },
+    "nivel_turno": {
+      "clase": "B",
+      "base": "L1",
+      "opciones": ["L1", "L2", "L3"],
+      "orden_exigencia": ["L1", "L2", "L3"],
+      "modo_defecto": "apagado",
+      "clase_datos": "sin_datos_personales",
+      "esquema_estado": {
+        "tipo_mensaje": ["simple", "comando", "complejo"],
+        "longitud_rango": ["corta", "media", "larga"]
+      }
+    },
+    "modelo": {
+      "clase": "C",
+      "base": "gemini-3.8-flash",
+      "opciones": ["gemini-3.8-flash", "gpt-6-luna", "claude-opus-5.5"],
+      "modo_defecto": "apagado",
+      "clase_datos": "con_datos_personales",
+      "modelos_aptos_datos_personales": ["gpt-6-luna"],
+      "esquema_estado": {
+        "complejidad": ["baja", "media", "alta"]
+      }
+    },
+    "habilidad": {
+      "clase": "C",
+      "base": "general",
+      "opciones": ["crm", "finanzas", "marketing", "general"],
+      "modo_defecto": "apagado",
+      "clase_datos": "sin_datos_personales",
+      "esquema_estado": {
+        "intencion": ["consulta", "operacion", "desconocida"]
+      }
+    },
+    "escalar_humano": {
+      "clase": "B",
+      "base": "pedir",
+      "opciones": ["no_pedir", "pedir"],
+      "orden_exigencia": ["no_pedir", "pedir"],
+      "modo_defecto": "apagado",
+      "clase_datos": "sin_datos_personales",
+      "esquema_estado": {
+        "tiene_efecto_externo": ["si", "no"],
+        "es_irreversible": ["si", "no"]
+      }
+    },
+    "siguiente_paso_voz": {
+      "clase": "B",
+      "base": "pasar_humano",
+      "opciones": ["continuar", "pasar_humano"],
+      "orden_exigencia": ["continuar", "pasar_humano"],
+      "modo_defecto": "apagado",
+      "clase_datos": "sin_datos_personales",
+      "esquema_estado": {
+        "confianza_transcripcion": ["alta", "media", "baja"],
+        "duda_detectada": ["si", "no"]
+      }
+    },
+    "riesgo_pieza": {
+      "clase": "B",
+      "base": "alto",
+      "opciones": ["bajo", "moderado", "alto"],
+      "orden_exigencia": ["bajo", "moderado", "alto"],
+      "modo_defecto": "apagado",
+      "clase_datos": "sin_datos_personales",
+      "esquema_estado": {
+        "canal": ["meta", "web", "correo", "organico"],
+        "gasto_autorizado": ["0", "bajo", "medio", "alto"]
+      }
+    },
+    "ruta_consulta_financiera": {
+      "clase": "B",
+      "base": "herramienta",
+      "opciones": ["conceptual", "herramienta", "humano"],
+      "orden_exigencia": ["conceptual", "herramienta", "humano"],
+      "modo_defecto": "apagado",
+      "clase_datos": "sin_datos_personales",
+      "esquema_estado": {
+        "tipo_consulta": ["precio", "margen", "concepto", "estrategia"]
+      }
+    }
+  }
+}
