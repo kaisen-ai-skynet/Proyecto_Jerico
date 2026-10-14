@@ -36,17 +36,26 @@ def test_no_network_imports_in_decision_package():
                     )
 
 
-def test_pyproject_toml_unchanged():
-    """Las dependencias no han cambiado (pyproject.toml permanece intacto, VJT-091)."""
-    import subprocess
+def test_decision_package_adds_no_dependencies():
+    """jerico.decision solo importa la biblioteca estándar o el propio jerico (VJT-091).
 
-    root_dir = Path(__file__).parent.parent
-    diff = subprocess.check_output(
-        ["/usr/bin/git", "diff", "1f893ff", "--", "pyproject.toml"],
-        cwd=root_dir,
-        text=True,
-    )
-    assert diff.strip() == "", "pyproject.toml no debe tener modificaciones"
+    No depende del historial de git: el CI clona sin historia.
+    """
+    import sys
+
+    decision_dir = Path(__file__).parent.parent / "src" / "jerico" / "decision"
+    foreign: set[str] = set()
+    for py_file in decision_dir.glob("*.py"):
+        tree = ast.parse(py_file.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                roots = [alias.name.split(".")[0] for alias in node.names]
+            elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
+                roots = [node.module.split(".")[0]]
+            else:
+                continue
+            foreign.update(r for r in roots if r != "jerico" and r not in sys.stdlib_module_names)
+    assert not foreign, f"jerico.decision importa dependencias externas: {sorted(foreign)}"
 
 
 def test_no_network_calls_in_apagado_and_sombra(tmp_path: Path):
