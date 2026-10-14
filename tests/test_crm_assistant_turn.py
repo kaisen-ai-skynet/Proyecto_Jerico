@@ -11,7 +11,7 @@ import pytest
 
 from crm_support import FakeClock, FakeEmailSender, FakeRunner, FakeTelegram, make_settings
 from jerico.crm.app import CrmApp
-from jerico.crm.assistant import AssistantContext, handle
+from jerico.crm.assistant import SYSTEM_PROMPTS, AssistantContext, handle
 from jerico.crm.assistant_budget import AssistantBudget
 from jerico.crm.assistant_memory import AccessDeniedError, AssistantMemory
 from jerico.crm.bot import CrmBot
@@ -298,6 +298,7 @@ def test_app_restart_preserves_conversation(tmp_path: Path, fake_now: datetime) 
         runner=FakeRunner(),
         clock=clock.now,
     )
+    assert app2.assistant_memory is not None
     history = app2.assistant_memory.get_transcript(
         "crm:user:10:pregunta",
         user_id=10,
@@ -307,3 +308,157 @@ def test_app_restart_preserves_conversation(tmp_path: Path, fake_now: datetime) 
     assert "¿funciona?" in history[0]["content"]
     assert "Persistencia verificada" in history[1]["content"]
     app2.close()
+
+
+def test_crm_app_does_not_open_assistant_memory_when_disabled(
+    tmp_path: Path, fake_now: datetime
+) -> None:
+    settings = make_settings(
+        data_dir=str(tmp_path),
+        assistant_enabled=False,
+    )
+    clock = FakeClock(fake_now)
+    app = CrmApp(
+        settings,
+        telegram=FakeTelegram(),
+        email=FakeEmailSender(),
+        runner=FakeRunner(),
+        clock=clock.now,
+    )
+    assert app.assistant_memory is None
+    assert not (tmp_path / "assistant_memory.db").exists()
+    app.close()
+
+
+def test_assistant_resilient_to_memory_disk_or_io_failure(
+    tmp_path: Path, fake_now: datetime
+) -> None:
+    settings = make_settings(
+        data_dir=str(tmp_path),
+        assistant_enabled=True,
+        assistant_api_key="sk-test",
+    )
+    db = CrmDatabase(tmp_path / "crm.db")
+    with db.tx() as tx:
+        tx.execute(
+            "INSERT INTO crm_users(id, telegram_id, role, email, active, created_at) "
+            "VALUES (10, 1001, 'commercial', 'com1@kaisen.la', 1, ?)",
+            (fake_now.isoformat(),),
+        )
+
+    # Creamos un mock de memoria que lanza fallo de disco en get_or_create_session y record_turn
+    mock_mem = AsyncMock(spec=AssistantMemory)
+    mock_mem.get_or_create_session.side_effect = OSError("Disk I/O failure")
+    mock_mem.record_turn.side_effect = OSError("Disk full")
+
+    mock_llm = AsyncMock()
+    mock_llm.complete.return_value = LlmResult(
+        text="Respuesta válida a pesar del fallo en disco.",
+        input_tokens=40,
+        output_tokens=20,
+    )
+
+    bot = CrmBot(db, FakeTelegram(), lambda: fake_now, kick=lambda: None)
+    ctx = AssistantContext(
+        settings=settings,
+        db=db,
+        client=mock_llm,
+        budget=AssistantBudget(settings),
+        clock=lambda: fake_now,
+        memory=mock_mem,
+    )
+    cmd = handle(ctx, bot)
+    u = User(
+        id=10,
+        telegram_id=1001,
+        role="commercial",
+        email="com1@kaisen.la",
+        active=1,
+        created_at=fake_now.isoformat(),
+        deactivated_at=None,
+    )
+
+    with db.tx() as tx:
+        reply = cmd(tx, u, "/asistente pregunta ¿hola?", fake_now)
+    assert len(reply) == 1
+    assert "Consultando" in reply[0].text
+
+    # El trabajo en diferido NO debe fallar ni convertir la respuesta en error genérico
+    deferred_results = _run_deferred(bot)
+    assert len(deferred_results) >= 1
+    assert "Respuesta válida a pesar del fallo en disco." in deferred_results[0].text
+
+
+def test_assistant_handles_user_role_change_gracefully(tmp_path: Path, fake_now: datetime) -> None:
+    settings = make_settings(
+        data_dir=str(tmp_path),
+        assistant_enabled=True,
+        assistant_api_key="sk-test",
+    )
+    db = CrmDatabase(tmp_path / "crm.db")
+    with db.tx() as tx:
+        tx.execute(
+            "INSERT INTO crm_users(id, telegram_id, role, email, active, created_at) "
+            "VALUES (10, 1001, 'commercial', 'com1@kaisen.la', 1, ?)",
+            (fake_now.isoformat(),),
+        )
+
+    mem_file = tmp_path / "assistant_memory.db"
+    mem = AssistantMemory(mem_file)
+
+    # Sesión creada inicialmente con rol 'commercial'
+    mem.get_or_create_session(
+        session_id="crm:user:10:pregunta",
+        user_id=10,
+        role="commercial",
+        system_prompt=SYSTEM_PROMPTS["pregunta"],
+        model=settings.openai_model,
+    )
+
+    mock_llm = AsyncMock()
+    mock_llm.complete.return_value = LlmResult(
+        text="Respuesta para usuario promovido.",
+        input_tokens=40,
+        output_tokens=20,
+    )
+
+    bot = CrmBot(db, FakeTelegram(), lambda: fake_now, kick=lambda: None)
+    ctx = AssistantContext(
+        settings=settings,
+        db=db,
+        client=mock_llm,
+        budget=AssistantBudget(settings),
+        clock=lambda: fake_now,
+        memory=mem,
+    )
+    cmd = handle(ctx, bot)
+
+    # Ahora el usuario 10 tiene rol 'cto' (promoción de rol)
+    u_promoted = User(
+        id=10,
+        telegram_id=1001,
+        role="cto",
+        email="com1@kaisen.la",
+        active=1,
+        created_at=fake_now.isoformat(),
+        deactivated_at=None,
+    )
+
+    with db.tx() as tx:
+        cmd(tx, u_promoted, "/asistente pregunta ¿reporte?", fake_now)
+
+    deferred_results = _run_deferred(bot)
+    assert len(deferred_results) >= 1
+    assert "Respuesta para usuario promovido." in deferred_results[0].text
+
+    # El rol en la sesión fue actualizado y el historial preservado
+    session = mem.get_or_create_session(
+        session_id="crm:user:10:pregunta",
+        user_id=10,
+        role="cto",
+        system_prompt=SYSTEM_PROMPTS["pregunta"],
+        model=settings.openai_model,
+    )
+    assert session.role == "cto"
+    mem.close()
+

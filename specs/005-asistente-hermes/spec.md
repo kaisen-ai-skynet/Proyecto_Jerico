@@ -115,12 +115,15 @@ Un único directorio `schemas/` (Pydantic + JSON Schema generado) con `Lead`, `C
 2. **Proveedor de voz:** pendiente de §7; ningún pago hasta su OK.
 3. **PostgreSQL ya (A1) o seguir en SQLite hasta la migración D1:** propuesta, empezar con PostgreSQL en desarrollo para no repetir la migración.
 4. **Prioridad entre A3 (webs/apps) y A5 (interfaz):** propuesta, A5 antes si se suman más comerciales; A3 antes si el interés es producir webs.
+5. **Plazo de retención y derechos ARCO para `assistant_memory.db` [REQUIERE ABOGADO]:**
+   - *Propuesta preliminar:* Purgar turnos detallados de conversación (`messages`) tras **30 días** de inactividad de la sesión, reteniendo únicamente resúmenes de compactación anonimizados (`session_summaries`) hasta **90 días** para coherencia operativa del comercial.
+   - *Límites legales (Ley 1581 de 2012):* `assistant_memory.db` almacena prompts seudonimizados y respuestas locales. Aunque no contiene nombres en claro (por `Redactor`), requiere definición formal por parte del abogado sobre el plazo máximo antes de integrarse al sweep de supresión/retención/exportación de F2.
 
 ## 6. Riesgos
 
 - Alcance «hace todo»: se controla con fases y criterios de salida medibles.
 - Costo de tokens: tope por usuario ya existe; se extiende por fase.
-- Datos de clientes en memoria del asistente (Ley 1581): memoria mínima, sin copiar documentos; retención definida en la spec de F2.
+- Datos de clientes en memoria del asistente (Ley 1581): memoria mínima, sin copiar documentos; retención en `assistant_memory.db` pendiente de confirmación formal [REQUIERE ABOGADO].
 - Voz: rige la Ley 2300 de 2023 para contactos comerciales (según el plan maestro); su alcance exacto sobre llamadas automatizadas lo confirma el abogado (sin verificar por mí).
 - Superposición con la spec de F2 (CRM) y con F3 (Jev en el núcleo): se coordina por el plan maestro.
 
