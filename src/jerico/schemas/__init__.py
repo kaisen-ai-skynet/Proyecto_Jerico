@@ -1,8 +1,9 @@
 """Esquemas compartidos entre F2 (CRM), F4 (asistente) y F6 (precios): Plan Maestro §4.
 
 Un único contrato Pydantic/JSON Schema para `Lead`, `Cotizacion` y `PaqueteContrato`. Los importes
-son enteros en la unidad menor de la moneda; el total lo calcula el código y **nunca** un modelo
-de lenguaje (los precios finales salen de la herramienta determinista de F6)."""
+son enteros en unidades completas de la moneda (pesos para COP, sin decimales); el total lo
+calcula el código y **nunca** un modelo de lenguaje (los precios finales salen de la herramienta
+determinista de F6)."""
 
 import json
 import re

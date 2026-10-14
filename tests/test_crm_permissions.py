@@ -80,6 +80,11 @@ EXPECTED: dict[Action, tuple[Scope, Scope, Scope]] = {
         Scope.ALL,
         Scope.NONE,
     ),  # F2: pausar, reanudar, frecuencia, reactivar
+    A.PACKAGE_MANAGE: (Scope.OWN, Scope.ALL, Scope.NONE),
+    A.PACKAGE_VIEW: (Scope.OWN, Scope.ALL, Scope.VISIBLE),
+    A.CONTRACT_UPLOAD: (Scope.NONE, Scope.NONE, Scope.VISIBLE),
+    A.CONTRACT_APPROVE: (Scope.OWN, Scope.ALL, Scope.NONE),
+    A.MAILBOX_VIEW: (Scope.OWN, Scope.ALL, Scope.NONE),
 }
 ROLES = (Role.COMMERCIAL, Role.CTO, Role.LAWYER)
 
@@ -210,3 +215,35 @@ def test_vcrm085_recipients_assignee_missing_or_not_commercial_goes_to_cto() -> 
 def test_vcrm085_recipients_without_active_cto_is_empty() -> None:
     inactive_cto = replace(CTO, active=0)
     assert commercial_recipients(replace(LEAD, assigned_user_id=None), [inactive_cto, COM]) == []
+
+
+def test_vcrm_r04_spec004_matrix_rows() -> None:
+    from crm_support import make_lead
+    from jerico.crm.model import Role
+    from jerico.crm.permissions import Action, authorize
+
+    def user(role: Role, uid: int) -> object:
+        from jerico.crm.model import User
+
+        return User(uid, 1000 + uid, role.value, "u@k.co", 1, "2026-01-01T00:00:00Z", None)
+
+    own = make_lead(assigned_user_id=1, ever_accepted=1)
+    other = make_lead(assigned_user_id=9, ever_accepted=1)
+    never = make_lead(assigned_user_id=9, ever_accepted=0)
+    com, cto, law = user(Role.COMMERCIAL, 1), user(Role.CTO, 2), user(Role.LAWYER, 3)
+    allowed = lambda u, a, lead: authorize(u, a, lead).allowed  # type: ignore[arg-type]  # noqa: E731
+    assert allowed(com, Action.PACKAGE_MANAGE, own) and not allowed(
+        com, Action.PACKAGE_MANAGE, other
+    )
+    assert allowed(cto, Action.PACKAGE_MANAGE, other)
+    assert not allowed(law, Action.PACKAGE_MANAGE, own)
+    assert allowed(law, Action.PACKAGE_VIEW, other) and not allowed(law, Action.PACKAGE_VIEW, never)
+    assert allowed(law, Action.CONTRACT_UPLOAD, other)
+    assert not allowed(com, Action.CONTRACT_UPLOAD, own) and not allowed(
+        cto, Action.CONTRACT_UPLOAD, own
+    )
+    assert not allowed(law, Action.CONTRACT_APPROVE, other)
+    assert allowed(com, Action.CONTRACT_APPROVE, own) and allowed(
+        cto, Action.CONTRACT_APPROVE, other
+    )
+    assert not allowed(law, Action.MAILBOX_VIEW, None) and allowed(com, Action.MAILBOX_VIEW, None)
