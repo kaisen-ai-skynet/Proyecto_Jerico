@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# Lint reproducible de scripts/oci/*.sh: `bash -n` + ShellCheck (todas las
+# Lint reproducible de scripts/oci/*.sh y scripts/servidor/*.sh: `bash -n` + ShellCheck (todas las
 # severidades). Instala shellcheck-py en un venv TEMPORAL fuera del proyecto
 # (no toca .venv) y lo reutiliza en ejecuciones siguientes. No necesita sudo.
 # Uso: scripts/oci/lint.sh        (sale con código != 0 si hay hallazgos)
@@ -28,7 +28,7 @@ fi
 
 cd "$REPO_ROOT"
 "$SC" --version | sed -n 2p
-for f in scripts/oci/*.sh; do bash -n "$f"; done
+for f in scripts/oci/*.sh scripts/servidor/*.sh; do bash -n "$f"; done
 echo "[OK] bash -n sin errores de sintaxis."
-"$SC" scripts/oci/*.sh
-echo "[OK] ShellCheck sin hallazgos en $(find scripts/oci -name '*.sh' | wc -l) scripts."
+"$SC" -x -P scripts/servidor scripts/oci/*.sh scripts/servidor/*.sh
+echo "[OK] ShellCheck sin hallazgos en $(find scripts/oci scripts/servidor -name '*.sh' | wc -l) scripts."
