@@ -64,10 +64,10 @@ Jev no se limita al CRM: es la capa de decisión de todo Jericó. Regla de dise�
 | Elegir modelo por tarea (A1/A6) | `modelo` | tipo de tarea, longitud estimada, si toca datos de clientes |
 | Habilidad a activar (A2) | `habilidad` | intención clasificada, rol |
 | Pedir aprobación o no (A3) | `escalar_humano` | reversibilidad, efecto externo |
-| Voz: continuar o pasar a humano (A4) | `siguiente_paso` | etapa de la llamada, intentos |
+| Voz: continuar o pasar a humano (A4) | `siguiente_paso_voz` | etapa de la llamada, intentos |
 | Seguimiento de leads | lo define la spec 007 (`jer-jev`) | vector de VJC-012 |
 
-Reglas: sin texto libre, nombres, teléfonos ni correos hacia Jev; `jev-latest` con el `model` devuelto guardado en cada decisión; registro de costo y tokens. Las decisiones de **desarrollo** (numeración, modelos) se consultan con `Flota_Jev/scripts/jev_decidir.py`; las de **producto** pasan por esta capa con su propio esquema. Coordinación: el consejero de seguimiento es de la spec 007 (`jer-jev`), que aquí se consume, no se repite.
+Reglas: sin texto libre, nombres, teléfonos ni correos hacia Jev; `jev-latest` con el `model` devuelto guardado en cada decisión; registro de costo y tokens. Las decisiones de **desarrollo** (numeración, modelos) se consultan con `Flota_Jev/scripts/jev_decidir.py`; las de **producto** pasan por esta capa con su propio esquema. **El contrato común de `decidir` es la spec 007 (`jer-jev`)**: clases de riesgo (A nunca consulta a Jev; B solo puede subir la exigencia respecto a la base; C puede bajar solo en modo enrutado y con datos sin PII o seudonimizados verificados), política base versionada, conjunto permitido calculado por código y sin consulta cuando hay una sola opción (VJT-008). Esta spec solo declara los tipos del asistente (`modelo`, `habilidad`, `escalar_humano`, `siguiente_paso_voz`); si la 007 y esta divergen, manda la 007. Un único registro de decisiones (VJT-040) alimenta los informes de `Flota_Jev`. Cada repo conserva su cliente de Jev (el de la flota añade consenso y bitácora); comparten una prueba de contrato con una respuesta real anonimizada (decidido con Jev el 13/10/2026).
 
 ## 3.2 Enrutamiento de modelos (plan maestro §4, decidido con Jev el 13/10/2026)
 
