@@ -30,6 +30,7 @@ from jerico.crm.inbox import build_inbox
 from jerico.crm.jobs import register_jobs
 from jerico.crm.llm import LlmPort, OpenAIResponsesClient
 from jerico.crm.mail import build_email_sender
+from jerico.crm.mailboxes import MailContext, poll_mailboxes, register_mailboxes
 from jerico.crm.migrate import MigrationError, migrate_if_needed
 from jerico.crm.model import Role
 from jerico.crm.outbox import OutboxWorker, escalate
@@ -183,6 +184,8 @@ class CrmApp:
         )
         register_closing(self.bot, self.closing_ctx)
         register_contract(self.bot, self.db, self.closing_ctx)
+        self.mail_ctx = MailContext(settings=settings, keys=self.keys, clock=clock)
+        register_mailboxes(self.bot, self.mail_ctx)
         register_f2(
             self.bot,
             F2Context(
@@ -261,6 +264,7 @@ class CrmApp:
         """Barrido único de F2 (cada minuto): buzón, expiración, generación y entrega."""
         await followup_sweep(self._sweep_context(), self.clock())
         await contract_sweep(self.db, self.closing_ctx, self.clock())  # spec 004 §5
+        await poll_mailboxes(self.db, self.mail_ctx, self.clock())  # spec 004 §7
 
     def _kick_delivery(self) -> None:
         """Primer intento de envío en línea tras un ✅ dentro de franja y cupo (D-3)."""

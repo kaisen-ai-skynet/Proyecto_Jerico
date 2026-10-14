@@ -511,3 +511,19 @@ def signature_for_contract(conn: sqlite3.Connection, contract_id: int) -> Signat
         (contract_id,),
     ).fetchone()
     return None if row is None else Signature(**dict(row))
+
+
+def set_mailbox_active(conn: sqlite3.Connection, mailbox_id: int, active: bool) -> None:
+    conn.execute(
+        "UPDATE crm_mailboxes SET active = ? WHERE id = ?", (1 if active else 0, mailbox_id)
+    )
+
+
+def get_mailbox(conn: sqlite3.Connection, mailbox_id: int) -> Mailbox | None:
+    row = conn.execute("SELECT * FROM crm_mailboxes WHERE id = ?", (mailbox_id,)).fetchone()
+    return None if row is None else Mailbox(**dict(row))
+
+
+def all_mailboxes(conn: sqlite3.Connection) -> list[Mailbox]:
+    rows = conn.execute("SELECT * FROM crm_mailboxes ORDER BY id").fetchall()
+    return [Mailbox(**dict(r)) for r in rows]
