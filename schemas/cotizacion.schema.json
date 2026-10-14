@@ -1,0 +1,86 @@
+{
+  "$defs": {
+    "CotizacionLinea": {
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "maxLength": 300,
+          "minLength": 1,
+          "title": "Description",
+          "type": "string"
+        },
+        "quantity": {
+          "exclusiveMinimum": 0,
+          "title": "Quantity",
+          "type": "integer"
+        },
+        "unit_price": {
+          "minimum": 0,
+          "title": "Unit Price",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "description",
+        "quantity",
+        "unit_price"
+      ],
+      "title": "CotizacionLinea",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "currency": {
+      "title": "Currency",
+      "type": "string"
+    },
+    "lines": {
+      "items": {
+        "$ref": "#/$defs/CotizacionLinea"
+      },
+      "minItems": 1,
+      "title": "Lines",
+      "type": "array"
+    },
+    "payment_terms": {
+      "maxLength": 300,
+      "minLength": 1,
+      "title": "Payment Terms",
+      "type": "string"
+    },
+    "special_conditions": {
+      "anyOf": [
+        {
+          "maxLength": 1000,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Special Conditions"
+    },
+    "valid_until": {
+      "anyOf": [
+        {
+          "format": "date",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Valid Until"
+    }
+  },
+  "required": [
+    "currency",
+    "lines",
+    "payment_terms"
+  ],
+  "title": "Cotizacion",
+  "type": "object"
+}

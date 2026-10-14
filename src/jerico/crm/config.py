@@ -14,7 +14,11 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class CrmSettings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_prefix="JERICO_CRM_", env_file=".env", extra="ignore", env_ignore_empty=True
+        env_prefix="JERICO_CRM_",
+        env_file=".env",
+        extra="ignore",
+        env_ignore_empty=True,
+        populate_by_name=True,
     )
 
     # Secretos: sin valor por defecto; `app.py` exige token y clave al arrancar.
@@ -47,6 +51,12 @@ class CrmSettings(BaseSettings):
     backup_retention_days: int = 30
     outbox_interval_s: float = 5.0
     poll_timeout_s: int = 25
+
+    # --- Spec 004: comunicaciones externas (Plan Maestro §4) ---
+    # Encendido por defecto: lo externo se redirige al CTO hasta que él lo apague.
+    external_comms_dry_run: bool = Field(
+        default=True, validation_alias="JERICO_EXTERNAL_COMMS_DRY_RUN"
+    )
 
     # --- Asistente comercial con LLM (spec-asistente.md) ---
     # Apagado por defecto. Las variables OPENAI_* no llevan el prefijo del CRM (VCRM-A35).

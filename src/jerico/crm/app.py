@@ -21,6 +21,7 @@ from jerico.crm.config import (
     parse_extra_holidays,
 )
 from jerico.crm.db import CrmDatabase
+from jerico.crm.dryrun import DryRunEmailSender, dry_run_active
 from jerico.crm.f2_bot import F2Context, register_f2
 from jerico.crm.files import LocalFileStore
 from jerico.crm.inbox import build_inbox
@@ -54,6 +55,14 @@ def utcnow() -> datetime:
 def _secret(value: object) -> str:
     getter = getattr(value, "get_secret_value", None)
     return (getter() if getter else str(value or "")).strip()
+
+
+def outbound_email(settings: CrmSettings) -> EmailSender:
+    """Correo real; con DRY_RUN activo (por defecto) todo se redirige al correo del CTO."""
+    sender = build_email_sender(settings)
+    if dry_run_active(settings):
+        return DryRunEmailSender(sender, settings.seed_cto_email)
+    return sender
 
 
 def build_assistant_llm(settings: CrmSettings) -> LlmPort | None:
@@ -289,7 +298,7 @@ async def run_service(
     app = CrmApp(
         settings,
         telegram=telegram,
-        email=email or build_email_sender(settings),
+        email=email or outbound_email(settings),
         runner=runner or SubprocessRunner(),
         clock=clock,
         inbox=inbox,
@@ -331,6 +340,7 @@ __all__ = [
     "EXIT_MIGRATION",
     "STARTUP_NOTICE_KIND",
     "build_assistant_llm",
+    "outbound_email",
     "CrmApp",
     "fingerprint_keys",
     "main",

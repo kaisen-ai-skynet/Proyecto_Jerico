@@ -604,3 +604,13 @@ def test_vcrma34_enabled_with_key_builds_the_real_client_without_leaking_it(env:
     assert "sk-live-secreto" not in repr(app.assistant_llm)
     asyncio.run(app.startup())
     assert all("sk-live-secreto" not in s.text for s in env.tg.sent)
+
+
+def test_outbound_email_wraps_in_dry_run_by_default_and_not_when_disabled(tmp_path: Path) -> None:
+    from jerico.crm.app import outbound_email
+    from jerico.crm.dryrun import DryRunEmailSender
+    from jerico.crm.mail import UnconfiguredEmailSender
+
+    assert isinstance(outbound_email(_settings(tmp_path)), DryRunEmailSender)
+    off = _settings(tmp_path, external_comms_dry_run=False)
+    assert isinstance(outbound_email(off), UnconfiguredEmailSender)
