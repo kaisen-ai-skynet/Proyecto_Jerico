@@ -115,6 +115,9 @@ class OrquestadorMarketing:
             f"🔴 Responder: /rechazar {campana.id} <motivo>"
         )
 
+    # Alias compatible para bots y herramientas
+    formatear_vista_previa_telegram = generar_preview_telegram
+
     def aprobar_campana(
         self,
         campana_id: str,

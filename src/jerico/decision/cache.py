@@ -67,6 +67,11 @@ class DecisionCache:
         with self._lock:
             self._entries[key] = (option, now + self.ttl)
 
+    def clear(self) -> None:
+        """Limpia todas las entradas de la caché."""
+        with self._lock:
+            self._entries.clear()
+
 
 class SingleFlight:
     """Garantiza una sola ejecución para peticiones concurrentes con la misma clave (VJT-036)."""
