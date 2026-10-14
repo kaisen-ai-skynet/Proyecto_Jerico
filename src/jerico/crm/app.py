@@ -170,7 +170,11 @@ class CrmApp:
             files=self.files,
             params=self.params,
         )
-        self.assistant_memory = AssistantMemory(self.data_dir / "assistant_memory.db")
+        self.assistant_memory: AssistantMemory | None = (
+            AssistantMemory(self.data_dir / "assistant_memory.db")
+            if settings.assistant_enabled
+            else None
+        )
         register_assistant(
             self.bot,
             AssistantContext(
@@ -339,7 +343,8 @@ class CrmApp:
             await self.scheduler.stop()
 
     def close(self) -> None:
-        self.assistant_memory.close()
+        if self.assistant_memory is not None:
+            self.assistant_memory.close()
         self.db.close()
 
 
