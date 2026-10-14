@@ -21,6 +21,10 @@ from jerico.catalogo.repositorio import (
     RepositorioCatalogo,
     VersionCatalogoNoEncontradaError,
 )
+from jerico.catalogo.verificador import (
+    ResultadoVerificacion,
+    verificar_catalogo,
+)
 from jerico.catalogo.vista import (
     PlanComercial,
     PlanCTO,
@@ -43,6 +47,7 @@ __all__ = [
     "PlanPrecio",
     "ReglaMensualidad",
     "RepositorioCatalogo",
+    "ResultadoVerificacion",
     "VersionCatalogoNoEncontradaError",
     "VistaComercial",
     "VistaCTO",
@@ -50,4 +55,5 @@ __all__ = [
     "calcular_total_anual",
     "cotizar_plan",
     "obtener_vista",
+    "verificar_catalogo",
 ]
