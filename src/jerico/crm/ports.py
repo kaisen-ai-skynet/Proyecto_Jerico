@@ -33,6 +33,8 @@ class Update:
     file: FileRef | None = None
     callback_id: str | None = None
     callback_data: str | None = None
+    user_name: str | None = None
+    username: str | None = None
 
 
 @dataclass(frozen=True)

@@ -52,24 +52,36 @@ def normalize_update(raw: dict[str, Any]) -> Update:
     if "callback_query" in raw:
         cb = raw["callback_query"]
         chat = (cb.get("message") or {}).get("chat") or {}
+        from_user = cb.get("from") or {}
+        first = from_user.get("first_name") or ""
+        last = from_user.get("last_name") or ""
+        user_name = f"{first} {last}".strip() or None
         return Update(
             update_id=update_id,
-            user_id=(cb.get("from") or {}).get("id"),
+            user_id=from_user.get("id"),
             chat_id=chat.get("id"),
             chat_type=chat.get("type"),
             callback_id=cb.get("id"),
             callback_data=cb.get("data"),
+            user_name=user_name,
+            username=from_user.get("username"),
         )
     message = raw.get("message") or {}
     chat = message.get("chat") or {}
+    from_user = message.get("from") or {}
+    first = from_user.get("first_name") or ""
+    last = from_user.get("last_name") or ""
+    user_name = f"{first} {last}".strip() or None
     return Update(
         update_id=update_id,
-        user_id=(message.get("from") or {}).get("id"),
+        user_id=from_user.get("id"),
         chat_id=chat.get("id"),
         chat_type=chat.get("type"),
         text=message.get("text"),
         caption=message.get("caption"),
         file=_file_ref(message),
+        user_name=user_name,
+        username=from_user.get("username"),
     )
 
 

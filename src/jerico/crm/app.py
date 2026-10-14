@@ -177,16 +177,17 @@ class CrmApp:
             if settings.assistant_enabled
             else None
         )
+        self.assistant_ctx = AssistantContext(
+            settings=settings,
+            db=self.db,
+            client=self.assistant_llm,
+            budget=AssistantBudget(settings),
+            clock=clock,
+            memory=self.assistant_memory,
+        )
         register_assistant(
             self.bot,
-            AssistantContext(
-                settings=settings,
-                db=self.db,
-                client=self.assistant_llm,
-                budget=AssistantBudget(settings),
-                clock=clock,
-                memory=self.assistant_memory,
-            ),
+            self.assistant_ctx,
         )
         self.closing_ctx = ClosingContext(
             dry_run=dry_run_active(settings),
@@ -202,8 +203,15 @@ class CrmApp:
         self.legal_bot: CrmBot | None = None
         if legal_telegram is not None:  # sin IDs permitidos solo responde /start (modo registro)
             self.legal_bot = build_legal_bot(
-                self.db, legal_telegram, clock, settings, self.closing_ctx, self.files
+                self.db,
+                legal_telegram,
+                clock,
+                settings,
+                self.closing_ctx,
+                self.files,
+                assistant_ctx=self.assistant_ctx,
             )
+            self.legal_bot.on_user_menu_sync = self.sync_user_menu
         self.mail_ctx = MailContext(settings=settings, keys=self.keys, clock=clock)
         register_mailboxes(self.bot, self.mail_ctx)
         register_f2(

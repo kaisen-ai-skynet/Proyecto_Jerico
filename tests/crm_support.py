@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from jerico.crm.config import CrmSettings
+from jerico.crm.llm import LlmError, LlmResult
 from jerico.crm.model import Lead
 from jerico.crm.ports import (
     CommandResult,
@@ -23,6 +24,23 @@ from jerico.crm.ports import (
     Update,
 )
 from jerico.crm.telegram import TelegramApiError
+
+
+class FakeLlm:
+    def __init__(self, reply: str | None = None) -> None:
+        self.calls: list[dict[str, object]] = []
+        text = reply or "Hola [CLIENTE]: seguimos."
+        self.reply = LlmResult(text=text, input_tokens=100, output_tokens=40)
+        self.error: LlmError | None = None
+
+    async def complete(self, *, system: str, user: str, max_output_tokens: int) -> LlmResult:
+        self.calls.append({"system": system, "user": user, "max": max_output_tokens})
+        if self.error is not None:
+            raise self.error
+        return self.reply
+
+    def sent_text(self) -> str:
+        return " ".join(f"{c['system']} {c['user']}" for c in self.calls)
 
 
 def make_settings(**overrides: Any) -> CrmSettings:

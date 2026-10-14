@@ -244,3 +244,114 @@ async def test_httpx_telegram_client_menu_methods():
     assert await bad_client.set_my_commands([]) is False
     assert await bad_client.delete_my_commands() is False
     assert await bad_client.set_chat_menu_button() is False
+
+
+@pytest.mark.asyncio
+async def test_bot_start_and_ayuda_commands(tmp_path: Path):
+    app, tg, legal_tg = _build_app(tmp_path)
+    await app.startup()
+
+    # Dar de alta comercial y abogado
+    with app.db.tx() as tx:
+        repo.insert_user(
+            tx, telegram_id=COM_TG, role=Role.COMMERCIAL, email="com@kaisen.la", now=NOW
+        )
+        repo.insert_user(tx, telegram_id=LAW_TG, role=Role.LAWYER, email="law@kaisen.la", now=NOW)
+
+    tg.sent.clear()
+    legal_tg.sent.clear()
+
+    # 1. Comercial escribe /start al bot principal
+    u_start = Update(
+        update_id=101, chat_id=COM_TG, user_id=COM_TG, text="/start", chat_type="private"
+    )
+    await app.bot.process_update(u_start)
+    assert len(tg.sent) >= 1
+    assert "Bienvenido" in tg.sent[-1].text or "com@kaisen.la" in tg.sent[-1].text
+
+    # 2. Comercial escribe /ayuda al bot principal
+    u_help = Update(
+        update_id=102, chat_id=COM_TG, user_id=COM_TG, text="/ayuda", chat_type="private"
+    )
+    await app.bot.process_update(u_help)
+    reply_help = tg.sent[-1].text
+    assert "Comandos disponibles" in reply_help
+    assert "/nuevo" in reply_help
+    assert "/lista" in reply_help
+    assert "/alta" not in reply_help  # Alta es del CTO
+
+    # 3. Abogado escribe /ayuda al bot legal
+    assert app.legal_bot is not None
+    u_law_help = Update(
+        update_id=103, chat_id=LAW_TG, user_id=LAW_TG, text="/ayuda", chat_type="private"
+    )
+    await app.legal_bot.process_update(u_law_help)
+    law_reply = legal_tg.sent[-1].text
+    assert "Comandos disponibles" in law_reply
+    assert "/casos" in law_reply
+    assert "/asistente" in law_reply
+
+
+@pytest.mark.asyncio
+async def test_completeness_of_all_commands_and_menus(tmp_path: Path):
+    """Requisito 5: Todo comando registrado aparece en el menú del rol correspondiente,
+
+    y ningún comando del menú deja de estar registrado ni responde 'Orden no reconocida'.
+    """
+    app, tg, legal_tg = _build_app(tmp_path)
+    await app.startup()
+
+    with app.db.tx() as tx:
+        repo.insert_user(
+            tx, telegram_id=COM_TG, role=Role.COMMERCIAL, email="com@kaisen.la", now=NOW
+        )
+        repo.insert_user(tx, telegram_id=LAW_TG, role=Role.LAWYER, email="law@kaisen.la", now=NOW)
+
+    from jerico.crm.bot import UNKNOWN_COMMAND
+    from jerico.crm.team import DENIED
+
+    # Verificar para cada bot y rol
+    bots_and_users = [
+        (app.bot, COM_TG, Role.COMMERCIAL, tg),
+        (app.bot, CTO_TG, Role.CTO, tg),
+        (app.legal_bot, LAW_TG, Role.LAWYER, legal_tg),
+        (app.legal_bot, CTO_TG, Role.CTO, legal_tg),
+    ]
+
+    update_seq = 200
+    for bot, uid, role, fake_tg in bots_and_users:
+        assert bot is not None
+        menu_cmds = bot.commands_for_role(role)
+        menu_cmd_names = {c["command"] for c in menu_cmds}
+
+        # 1. Todo comando del bot que permite este rol DEBE estar en el menú
+        for cmd_entry in bot.commands.values():
+            if role in cmd_entry.roles or (role == Role.CTO and cmd_entry.roles):
+                assert cmd_entry.name in menu_cmd_names, (
+                    f"Comando {cmd_entry.name} permitido para {role} no aparece en el menú de {bot}"
+                )
+
+        # 2. Ningún comando del menú responde 'Orden no reconocida' o 'Permiso denegado'
+        for cmd_item in menu_cmds:
+            cmd_name = cmd_item["command"]
+            assert cmd_name in bot.commands, (
+                f"Comando {cmd_name} en menú pero no registrado en {bot}"
+            )
+            fake_tg.sent.clear()
+            update_seq += 1
+            u = Update(
+                update_id=update_seq,
+                chat_id=uid,
+                user_id=uid,
+                text=f"/{cmd_name}",
+                chat_type="private",
+            )
+            await bot.process_update(u)
+            assert len(fake_tg.sent) >= 1, f"Comando /{cmd_name} para {role} no generó respuesta"
+            last_text = fake_tg.sent[-1].text
+            assert UNKNOWN_COMMAND not in last_text, (
+                f"Comando /{cmd_name} para {role} respondió 'Orden no reconocida'"
+            )
+            assert DENIED not in last_text, (
+                f"Comando /{cmd_name} para {role} respondió 'No tiene permiso'"
+            )
