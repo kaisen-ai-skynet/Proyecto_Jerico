@@ -1,4 +1,4 @@
-# Tareas 004 — Asistente de Jericó (F4)
+# Tareas 005 — Asistente de Jericó (F4)
 
 Una spec hija por fase, cada una con su rama y TDD. Esta rama solo entrega la arquitectura.
 

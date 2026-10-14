@@ -1,8 +1,8 @@
-# Spec 004 — Arquitectura por fases del asistente de Jericó (nivel Hermes y superior) (F4)
+# Spec 005 — Arquitectura por fases del asistente de Jericó (nivel Hermes y superior) (F4)
 
 - **Estado:** BORRADOR para revisión del CTO (13/10/2026). Rama `asistente/f4-arquitectura-hermes`. Solo arquitectura y specs: sin código ni despliegue.
 - **Insumos:** `docs/architecture/hermes_master_architecture.md`; informe de mercado de `plan-gemini` (`docs/informes/mercado-asistentes-ia.md`, ver §7); código actual del repo (verificado: `src/jerico/agent/`, `memory.py`, `skills/{loader,validator,curator}.py`, `tools/registry.py`, `voice/{stt,tts}.py`, `crm/assistant.py`).
-- **Numeración:** 004 porque 003 se toma para `003-catalogo-precios` (F6). Reconfirmar con `git branch -a` antes de integrar.
+- **Numeración:** 005 porque 003 es `003-catalogo-precios` (F6) y 004 ya lo usa `004-crm-cierre-contrato-firma` (CRM). Reconfirmar con `git branch -a` antes de integrar.
 - **Reglas:** constitución de Jericó (Postgres en producción, sin alias `-latest`, humano en el bucle D5, subproceso aislado D3, sin `git push`), Ley 1581 y «gratis primero» (nada de pago sin OK del CTO).
 
 ## 1. Punto de partida (verificado)

@@ -1,4 +1,4 @@
-# Plan 004 — Asistente de Jericó por fases (F4)
+# Plan 005 — Asistente de Jericó por fases (F4)
 
 Las fases A1–A6 y sus criterios de salida están en `spec.md` §3; este plan fija el orden y las dependencias.
 
