@@ -1,5 +1,6 @@
 """Módulo de catálogo de precios de Jericó (Spec 006)."""
 
+from jerico.catalogo.bot import register_catalogo_commands
 from jerico.catalogo.cotizar import (
     PlanNoEncontradoError,
     calcular_mensualidad,
@@ -55,5 +56,6 @@ __all__ = [
     "calcular_total_anual",
     "cotizar_plan",
     "obtener_vista",
+    "register_catalogo_commands",
     "verificar_catalogo",
 ]
