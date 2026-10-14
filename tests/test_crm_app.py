@@ -614,3 +614,10 @@ def test_outbound_email_wraps_in_dry_run_by_default_and_not_when_disabled(tmp_pa
     assert isinstance(outbound_email(_settings(tmp_path)), DryRunEmailSender)
     off = _settings(tmp_path, external_comms_dry_run=False)
     assert isinstance(outbound_email(off), UnconfiguredEmailSender)
+
+
+def test_spec004_closing_commands_are_registered_in_the_real_app(env: Env) -> None:
+    app = env.build()
+    asyncio.run(app.startup())
+    _command(app, "/oferta")
+    assert "Ejemplo" in env.tg.sent[-1].text

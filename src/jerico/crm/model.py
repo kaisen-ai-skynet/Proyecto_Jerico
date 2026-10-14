@@ -70,6 +70,10 @@ class AuditAction(StrEnum):
     HANDLER_ERROR = "handler_error"  # plan §7, regla O1
     ATTACHMENT_EXPIRED = "attachment_expired"  # VCRM-145
     LLM_CALL = "llm_call"  # VCRM-A21: llamada al asistente, sin texto del prompt
+    PACKAGE_EVENT = "package_event"  # spec 004: creación, envío, edición y cancelación (C05)
+    CONTRACT_EVENT = "contract_event"  # spec 004: subida, devolución, aprobación, vencimiento
+    SIGNATURE_EVENT = "signature_event"  # spec 004: envío a firma y resultado
+    MAILBOX_EVENT = "mailbox_event"  # spec 004: consulta de buzón y candidatos
 
 
 class AuditOutcome(StrEnum):

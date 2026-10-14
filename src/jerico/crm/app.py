@@ -13,6 +13,7 @@ from jerico.crm.assistant import AssistantContext, register_assistant
 from jerico.crm.assistant_budget import AssistantBudget
 from jerico.crm.backup import SubprocessRunner, run_backup
 from jerico.crm.bot import CrmBot
+from jerico.crm.closing_flow import ClosingContext, register_closing
 from jerico.crm.config import (
     ConfigWarning,
     CrmSettings,
@@ -160,6 +161,7 @@ class CrmApp:
                 clock=clock,
             ),
         )
+        register_closing(self.bot, ClosingContext(dry_run=dry_run_active(settings)))
         register_f2(
             self.bot,
             F2Context(
