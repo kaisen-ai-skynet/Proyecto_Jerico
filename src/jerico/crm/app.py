@@ -139,6 +139,7 @@ class CrmApp:
     ) -> None:
         self.settings = settings
         self.telegram = telegram
+        self.legal_telegram: TelegramPort | None = legal_telegram
         self.email = email
         self.runner = runner
         self.clock = clock
@@ -170,21 +171,23 @@ class CrmApp:
             files=self.files,
             params=self.params,
         )
+        self.bot.on_user_menu_sync = self.sync_user_menu
         self.assistant_memory: AssistantMemory | None = (
             AssistantMemory(self.data_dir / "assistant_memory.db")
             if settings.assistant_enabled
             else None
         )
+        self.assistant_ctx = AssistantContext(
+            settings=settings,
+            db=self.db,
+            client=self.assistant_llm,
+            budget=AssistantBudget(settings),
+            clock=clock,
+            memory=self.assistant_memory,
+        )
         register_assistant(
             self.bot,
-            AssistantContext(
-                settings=settings,
-                db=self.db,
-                client=self.assistant_llm,
-                budget=AssistantBudget(settings),
-                clock=clock,
-                memory=self.assistant_memory,
-            ),
+            self.assistant_ctx,
         )
         self.closing_ctx = ClosingContext(
             dry_run=dry_run_active(settings),
@@ -200,8 +203,15 @@ class CrmApp:
         self.legal_bot: CrmBot | None = None
         if legal_telegram is not None:  # sin IDs permitidos solo responde /start (modo registro)
             self.legal_bot = build_legal_bot(
-                self.db, legal_telegram, clock, settings, self.closing_ctx, self.files
+                self.db,
+                legal_telegram,
+                clock,
+                settings,
+                self.closing_ctx,
+                self.files,
+                assistant_ctx=self.assistant_ctx,
             )
+            self.legal_bot.on_user_menu_sync = self.sync_user_menu
         self.mail_ctx = MailContext(settings=settings, keys=self.keys, clock=clock)
         register_mailboxes(self.bot, self.mail_ctx)
         register_f2(
@@ -239,6 +249,7 @@ class CrmApp:
             )
         notices += self._legal_bot_notices()
         await self._notify_cto(notices)
+        await self.sync_menus()
         await self.run_daily_job()
         await self.run_followup_job()  # activa F2 si procede y avisa si falta configuración
         self.heartbeat()
@@ -280,6 +291,56 @@ class CrmApp:
                         error=result.error,
                         now=now,
                     )
+
+    async def sync_menus(self) -> None:
+        """Sincroniza setMyCommands y setChatMenuButton en ambos bots."""
+        try:
+            await self.bot.set_my_commands_for_role(
+                Role.COMMERCIAL, scope={"type": "all_private_chats"}
+            )
+            await self.bot.set_chat_menu_button(menu_button={"type": "commands"})
+            if self.legal_bot is not None:
+                await self.legal_bot.set_my_commands_for_role(
+                    Role.LAWYER, scope={"type": "all_private_chats"}
+                )
+                await self.legal_bot.set_chat_menu_button(menu_button={"type": "commands"})
+
+            with self.db.read() as conn:
+                users = repo.active_users(conn)
+            for user in users:
+                await self.sync_user_menu(user.telegram_id, Role(user.role), active=True)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Fallo al sincronizar menús de comandos en arranque: %s", exc)
+
+    async def sync_user_menu(self, telegram_id: int, role: Role | str, active: bool) -> None:
+        """Actualiza o elimina el menú personalizado de un usuario según su rol y estado."""
+        role_enum = Role(role) if isinstance(role, str) else role
+        try:
+            if active:
+                if role_enum in (Role.COMMERCIAL, Role.CTO):
+                    await self.bot.set_my_commands_for_role(
+                        role_enum, scope={"type": "chat", "chat_id": telegram_id}
+                    )
+                    await self.bot.set_chat_menu_button(
+                        chat_id=telegram_id, menu_button={"type": "commands"}
+                    )
+                if self.legal_bot is not None and role_enum in (Role.LAWYER, Role.CTO):
+                    await self.legal_bot.set_my_commands_for_role(
+                        Role.LAWYER, scope={"type": "chat", "chat_id": telegram_id}
+                    )
+                    await self.legal_bot.set_chat_menu_button(
+                        chat_id=telegram_id, menu_button={"type": "commands"}
+                    )
+            else:
+                await self.bot.delete_my_commands(scope={"type": "chat", "chat_id": telegram_id})
+                if self.legal_bot is not None:
+                    await self.legal_bot.delete_my_commands(
+                        scope={"type": "chat", "chat_id": telegram_id}
+                    )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "Fallo al sincronizar menú de comandos para usuario %s: %s", telegram_id, exc
+            )
 
     async def run_daily_job(self) -> None:
         await daily_sweep(

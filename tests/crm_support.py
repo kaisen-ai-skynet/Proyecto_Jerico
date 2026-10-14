@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from jerico.crm.config import CrmSettings
+from jerico.crm.llm import LlmError, LlmResult
 from jerico.crm.model import Lead
 from jerico.crm.ports import (
     CommandResult,
@@ -22,6 +23,24 @@ from jerico.crm.ports import (
     SendResult,
     Update,
 )
+from jerico.crm.telegram import TelegramApiError
+
+
+class FakeLlm:
+    def __init__(self, reply: str | None = None) -> None:
+        self.calls: list[dict[str, object]] = []
+        text = reply or "Hola [CLIENTE]: seguimos."
+        self.reply = LlmResult(text=text, input_tokens=100, output_tokens=40)
+        self.error: LlmError | None = None
+
+    async def complete(self, *, system: str, user: str, max_output_tokens: int) -> LlmResult:
+        self.calls.append({"system": system, "user": user, "max": max_output_tokens})
+        if self.error is not None:
+            raise self.error
+        return self.reply
+
+    def sent_text(self) -> str:
+        return " ".join(f"{c['system']} {c['user']}" for c in self.calls)
 
 
 def make_settings(**overrides: Any) -> CrmSettings:
@@ -84,10 +103,17 @@ class FakeTelegram:
         self.updates: list[Update] = []
         self.answered: list[tuple[str, str | None]] = []
         self.files: dict[str, bytes] = {}
+        self.my_commands: list[tuple[list[dict[str, str]], dict[str, Any] | None]] = []
+        self.deleted_commands: list[dict[str, Any] | None] = []
+        self.menu_buttons: list[tuple[int | None, dict[str, Any] | None]] = []
         self._failures: defaultdict[int, int] = defaultdict(int)
         self._failed_documents: set[int] = set()
+        self._commands_failure = False
         self._document_attempts = 0
         self._next_id = 1
+
+    def fail_commands(self, fail: bool = True) -> None:
+        self._commands_failure = fail
 
     def fail_next(self, chat_id: int, times: int = 1) -> None:
         self._failures[chat_id] += times
@@ -136,6 +162,37 @@ class FakeTelegram:
             self.attempts.append(item)
             return SendResult(delivered=False, error="sendDocument: HTTP 502")
         return self._deliver(item)
+
+    async def set_my_commands(
+        self,
+        commands: Any,
+        scope: Any = None,
+    ) -> bool:
+        if self._commands_failure:
+            raise TelegramApiError("setMyCommands: HTTP 502")
+        self.my_commands.append(([dict(c) for c in commands], dict(scope) if scope else None))
+        return True
+
+    async def delete_my_commands(
+        self,
+        scope: Any = None,
+    ) -> bool:
+        if self._commands_failure:
+            raise TelegramApiError("deleteMyCommands: HTTP 502")
+        self.deleted_commands.append(dict(scope) if scope else None)
+        return True
+
+    async def set_chat_menu_button(
+        self,
+        chat_id: int | None = None,
+        menu_button: Any = None,
+    ) -> bool:
+        if self._commands_failure:
+            raise TelegramApiError("setChatMenuButton: HTTP 502")
+        self.menu_buttons.append(
+            (chat_id, dict(menu_button) if menu_button else {"type": "commands"})
+        )
+        return True
 
 
 @dataclass(frozen=True)

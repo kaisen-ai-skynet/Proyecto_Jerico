@@ -394,7 +394,12 @@ async def _run(
 
 
 def register_assistant(bot: CrmBot, ctx: AssistantContext) -> None:
-    bot.register_command(COMMAND, handle(ctx, bot))
+    bot.register_command(
+        COMMAND,
+        handle(ctx, bot),
+        description="Consultar al asistente comercial",
+        roles=(Role.COMMERCIAL, Role.CTO),
+    )
 
 
 __all__ = ["AssistantContext", "lead_context", "pipeline_context", "register_assistant"]

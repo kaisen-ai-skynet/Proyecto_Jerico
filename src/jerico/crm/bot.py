@@ -9,8 +9,10 @@ import asyncio
 import logging
 import re
 import sqlite3
-from collections.abc import Awaitable, Callable, Sequence
-from datetime import datetime
+from collections.abc import Awaitable, Callable, Mapping, Sequence
+from dataclasses import dataclass
+from datetime import datetime, timedelta
+from typing import Any
 
 from jerico.crm import compliance, leads, repo, team
 from jerico.crm.config import Params, default_params
@@ -27,10 +29,11 @@ from jerico.crm.model import (
     Role,
     User,
 )
-from jerico.crm.parsing import parse_callback
+from jerico.crm.parsing import build_callback, normalize_email, parse_callback
 from jerico.crm.permissions import Action, authorize
 from jerico.crm.ports import DownloadResult, FileStore, InlineButton, TelegramPort, Update
 from jerico.crm.telegram import TelegramApiError
+from jerico.crm.timeutil import from_iso, to_iso
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +68,62 @@ FilePendingHandler = Callable[
 ConfirmationHandler = Callable[
     [sqlite3.Connection, User, Confirmation, bool, datetime], list[Outgoing]
 ]
+UserMenuSync = Callable[[int, Role, bool], Awaitable[None]]
+
+
+DEFAULT_COMMAND_META: dict[str, tuple[str, tuple[Role, ...]]] = {
+    # Comandos comerciales (y CTO)
+    "nuevo": ("Registrar un nuevo lead", (Role.COMMERCIAL, Role.CTO)),
+    "lista": ("Listar leads", (Role.COMMERCIAL, Role.CTO)),
+    "ver": ("Ver ficha de un lead", (Role.COMMERCIAL, Role.CTO)),
+    "nota": ("Añadir nota a un lead", (Role.COMMERCIAL, Role.CTO)),
+    "editar": ("Editar datos de un lead", (Role.COMMERCIAL, Role.CTO)),
+    "seguimiento": ("Ver estado de seguimiento", (Role.COMMERCIAL, Role.CTO)),
+    "pedirautorizacion": ("Solicitar autorización a un lead", (Role.COMMERCIAL, Role.CTO)),
+    "solicitar_autorizacion": ("Solicitar autorización a un lead", (Role.COMMERCIAL, Role.CTO)),
+    "autorizacion": ("Registrar consentimiento de un lead", (Role.COMMERCIAL, Role.CTO)),
+    "oferta": ("Crear o consultar oferta para un lead", (Role.COMMERCIAL, Role.CTO)),
+    "firma": ("Enviar contrato a firma electrónica", (Role.COMMERCIAL, Role.CTO)),
+    "retractar": ("Retractar un lead", (Role.COMMERCIAL, Role.CTO)),
+    "baja": ("Registrar baja voluntaria de un lead", (Role.COMMERCIAL, Role.CTO)),
+    "buzon": ("Consultar estado de tu buzón de correo", (Role.COMMERCIAL, Role.CTO)),
+    "candidatos": ("Listar correos candidatos a lead", (Role.COMMERCIAL, Role.CTO)),
+    "asistente": ("Consultar al asistente comercial", (Role.COMMERCIAL, Role.CTO)),
+    # Comandos exclusivos de CTO
+    "alta": ("Dar de alta a un usuario", (Role.CTO,)),
+    "baja_usuario": ("Dar de baja a un usuario", (Role.CTO,)),
+    "reasignar": ("Reasignar leads de un comercial", (Role.CTO,)),
+    "suprimir": ("Suprimir datos de un lead", (Role.CTO,)),
+    "exportar": ("Exportar datos de un lead", (Role.CTO,)),
+    "solicitud": ("Registrar solicitud de titular", (Role.CTO,)),
+    "solicitudes": ("Listar solicitudes de titulares", (Role.CTO,)),
+    "atendida": ("Marcar alerta como atendida", (Role.CTO,)),
+    "buzones": ("Listar todos los buzones configurados", (Role.CTO,)),
+    "casos": ("Listar casos para contrato", (Role.CTO,)),
+    "paquete": ("Consultar paquete de contrato", (Role.COMMERCIAL, Role.CTO)),
+    "basejuridica": ("Confirmar base legal de un contrato", (Role.CTO,)),
+    "subircontrato": ("Subir contrato en PDF o DOCX", (Role.CTO,)),
+    "devolver": ("Devolver paquete con observaciones", (Role.CTO,)),
+    "formaespecial": ("Marcar contrato con forma especial", (Role.CTO,)),
+    "firmaprueba": ("Simular firma en modo prueba", (Role.CTO,)),
+    # Comandos generales
+    "start": ("Iniciar y ver bienvenida", (Role.COMMERCIAL, Role.LAWYER, Role.CTO)),
+    "ayuda": ("Ver comandos disponibles", (Role.COMMERCIAL, Role.LAWYER, Role.CTO)),
+    "descargar": ("Descargar paquete como archivo", (Role.LAWYER, Role.CTO)),
+}
+
+
+@dataclass(frozen=True)
+class CommandEntry:
+    name: str
+    handler: CommandHandler
+    description: str = ""
+    roles: tuple[Role, ...] = ()
+
+    def __call__(
+        self, conn: sqlite3.Connection, actor: User, text: str, now: datetime
+    ) -> list[Outgoing]:
+        return self.handler(conn, actor, text, now)
 
 
 def deny(conn: sqlite3.Connection, actor: User, now: datetime) -> list[Outgoing]:
@@ -229,28 +288,10 @@ class CrmBot:
         self._export_jobs: list[compliance.ExportJob] = []  # se envían tras el *commit*
         self._file_pending: dict[str, FilePendingHandler] = {}
         self._deferred: list[DeferredJob] = []  # trabajos de red tras el *commit* (asistente)
-        self._commands: dict[str, CommandHandler] = (
-            {}
-            if minimal
-            else {
-                "alta": team.add_user,
-                "baja_usuario": team.deactivate_user,
-                "reasignar": team.reassign_command,
-                "nuevo": self._register,
-                "nota": leads.add_note,
-                "editar": self._edit,
-                "lista": leads.list_command,
-                "ver": leads.view_lead,
-                "retractar": leads.retract_command,
-                "autorizacion": compliance.authorization_command,
-                "baja": self._opt_out,
-                "suprimir": self._suppress,
-                "exportar": self._export,
-                "solicitud": self._request,
-                "solicitudes": compliance.requests_command,
-                "atendida": compliance.attended_command,
-            }
-        )
+        self._on_user_menu_sync: UserMenuSync | None = None
+        self._commands: dict[str, CommandEntry] = {}
+        if not minimal:
+            self._register_default_commands()
         self._callbacks: dict[str, CallbackHandler] = (
             {}
             if minimal
@@ -266,6 +307,7 @@ class CrmBot:
                 "rmotivo": _retract_reason_cb,
                 "retractar": _retract_cb,
                 "atendida": _attended_cb,
+                "altareq": self._handle_alta_req_cb,
             }
         )
         self._pending: dict[str, PendingHandler] = (
@@ -274,6 +316,7 @@ class CrmBot:
             else {
                 leads.REJECT_TEXT_KIND: leads.answer_reject_text,
                 leads.RETRACT_TEXT_KIND: leads.answer_retract_text,
+                "alta_guiada": self._handle_alta_guiada_pending,
             }
         )
         self._confirmations: dict[str, ConfirmationHandler] = (
@@ -296,8 +339,227 @@ class CrmBot:
         """Entrada pendiente que espera un archivo (el contrato del abogado, spec 004)."""
         self._file_pending[kind] = handler
 
-    def register_command(self, name: str, handler: CommandHandler) -> None:
-        self._commands[name] = handler
+    def _register_default_commands(self) -> None:
+        self.register_command("start", self._start_cmd)
+        self.register_command("ayuda", self._help_cmd)
+        self.register_command("alta", self._add_user_cmd)
+        self.register_command("baja_usuario", self._deactivate_user_cmd)
+        self.register_command("reasignar", team.reassign_command)
+        self.register_command("nuevo", self._register)
+        self.register_command("nota", leads.add_note)
+        self.register_command("editar", self._edit)
+        self.register_command("lista", leads.list_command)
+        self.register_command("ver", leads.view_lead)
+        self.register_command("retractar", leads.retract_command)
+        self.register_command("autorizacion", compliance.authorization_command)
+        self.register_command("baja", self._opt_out)
+        self.register_command("suprimir", self._suppress)
+        self.register_command("exportar", self._export)
+        self.register_command("solicitud", self._request)
+        self.register_command("solicitudes", compliance.requests_command)
+        self.register_command("atendida", compliance.attended_command)
+
+    def _start_cmd(
+        self, conn: sqlite3.Connection, actor: User, text: str, now: datetime
+    ) -> list[Outgoing]:
+        msg = (
+            f"Bienvenido a Jericó CRM, {actor.email}.\n"
+            "Usa /ayuda para ver los comandos disponibles."
+        )
+        return [Outgoing(actor.telegram_id, msg)]
+
+    def _help_cmd(
+        self, conn: sqlite3.Connection, actor: User, text: str, now: datetime
+    ) -> list[Outgoing]:
+        role = Role(actor.role)
+        cmds = self.commands_for_role(role)
+        lines = ["Comandos disponibles:"]
+        for c in cmds:
+            lines.append(f"• /{c['command']} — {c['description']}")
+        return [Outgoing(actor.telegram_id, "\n".join(lines))]
+
+    def _handle_alta_req_cb(
+        self, conn: sqlite3.Connection, user: User, args: tuple[str, ...], now: datetime
+    ) -> list[Outgoing] | None:
+        if user.role != Role.CTO:
+            return deny(conn, user, now)
+        if not args or len(args) < 2:
+            return None
+        action, target_tg_str = args[0], args[1]
+        if action == "ign":
+            return [Outgoing(user.telegram_id, "Solicitud de acceso ignorada.")]
+        if action in ("com", "law"):
+            target_role = "comercial" if action == "com" else "abogado"
+            repo.set_pending_input(
+                conn,
+                user_id=user.id,
+                kind="alta_guiada",
+                data=f"{target_role}:{target_tg_str}",
+                now=now,
+            )
+            return [
+                Outgoing(
+                    user.telegram_id,
+                    f"Por favor ingresa el correo electrónico para el nuevo {target_role}:",
+                )
+            ]
+        return None
+
+    def _handle_alta_guiada_pending(
+        self,
+        conn: sqlite3.Connection,
+        user: User,
+        pending: PendingInput,
+        u: Update,
+        now: datetime,
+    ) -> list[Outgoing]:
+        if not pending.data or ":" not in pending.data:
+            return [Outgoing(user.telegram_id, "Error en la solicitud de alta guiada.")]
+        role_str, target_tg_str = pending.data.split(":", 1)
+        email = (u.text or "").strip()
+        email_clean = normalize_email(email)
+        if email_clean is None:
+            repo.set_pending_input(
+                conn,
+                user_id=user.id,
+                kind="alta_guiada",
+                data=pending.data,
+                now=now,
+            )
+            return [
+                Outgoing(
+                    user.telegram_id,
+                    "Correo inválido. Por favor ingresa un correo electrónico válido:",
+                )
+            ]
+        out = self._add_user_cmd(
+            conn, user, f"/alta {role_str}; {target_tg_str}; {email_clean}", now
+        )
+        return out
+
+    def _add_user_cmd(
+        self, conn: sqlite3.Connection, actor: User, text: str, now: datetime
+    ) -> list[Outgoing]:
+        out = team.add_user(conn, actor, text, now)
+        if out and "Alta registrada:" in out[0].text:
+            body = text.split(maxsplit=1)[1] if len(text.split(maxsplit=1)) > 1 else ""
+            parts = [p.strip() for p in body.split(";")]
+            if len(parts) >= 2:
+                role = team._ROLE_WORDS.get(parts[0].lower())
+                tg_id = team._parse_tg(parts[1])
+                if role == Role.LAWYER and tg_id is not None:
+                    repo.set_meta(conn, f"legal_allowed:{tg_id}", "1")
+                if role is not None and tg_id is not None and self._on_user_menu_sync is not None:
+                    sync_fn = self._on_user_menu_sync
+                    self.defer(lambda: self._sync_deferred(sync_fn, tg_id, role, True))
+        return out
+
+    def _deactivate_user_cmd(
+        self, conn: sqlite3.Connection, actor: User, text: str, now: datetime
+    ) -> list[Outgoing]:
+        body = text.split(maxsplit=1)[1] if len(text.split(maxsplit=1)) > 1 else ""
+        tg_id = team._parse_tg(body)
+        target = None if tg_id is None else repo.active_user_by_telegram(conn, tg_id)
+        out = team.deactivate_user(conn, actor, text, now)
+        if out and "Baja registrada:" in out[0].text:
+            if target is not None:
+                target_role = Role(target.role)
+                if target_role == Role.LAWYER:
+                    repo.set_meta(conn, f"legal_allowed:{target.telegram_id}", "0")
+                if self._on_user_menu_sync is not None:
+                    sync_fn = self._on_user_menu_sync
+                    self.defer(
+                        lambda: self._sync_deferred(sync_fn, target.telegram_id, target_role, False)
+                    )
+        return out
+
+    async def _sync_deferred(
+        self,
+        sync_fn: UserMenuSync,
+        tg_id: int,
+        role: Role,
+        active: bool,
+    ) -> list[Outgoing]:
+        try:
+            await sync_fn(tg_id, role, active)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Error sincronizando menú de usuario %s: %s", tg_id, exc)
+        return []
+
+    def register_command(
+        self,
+        name: str,
+        handler: CommandHandler,
+        description: str = "",
+        roles: Sequence[Role] = (),
+    ) -> None:
+        if not description and name in DEFAULT_COMMAND_META:
+            description = DEFAULT_COMMAND_META[name][0]
+        if not roles and name in DEFAULT_COMMAND_META:
+            roles = DEFAULT_COMMAND_META[name][1]
+        self._commands[name] = CommandEntry(
+            name=name,
+            handler=handler,
+            description=description,
+            roles=tuple(roles),
+        )
+
+    @property
+    def commands(self) -> Mapping[str, CommandEntry]:
+        return self._commands
+
+    @property
+    def on_user_menu_sync(self) -> UserMenuSync | None:
+        return self._on_user_menu_sync
+
+    @on_user_menu_sync.setter
+    def on_user_menu_sync(self, fn: UserMenuSync | None) -> None:
+        self._on_user_menu_sync = fn
+
+    def commands_for_role(self, role: Role) -> list[dict[str, str]]:
+        """Devuelve los comandos para setMyCommands según el rol."""
+        res: list[dict[str, str]] = []
+        for entry in self._commands.values():
+            if not entry.description:
+                continue
+            if role == Role.CTO or role in entry.roles:
+                res.append({"command": entry.name, "description": entry.description})
+        return res
+
+    async def set_my_commands_for_role(
+        self,
+        role: Role,
+        scope: Mapping[str, Any] | None = None,
+    ) -> bool:
+        cmds = self.commands_for_role(role)
+        try:
+            return await self._telegram.set_my_commands(cmds, scope=scope)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Fallo en setMyCommands para rol %s (scope=%s): %s", role, scope, exc)
+            return False
+
+    async def delete_my_commands(
+        self,
+        scope: Mapping[str, Any] | None = None,
+    ) -> bool:
+        try:
+            return await self._telegram.delete_my_commands(scope=scope)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Fallo en deleteMyCommands (scope=%s): %s", scope, exc)
+            return False
+
+    async def set_chat_menu_button(
+        self,
+        chat_id: int | None = None,
+        menu_button: Mapping[str, Any] | None = None,
+    ) -> bool:
+        try:
+            return await self._telegram.set_chat_menu_button(
+                chat_id=chat_id, menu_button=menu_button
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Fallo en setChatMenuButton (chat_id=%s): %s", chat_id, exc)
+            return False
 
     def register_callback(self, action: str, handler: CallbackHandler) -> None:
         self._callbacks[action] = handler
@@ -424,6 +686,8 @@ class CrmBot:
         with self._db.read() as conn:
             if repo.active_user_by_telegram(conn, u.user_id) is None:
                 return None
+            if not self._is_allowed(u.user_id, conn):
+                return None
         path = self._files.new_tmp_path()
         if u.file.size is not None and u.file.size > MAX_ATTACHMENT_BYTES:
             result = DownloadResult(ok=False, size=u.file.size, error="too_large")
@@ -446,7 +710,7 @@ class CrmBot:
                     return  # VCRM-079
                 repo.set_meta(tx, self._offset_key, str(u.update_id + 1))
                 user = None if u.user_id is None else repo.active_user_by_telegram(tx, u.user_id)
-                if user is not None and not self._is_allowed(u.user_id):
+                if user is not None and not self._is_allowed(u.user_id, tx):
                     user = None  # lista blanca del segundo bot: silencio y auditoría
                 if user is None:  # VCRM-001/002: silencio y auditoría
                     repo.audit(
@@ -459,6 +723,47 @@ class CrmBot:
                     )
                     if self._wants_id(u):
                         out = [Outgoing(u.chat_id or 0, START_REPLY.format(id=u.user_id))]
+                    elif not self._anonymous_start and self._is_start_cmd(u):
+                        last_req_raw = repo.get_meta(tx, f"alta_req:{u.user_id}")
+                        is_rate_limited = False
+                        if last_req_raw:
+                            try:
+                                if now - from_iso(last_req_raw) < timedelta(hours=24):
+                                    is_rate_limited = True
+                            except Exception as exc:  # noqa: BLE001
+                                logger.debug("Error parseando fecha de alta_req: %s", exc)
+                        if not is_rate_limited:
+                            repo.set_meta(tx, f"alta_req:{u.user_id}", to_iso(now))
+                            reply_unknown = Outgoing(
+                                u.chat_id or 0,
+                                "Hola, tu solicitud de acceso fue enviada al administrador.",
+                            )
+                            ctos = repo.active_users(tx, Role.CTO)
+                            name_str = u.user_name or "Desconocido"
+                            uname_str = f"@{u.username}" if u.username else "sin @usuario"
+                            cto_text = (
+                                f"Solicitud de acceso:\n"
+                                f"• Nombre: {name_str}\n"
+                                f"• Usuario: {uname_str}\n"
+                                f"• ID: {u.user_id}"
+                            )
+                            buttons = (
+                                (
+                                    (
+                                        "Alta comercial",
+                                        build_callback("altareq", "com", str(u.user_id)),
+                                    ),
+                                    (
+                                        "Alta abogado",
+                                        build_callback("altareq", "law", str(u.user_id)),
+                                    ),
+                                ),
+                                (("Ignorar", build_callback("altareq", "ign", str(u.user_id))),),
+                            )
+                            cto_msgs = [
+                                Outgoing(cto.telegram_id, cto_text, buttons=buttons) for cto in ctos
+                            ]
+                            out = [reply_unknown, *cto_msgs]
                 elif u.chat_type != "private":
                     repo.audit(
                         tx,
@@ -525,8 +830,27 @@ class CrmBot:
             and (text == "/start" or text.startswith("/start "))
         )
 
-    def _is_allowed(self, telegram_id: int | None) -> bool:
-        return self._allowed_ids is None or telegram_id in self._allowed_ids
+    def _is_start_cmd(self, u: Update) -> bool:
+        text = (u.text or "").strip().lower()
+        return (
+            u.chat_type == "private"
+            and u.user_id is not None
+            and u.chat_id is not None
+            and (text == "/start" or text.startswith("/start "))
+        )
+
+    def _is_allowed(self, telegram_id: int | None, conn: sqlite3.Connection | None = None) -> bool:
+        if self._allowed_ids is None:
+            return True
+        if telegram_id in self._allowed_ids:
+            return True
+        if conn is not None and telegram_id is not None:
+            if repo.get_meta(conn, f"legal_allowed:{telegram_id}") == "1":
+                return True
+            u = repo.active_user_by_telegram(conn, telegram_id)
+            if u is not None and u.role == Role.CTO:
+                return True
+        return False
 
     async def _run_deferred(self, job: DeferredJob, chat_id: int) -> list[Outgoing]:
         try:

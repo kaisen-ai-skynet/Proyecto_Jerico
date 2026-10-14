@@ -10,6 +10,7 @@ import sqlite3
 from collections.abc import Callable
 from datetime import datetime
 
+from jerico.crm.assistant import AssistantContext
 from jerico.crm.bot import CrmBot
 from jerico.crm.closing_contract import (
     CONTRACT_FILE_KIND,
@@ -30,7 +31,8 @@ from jerico.crm.closing_flow import (
 from jerico.crm.config import CrmSettings, parse_allowed_ids
 from jerico.crm.db import CrmDatabase
 from jerico.crm.files import LocalFileStore
-from jerico.crm.model import Outgoing, User
+from jerico.crm.lawyer_assistant import lawyer_assistant_command
+from jerico.crm.model import Outgoing, Role, User
 from jerico.crm.ports import TelegramPort
 
 LEGAL_OFFSET_KEY = "legal_telegram_offset"
@@ -55,18 +57,103 @@ def start_command(
     return [Outgoing(actor.telegram_id, HELP.format(id=actor.telegram_id))]
 
 
+def help_command(
+    bot: CrmBot,
+) -> Callable[[sqlite3.Connection, User, str, datetime], list[Outgoing]]:
+    def handler(conn: sqlite3.Connection, actor: User, text: str, now: datetime) -> list[Outgoing]:
+        role = Role(actor.role)
+        cmds = bot.commands_for_role(role)
+        lines = ["Comandos disponibles:"]
+        for c in cmds:
+            lines.append(f"• /{c['command']} — {c['description']}")
+        return [Outgoing(actor.telegram_id, "\n".join(lines))]
+
+    return handler
+
+
 def register_lawyer_commands(
-    bot: CrmBot, db: CrmDatabase, ctx: ClosingContext, telegram: TelegramPort
+    bot: CrmBot,
+    db: CrmDatabase,
+    ctx: ClosingContext,
+    telegram: TelegramPort,
+    *,
+    assistant_ctx: AssistantContext | None = None,
 ) -> None:
-    bot.register_command("start", start_command)
-    bot.register_command("casos", as_lawyer(ctx, cases_command))
-    bot.register_command("paquete", package_command)
-    bot.register_command("descargar", download_command(ctx, bot, telegram))
-    bot.register_command("basejuridica", as_lawyer(ctx, legal_basis_command))
-    bot.register_command("subircontrato", as_lawyer(ctx, upload_command))
+    bot.register_command(
+        "start",
+        start_command,
+        description="Iniciar y ver ID de Telegram",
+        roles=(Role.LAWYER, Role.CTO),
+    )
+    bot.register_command(
+        "ayuda",
+        as_lawyer(ctx, help_command(bot)),
+        description="Ver comandos disponibles",
+        roles=(Role.LAWYER, Role.CTO),
+    )
+    bot.register_command(
+        "casos",
+        as_lawyer(ctx, cases_command),
+        description="Listar casos con paquete enviado",
+        roles=(Role.LAWYER, Role.CTO),
+    )
+    bot.register_command(
+        "paquete",
+        package_command,
+        description="Consultar paquete de cierre",
+        roles=(Role.LAWYER, Role.CTO),
+    )
+    bot.register_command(
+        "descargar",
+        download_command(ctx, bot, telegram),
+        description="Descargar paquete como archivo",
+        roles=(Role.LAWYER, Role.CTO),
+    )
+    bot.register_command(
+        "basejuridica",
+        as_lawyer(ctx, legal_basis_command),
+        description="Confirmar base legal del contrato",
+        roles=(Role.LAWYER, Role.CTO),
+    )
+    bot.register_command(
+        "subircontrato",
+        as_lawyer(ctx, upload_command),
+        description="Subir contrato final (PDF o DOCX)",
+        roles=(Role.LAWYER, Role.CTO),
+    )
     bot.register_file_pending(CONTRACT_FILE_KIND, as_lawyer_file(ctx, file_handler(ctx, bot, db)))
-    bot.register_command("devolver", as_lawyer(ctx, return_command))
-    bot.register_command("formaespecial", as_lawyer(ctx, special_form_command))
+    bot.register_command(
+        "devolver",
+        as_lawyer(ctx, return_command),
+        description="Devolver paquete al comercial",
+        roles=(Role.LAWYER, Role.CTO),
+    )
+    bot.register_command(
+        "formaespecial",
+        as_lawyer(ctx, special_form_command),
+        description="Marcar forma especial requerida",
+        roles=(Role.LAWYER, Role.CTO),
+    )
+    if assistant_ctx is not None:
+        bot.register_command(
+            "asistente",
+            as_lawyer(ctx, lawyer_assistant_command(assistant_ctx, bot)),
+            description="Asistente IA para casos y cláusulas",
+            roles=(Role.LAWYER, Role.CTO),
+        )
+    else:
+
+        def disabled_assistant(
+            conn: sqlite3.Connection, actor: User, text: str, now: datetime
+        ) -> list[Outgoing]:
+            return [Outgoing(actor.telegram_id, "El asistente no está disponible.")]
+
+        bot.register_command(
+            "asistente",
+            as_lawyer(ctx, disabled_assistant),
+            description="Asistente IA para casos y cláusulas",
+            roles=(Role.LAWYER, Role.CTO),
+        )
 
 
 def build_legal_bot(
@@ -78,6 +165,7 @@ def build_legal_bot(
     files: LocalFileStore,
     *,
     kick: Callable[[], None] | None = None,
+    assistant_ctx: AssistantContext | None = None,
 ) -> CrmBot:
     allowed, _rejected = parse_allowed_ids(settings.legal_allowed_ids)
     bot = CrmBot(
@@ -92,5 +180,5 @@ def build_legal_bot(
         allowed_ids=allowed,
         anonymous_start=True,
     )
-    register_lawyer_commands(bot, db, ctx, telegram)
+    register_lawyer_commands(bot, db, ctx, telegram, assistant_ctx=assistant_ctx)
     return bot
