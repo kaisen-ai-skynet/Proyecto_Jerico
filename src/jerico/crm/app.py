@@ -45,8 +45,11 @@ from jerico.crm.sweep import SweepContext, deliver_now, followup_sweep
 from jerico.crm.team import seed_cto
 from jerico.crm.telegram import HttpxTelegramClient
 from jerico.cron.scheduler import CronScheduler
+from jerico.marketing.bot import register_marketing_commands
+from jerico.marketing.orquestador import OrquestadorMarketing
 
 EXIT_CONFIG = 2
+
 EXIT_MIGRATION = 3  # la migración v1 -> v2 falló: la base queda en v1 (VCRM-171)
 STARTUP_NOTICE_KIND = "aviso_arranque"
 EXECUTION_TIMEOUT_S = 1800
@@ -226,6 +229,10 @@ class CrmApp:
             ),
         )
         register_catalogo_commands(self.bot)
+        register_marketing_commands(
+            self.bot,
+            OrquestadorMarketing(dry_run=dry_run_active(settings)),
+        )
         self.scheduler = CronScheduler(
             execution_timeout_s=EXECUTION_TIMEOUT_S, poll_interval_s=POLL_INTERVAL_S
         )

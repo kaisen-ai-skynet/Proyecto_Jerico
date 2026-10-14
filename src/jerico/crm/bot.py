@@ -110,6 +110,22 @@ DEFAULT_COMMAND_META: dict[str, tuple[str, tuple[Role, ...]]] = {
     "start": ("Iniciar y ver bienvenida", (Role.COMMERCIAL, Role.LAWYER, Role.CTO)),
     "ayuda": ("Ver comandos disponibles", (Role.COMMERCIAL, Role.LAWYER, Role.CTO)),
     "descargar": ("Descargar paquete como archivo", (Role.LAWYER, Role.CTO)),
+    # Catálogo de precios (spec 006)
+    "catalogo": ("Ver el catálogo de servicios y precios", (Role.COMMERCIAL, Role.CTO)),
+    "cotizar": ("Generar una cotización con precios del catálogo", (Role.COMMERCIAL, Role.CTO)),
+    "catalogo_actualizar": ("Actualizar precios del catálogo (borrador)", (Role.CTO,)),
+    "catalogo_activar": ("Activar una versión del catálogo", (Role.CTO,)),
+    "catalogo_verificar": ("Verificar el catálogo contra el modelo financiero", (Role.CTO,)),
+    # Marketing y plantillas de marca (spec 008)
+    "campana": ("Proponer una campaña a partir de una idea", (Role.CTO,)),
+    "campanas": ("Ver campañas pendientes de aprobación", (Role.CTO,)),
+    "aprobarcampana": ("Aprobar una campaña", (Role.CTO,)),
+    "rechazarcampana": ("Rechazar una campaña con motivo", (Role.CTO,)),
+    "despachar": ("Enviar una campaña aprobada (respeta el modo prueba)", (Role.CTO,)),
+    "plantillas": ("Ver plantillas de marca disponibles", (Role.COMMERCIAL, Role.CTO)),
+    "plantilla": ("Crear o usar una plantilla de marca", (Role.COMMERCIAL, Role.CTO)),
+    "aprobarplantilla": ("Aprobar una plantilla nueva", (Role.CTO,)),
+    "rechazarplantilla": ("Rechazar una plantilla nueva", (Role.CTO,)),
 }
 
 

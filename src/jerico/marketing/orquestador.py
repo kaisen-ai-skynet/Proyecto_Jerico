@@ -237,3 +237,14 @@ class OrquestadorMarketing:
                 return "@kaizen_oficial"
             case CanalMarketing.FACEBOOK:
                 return "@kaizen_facebook"
+
+
+_GLOBAL_ORQUESTADOR: OrquestadorMarketing | None = None
+
+
+def obtener_orquestador_global() -> OrquestadorMarketing:
+    """Devuelve o inicializa la instancia singleton en memoria del orquestador."""
+    global _GLOBAL_ORQUESTADOR
+    if _GLOBAL_ORQUESTADOR is None:
+        _GLOBAL_ORQUESTADOR = OrquestadorMarketing()
+    return _GLOBAL_ORQUESTADOR
