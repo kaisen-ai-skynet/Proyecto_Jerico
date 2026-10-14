@@ -3,7 +3,7 @@ tipo: checklist-operativa
 proyecto: Jericó — Kaisen AI
 estado: en-pausa (VM OCI aplazada; CRM desplegado en kaisen-server)
 creado: "11/10/2026 20:20"
-modificado: "13/10/2026 10:10"
+modificado: "13/10/2026 19:50"
 ---
 
 # Día 1 — Oracle Cloud + laptop en una sola sesión
@@ -69,6 +69,16 @@ Instala age y **Docker**, crea la llave SSH y la llave age, comprueba Tailscale 
 > 🛑 **Resultado (13/10/2026):** el CTO corrió el script en Cloud Shell y lo cortó en el intento **153/200**, todavía sin capacidad. Que llegara al intento 153 indica que el script reconocía las respuestas de la API como falta de capacidad o límite de peticiones (no se detuvo con «Error distinto a capacidad»). Para retomar la migración basta con relanzarlo con los mismos `export`.
 > Si el script se detiene con «Error distinto a capacidad» pero el texto habla de capacidad, el mensaje de la API no coincide con el que busca el script: guarda las últimas líneas y pásalas para ajustarlo.
 
+> 🔁 **Segundo intento y reintento continuo (13/10/2026 19:50).** Con apoyo de Gemini Argon se volvió a probar desde la consola con lo mínimo: **A1.Flex 1 OCPU / 6 GB**, Ubuntu 24.04, disco por defecto (46,6 GB) y fault domain elegido por Oracle → otra vez «Capacidad insuficiente en AD-1». La **VM.Standard.E2.1.Micro no se ofrece en `sa-bogota-1`**: la lista «Siempre gratis» sale vacía, aunque la página de límites muestra 2 núcleos. En Bogotá la única VM gratis es la A1.
+> El script ahora sirve para correr **días seguidos en `kaisen-server`**: bucle sin límite (`MAX_ATTEMPTS=0`), 1 OCPU / 6 GB y 50 GB por defecto, espera de 300 s + 0–59 s aleatorios (el triple ante `TooManyRequests`), sin fijar fault domain, reintenta errores de red y se detiene solo ante cuota, permisos o parámetros. Busca solo el compartimento `kaisen-jerico` y su subred pública, y puede avisar por Telegram (`TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`).
+> **Falta la llave de API (la crea el CTO):** consola → perfil → *Tokens y claves* → *Agregar clave de API* → *Generar par de claves* → *Descargar clave privada* → *Agregar*, y copiar el bloque *Vista previa del archivo de configuración*. En el servidor van a `~/.oci/oci_api_key.pem` y `~/.oci/config` (ambos `chmod 600`, nunca en el repo). Luego:
+> ```bash
+> pipx install oci-cli    # o: python3 -m venv ~/.oci-venv && ~/.oci-venv/bin/pip install oci-cli
+> oci iam region list --query 'data[0].name'    # prueba de la llave
+> tmux new -d -s oci-a1 'SSH_PUBKEY_FILE=~/.ssh/id_ed25519_kaisen.pub bash ~/jerico/scripts/oci/00_retry_launch_a1.sh 2>&1 | tee -a ~/oci-a1.log'
+> ```
+> Cuando salga la VM, se amplía a 2 OCPU / 12 GB desde la consola (*Editar unidad*, con reinicio).
+
 - [x] VCN `jerico-vcn` creada con el wizard en `kaisen-jerico`: `10.0.0.0/16`, subred pública `10.0.0.0/24`, privada `10.0.1.0/24`, sin IPv6 (orquestador, 13/10/2026).
 - [x] Security List ajustada: TCP 22 solo desde la `/32` del CTO (la regla `0.0.0.0/0` está borrada) y nada en 5432/6379/8000 (orquestador, 13/10/2026).
 - [ ] *(Opcional)* Regla UDP 41641 desde `0.0.0.0/0` para que Tailscale conecte directo. Sin ella usa relays DERP.
@@ -121,4 +131,4 @@ La prueba de humo del bloque 1 no usa secretos. Para ver el bot funcionando de v
 - [ ] **No dejar la VM ociosa muchos días:** el siguiente paso es desplegar Jericó (runbook §3). Oracle puede recuperar VMs gratis que pasan 7 días casi sin uso.
 
 ---
-> 🕒 **Última modificación:** 13/10/2026 10:10 (Claude Code · Opus 5.5)
+> 🕒 **Última modificación:** 13/10/2026 19:50 (Claude Code · Opus 5.5)
