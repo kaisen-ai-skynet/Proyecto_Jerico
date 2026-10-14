@@ -232,6 +232,22 @@ def test_botones_con_argumentos_invalidos_no_hacen_nada(env: Env) -> None:
     assert env.kicks == 0
 
 
+def test_f2_bot_callbacks_argumentos_invalidos_y_propuesta_inexistente(env: Env) -> None:
+    for data in (
+        "v1:gno:x:1",
+        "v1:gno:1",
+        "v1:grew:a",
+        "v1:freint:a",
+        "v1:fcancel:a",
+        "v1:rbaja:nonint",
+        "v1:rrec:nonint",
+        "v1:rcon:nonint",
+    ):
+        assert INVALID_BUTTON in joined(env.press("com", data)), data
+    assert INVALID_BUTTON in joined(env.press("com", "v1:freint:99999"))
+    assert INVALID_BUTTON in joined(env.press("com", "v1:fcancel:99999"))
+
+
 # --- Envío fallido ---------------------------------------------------------------------------
 
 

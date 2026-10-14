@@ -107,7 +107,11 @@ def request_authorization(
     if lead.auth_status == AuthStatus.AUTHORIZED:
         return _text(actor, f"{sid} ya cuenta con autorización vigente.")
     if not lead.email:
-        return _text(actor, f"{sid} no tiene correo registrado: no se puede enviar la solicitud.")
+        return _text(
+            actor,
+            f"{sid} no tiene correo registrado: agrégalo con /editar {sid}; correo; <email> "
+            "y vuelve a pedir la autorización.",
+        )
     missing = _missing_notice_config(settings)
     if missing:  # VCRM-149
         return _text(
@@ -118,7 +122,10 @@ def request_authorization(
         )
     approver = _approver(conn, lead)
     if approver is None:
-        return _text(actor, "No hay un aprobador activo (comercial del lead o CTO).")
+        return _text(
+            actor,
+            "No hay un aprobador activo disponible para este lead (comercial del lead o CTO).",
+        )
     proposal_id = repo.insert_proposal(
         conn,
         lead_id=lead.id,
@@ -188,7 +195,11 @@ def _load_candidate(
             at=now,
             lead_id=lead.id,
         )
-        return _text(actor, "No tiene permiso para decidir sobre esta respuesta.")
+        return _text(
+            actor,
+            "No tienes permiso para decidir sobre esta respuesta: solo el comercial asignado "
+            "o el CTO pueden resolverla.",
+        )
     if inbound.classification != InboundClassification.AUTH_CANDIDATE:
         return _text(actor, "Esa respuesta no es una respuesta propuesta como autorización.")
     if inbound.decision != InboundDecision.PENDING:  # VCRM-143

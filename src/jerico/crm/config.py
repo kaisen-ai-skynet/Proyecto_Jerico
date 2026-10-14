@@ -8,13 +8,17 @@ from enum import Enum
 from pathlib import Path
 from typing import Literal
 
-from pydantic import SecretStr
+from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class CrmSettings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_prefix="JERICO_CRM_", env_file=".env", extra="ignore", env_ignore_empty=True
+        env_prefix="JERICO_CRM_",
+        env_file=".env",
+        extra="ignore",
+        env_ignore_empty=True,
+        populate_by_name=True,
     )
 
     # Secretos: sin valor por defecto; `app.py` exige token y clave al arrancar.
@@ -47,6 +51,44 @@ class CrmSettings(BaseSettings):
     backup_retention_days: int = 30
     outbox_interval_s: float = 5.0
     poll_timeout_s: int = 25
+
+    # --- Spec 004: comunicaciones externas (Plan Maestro §4) ---
+    # Encendido por defecto: lo externo se redirige al CTO hasta que él lo apague.
+    external_comms_dry_run: bool = Field(
+        default=True, validation_alias="JERICO_EXTERNAL_COMMS_DRY_RUN"
+    )
+
+    # --- Spec 004: firma electrónica (DocuSeal autoalojado; sin proveedor = no se ofrece firma) ---
+    docuseal_url: str | None = None
+    docuseal_token: SecretStr | None = None
+    signature_validity_days: int = 15  # VCRM-C14
+    # Bot propio del abogado (@Jericoo_law_bot): token y lista blanca de IDs de Telegram, solo en
+    # el .env del servidor. Sin token o sin IDs el bot del abogado no arranca.
+    legal_bot_token: SecretStr | None = None
+    legal_allowed_ids: str = ""
+    # Candidatos de correo sin registrar caducan a los N días (VCRM-M05).
+    mail_candidate_days: int = 30
+
+    # --- Asistente comercial con LLM (spec-asistente.md) ---
+    # Apagado por defecto. Las variables OPENAI_* no llevan el prefijo del CRM (VCRM-A35).
+    assistant_enabled: bool = False
+    openai_api_key: SecretStr | None = Field(default=None, validation_alias="OPENAI_API_KEY")
+    openai_model: str = Field(default="gpt-6-luna", validation_alias="OPENAI_MODEL")
+    openai_reasoning_effort: str = Field(default="low", validation_alias="OPENAI_REASONING_EFFORT")
+    assistant_max_output_tokens: int = 600  # se acota a [50, 2000] al usarlo (VCRM-A20)
+    assistant_include_notes: bool = False  # notas libres: apagadas por minimización (VCRM-A11)
+    assistant_daily_token_cap: int = 60_000
+    assistant_daily_cost_cap_usd: float | None = None  # exige tarifas (VCRM-A24)
+    assistant_user_daily_calls: int = 20
+    assistant_price_in_per_mtok: float | None = None
+    assistant_price_out_per_mtok: float | None = None
+
+    @field_validator("openai_reasoning_effort", mode="after")
+    @classmethod
+    def _effort_or_low(cls, value: str) -> str:
+        """Un valor desconocido en el `.env` no tumba el arranque: vuelve al más barato."""
+        value = value.strip().lower()
+        return value if value in {"minimal", "low", "medium", "high"} else "low"
 
     # Festivos extraordinarios: fechas ISO y/o rutas de archivo separadas por comas (VCRM-167).
     extra_holidays: str = ""
@@ -301,3 +343,18 @@ def f2_missing(settings: CrmSettings) -> list[str]:
 def f2_enabled(settings: CrmSettings) -> bool:
     """La fase 2 solo se activa con buzón, correo de salida, aviso y textos disponibles (D-9)."""
     return not f2_missing(settings)
+
+
+def parse_allowed_ids(raw: str) -> tuple[frozenset[int], tuple[str, ...]]:
+    """IDs de Telegram separados por comas; devuelve (válidos, entradas descartadas)."""
+    valid: set[int] = set()
+    rejected: list[str] = []
+    for part in raw.split(","):
+        item = part.strip()
+        if not item:
+            continue
+        if item.isdigit() and int(item) > 0:
+            valid.add(int(item))
+        else:
+            rejected.append("<entrada no numérica>")  # nunca se repite el valor en logs
+    return frozenset(valid), tuple(rejected)

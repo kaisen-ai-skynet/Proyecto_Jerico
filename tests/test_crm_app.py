@@ -83,13 +83,14 @@ class Env:
         self.clock = FakeClock(NOW)
         self.apps: list[CrmApp] = []
 
-    def build(self, **overrides: Any) -> CrmApp:
+    def build(self, assistant_llm: Any = None, **overrides: Any) -> CrmApp:
         app = CrmApp(
             _settings(self.tmp_path, **overrides),
             telegram=self.tg,
             email=self.mail,
             runner=self.runner,
             clock=self.clock.now,
+            assistant_llm=assistant_llm,
         )
         self.apps.append(app)
         return app
@@ -98,7 +99,7 @@ class Env:
 @pytest.fixture(autouse=True)
 def _hermetic(monkeypatch: pytest.MonkeyPatch) -> None:
     for name in list(os.environ):
-        if name.startswith("JERICO_CRM_"):
+        if name.startswith(("JERICO_CRM_", "OPENAI_")):
             monkeypatch.delenv(name)
 
 
@@ -327,6 +328,30 @@ async def test_run_service_starts_and_stops_cleanly(tmp_path: Path) -> None:
     assert (settings.data_dir / "crm.db").exists()
 
 
+@pytest.mark.asyncio
+async def test_run_service_logs_start_and_stop(tmp_path: Path) -> None:
+    """El arranque y la parada dejan rastro en los logs del contenedor (sin secretos)."""
+    from loguru import logger
+
+    lines: list[str] = []
+    sink = logger.add(lines.append, format="{message}", level="INFO")
+    try:
+        stop = asyncio.Event()
+        await run_service(
+            _settings(tmp_path),
+            telegram=StoppingTelegram(stop),
+            email=FakeEmailSender(),
+            runner=FakeRunner(),
+            clock=FakeClock(NOW).now,
+            stop=stop,
+        )
+    finally:
+        logger.remove(sink)
+    text = "".join(lines)
+    assert "jerico-crm iniciado" in text
+    assert "jerico-crm detenido" in text
+
+
 # --- De extremo a extremo: reinicio (VCRM-078, 049) --------------------------------------------
 
 
@@ -520,3 +545,133 @@ async def test_un_ok_dentro_de_franja_dispara_el_primer_intento_en_linea(env: En
         await asyncio.sleep(0.01)
 
     assert len(env.mail.sent) == 1  # salió sin esperar al siguiente barrido
+
+
+# --- Asistente comercial con LLM (VCRM-A30, A31, A35) -----------------------------------------
+
+
+class _EchoLlm:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def complete(self, *, system: str, user: str, max_output_tokens: int) -> Any:
+        from jerico.crm.llm import LlmResult
+
+        self.calls += 1
+        return LlmResult(text="Todo en orden.", input_tokens=10, output_tokens=5)
+
+
+def _command(app: CrmApp, text: str, uid: int = 1) -> None:
+    asyncio.run(
+        app.bot.process_update(
+            Update(update_id=uid, user_id=CTO_TG, chat_id=CTO_TG, chat_type="private", text=text)
+        )
+    )
+
+
+def test_vcrma30_assistant_is_off_by_default_and_silent_at_startup(env: Env) -> None:
+    app = env.build()
+    asyncio.run(app.startup())
+    assert all("asistente" not in s.text.lower() for s in env.tg.sent)
+    _command(app, "/asistente pregunta cuántos leads hay")
+    assert env.tg.sent[-1].text == "El asistente no está activado."
+
+
+def test_vcrma31_enabled_without_key_warns_cto_once_and_degrades(env: Env) -> None:
+    app = env.build(assistant_enabled=True)
+    asyncio.run(app.startup())
+    notices = [s.text for s in env.tg.sent if "asistente" in s.text.lower()]
+    assert len(notices) == 1 and "OPENAI_API_KEY" in notices[0]
+    _command(app, "/asistente pregunta hola")
+    assert "no está disponible" in env.tg.sent[-1].text
+
+
+def test_vcrma30_enabled_with_injected_client_answers_the_cto(env: Env) -> None:
+    llm = _EchoLlm()
+    app = env.build(assistant_llm=llm, assistant_enabled=True)
+    asyncio.run(app.startup())
+    assert all("asistente" not in s.text.lower() for s in env.tg.sent)
+    _command(app, "/asistente pregunta cómo va el pipeline")
+    assert llm.calls == 1
+    assert "Todo en orden." in env.tg.sent[-1].text
+
+
+def test_vcrma34_enabled_with_key_builds_the_real_client_without_leaking_it(env: Env) -> None:
+    from jerico.crm.llm import OpenAIResponsesClient
+
+    app = env.build(assistant_enabled=True, openai_api_key="sk-live-secreto")
+    assert isinstance(app.assistant_llm, OpenAIResponsesClient)
+    assert "sk-live-secreto" not in repr(app.assistant_llm)
+    asyncio.run(app.startup())
+    assert all("sk-live-secreto" not in s.text for s in env.tg.sent)
+
+
+def test_outbound_email_wraps_in_dry_run_by_default_and_not_when_disabled(tmp_path: Path) -> None:
+    from jerico.crm.app import outbound_email
+    from jerico.crm.dryrun import DryRunEmailSender
+    from jerico.crm.mail import UnconfiguredEmailSender
+
+    assert isinstance(outbound_email(_settings(tmp_path)), DryRunEmailSender)
+    off = _settings(tmp_path, external_comms_dry_run=False)
+    assert isinstance(outbound_email(off), UnconfiguredEmailSender)
+
+
+def test_spec004_closing_commands_are_registered_in_the_real_app(env: Env) -> None:
+    app = env.build()
+    asyncio.run(app.startup())
+    _command(app, "/oferta")
+    assert "Ejemplo" in env.tg.sent[-1].text
+
+
+# --- Bot del abogado (spec 004) -----------------------------------------------------------------
+
+
+def test_legal_bot_is_off_without_a_token_and_on_with_one(env: Env) -> None:
+    assert env.build().legal_bot is None
+    legal_tg = FakeTelegram()
+    app = CrmApp(
+        _settings(env.tmp_path, legal_allowed_ids=""),
+        telegram=env.tg,
+        email=env.mail,
+        runner=env.runner,
+        clock=env.clock.now,
+        legal_telegram=legal_tg,
+    )
+    env.apps.append(app)
+    assert app.legal_bot is not None
+    asyncio.run(app.startup())
+    registration = [s.text for s in env.tg.sent if "modo registro" in s.text]
+    assert len(registration) == 1 and "JERICO_CRM_LEGAL_ALLOWED_IDS" in registration[0]
+
+
+def test_legal_bot_with_ids_and_bad_entries_warns_once(env: Env) -> None:
+    app = CrmApp(
+        _settings(env.tmp_path, legal_allowed_ids="123,abc"),
+        telegram=env.tg,
+        email=env.mail,
+        runner=env.runner,
+        clock=env.clock.now,
+        legal_telegram=FakeTelegram(),
+    )
+    env.apps.append(app)
+    asyncio.run(app.startup())
+    texts = [s.text for s in env.tg.sent]
+    assert any("1 entrada(s)" in t for t in texts) and not any("modo registro" in t for t in texts)
+    assert all("abc" not in t for t in texts)
+
+
+@pytest.mark.asyncio
+async def test_serve_runs_both_pollers(env: Env) -> None:
+    stop = asyncio.Event()
+    legal_tg = FakeTelegram()
+    app = CrmApp(
+        _settings(env.tmp_path, legal_allowed_ids="123"),
+        telegram=StoppingTelegram(stop),
+        email=env.mail,
+        runner=env.runner,
+        clock=env.clock.now,
+        legal_telegram=legal_tg,
+    )
+    env.apps.append(app)
+    await app.serve(stop)
+    assert app.legal_bot is not None

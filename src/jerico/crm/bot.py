@@ -34,24 +34,33 @@ from jerico.crm.telegram import TelegramApiError
 
 logger = logging.getLogger(__name__)
 
-GENERIC_ERROR = "No se pudo procesar la solicitud. Intente de nuevo."
-UNKNOWN_COMMAND = "Orden no reconocida."
+GENERIC_ERROR = "No se pudo procesar tu solicitud. Por favor, intenta de nuevo en unos momentos."
+START_REPLY = (
+    "Tu ID de Telegram es {id}. Envíaselo al CTO de Kaisen AI para que te dé acceso a este bot."
+)
+UNKNOWN_COMMAND = "Orden no reconocida. Revisa que el comando esté bien escrito."
 INVALID_BUTTON = "Botón no válido o caducado."
 ALREADY_PROCESSED = "Esta confirmación ya fue procesada."
 CANCELLED = "Operación cancelada."
 ALERT_ATTENDED = "Alerta marcada «atendida por otro medio»."
 ALERT_ALREADY = "La alerta ya estaba atendida o no existe."
 OFFSET_KEY = "telegram_offset"
+UPDATE_NAMESPACE_SPAN = 10**13  # separa los ids de update de cada bot en la tabla de repetidos
 POLL_TIMEOUT_S = 25
 ERROR_BACKOFF_S = 5.0
 _COMMAND_RE = re.compile(r"^/([A-Za-z_]+)(?:@\w+)?(?:\s|$)")
 
+DeferredJob = Callable[[], Awaitable[list[Outgoing]]]
 CommandHandler = Callable[[sqlite3.Connection, User, str, datetime], list[Outgoing]]
 CallbackHandler = Callable[
     [sqlite3.Connection, User, tuple[str, ...], datetime], list[Outgoing] | None
 ]
 PendingHandler = Callable[
     [sqlite3.Connection, User, PendingInput, Update, datetime], list[Outgoing]
+]
+FilePendingHandler = Callable[
+    [sqlite3.Connection, User, PendingInput, Update, "leads.Prefetched | None", datetime],
+    list[Outgoing],
 ]
 ConfirmationHandler = Callable[
     [sqlite3.Connection, User, Confirmation, bool, datetime], list[Outgoing]
@@ -191,7 +200,22 @@ class CrmBot:
         export_limit: int = compliance.TELEGRAM_UPLOAD_LIMIT,
         export_margin: int = compliance.PART_MARGIN,
         params: Params | None = None,
+        offset_key: str = OFFSET_KEY,
+        update_namespace: int = 0,
+        minimal: bool = False,
+        allowed_ids: frozenset[int] | None = None,
+        anonymous_start: bool = False,
     ) -> None:
+        """Los cinco últimos parámetros permiten un segundo bot (el del abogado, spec 004).
+
+        `offset_key` y `update_namespace` separan su avance y sus ids de los del bot principal;
+        `minimal` no registra los comandos de ventas; `allowed_ids` añade una lista blanca de
+        identidades de Telegram además de la tabla de usuarios; `anonymous_start` responde a
+        `/start` de un desconocido solo con su propio ID (para que el CTO lo autorice)."""
+        self._offset_key = offset_key
+        self._id_base = update_namespace * UPDATE_NAMESPACE_SPAN
+        self._allowed_ids = allowed_ids
+        self._anonymous_start = anonymous_start
         self._db = db
         self._telegram = telegram
         self._clock = clock
@@ -203,48 +227,74 @@ class CrmBot:
         self._export_margin = export_margin
         self._params = params or default_params()
         self._export_jobs: list[compliance.ExportJob] = []  # se envían tras el *commit*
-        self._commands: dict[str, CommandHandler] = {
-            "alta": team.add_user,
-            "baja_usuario": team.deactivate_user,
-            "reasignar": team.reassign_command,
-            "nuevo": self._register,
-            "nota": leads.add_note,
-            "editar": self._edit,
-            "lista": leads.list_command,
-            "ver": leads.view_lead,
-            "retractar": leads.retract_command,
-            "autorizacion": compliance.authorization_command,
-            "baja": self._opt_out,
-            "suprimir": self._suppress,
-            "exportar": self._export,
-            "solicitud": self._request,
-            "solicitudes": compliance.requests_command,
-            "atendida": compliance.attended_command,
-        }
-        self._callbacks: dict[str, CallbackHandler] = {
-            "reasignar": _reassign_cb,
-            "baja_leads": _orphans_cb,
-            "conf": self._confirmation_cb,
-            "abrir": _open_cb,
-            "cancelar": _cancel_cb,
-            "lista": _list_cb,
-            "estado": _state_cb,
-            "motivo": _reason_cb,
-            "rmotivo": _retract_reason_cb,
-            "retractar": _retract_cb,
-            "atendida": _attended_cb,
-        }
-        self._pending: dict[str, PendingHandler] = {
-            leads.REJECT_TEXT_KIND: leads.answer_reject_text,
-            leads.RETRACT_TEXT_KIND: leads.answer_retract_text,
-        }
-        self._confirmations: dict[str, ConfirmationHandler] = {
-            leads.AUTH_QUESTION_KIND: leads.answer_authorization,
-            leads.ACCEPT_KIND: leads.confirm_accept,
-            leads.RETRACT_KIND: leads.confirm_retract,
-        }
+        self._file_pending: dict[str, FilePendingHandler] = {}
+        self._deferred: list[DeferredJob] = []  # trabajos de red tras el *commit* (asistente)
+        self._commands: dict[str, CommandHandler] = (
+            {}
+            if minimal
+            else {
+                "alta": team.add_user,
+                "baja_usuario": team.deactivate_user,
+                "reasignar": team.reassign_command,
+                "nuevo": self._register,
+                "nota": leads.add_note,
+                "editar": self._edit,
+                "lista": leads.list_command,
+                "ver": leads.view_lead,
+                "retractar": leads.retract_command,
+                "autorizacion": compliance.authorization_command,
+                "baja": self._opt_out,
+                "suprimir": self._suppress,
+                "exportar": self._export,
+                "solicitud": self._request,
+                "solicitudes": compliance.requests_command,
+                "atendida": compliance.attended_command,
+            }
+        )
+        self._callbacks: dict[str, CallbackHandler] = (
+            {}
+            if minimal
+            else {
+                "reasignar": _reassign_cb,
+                "baja_leads": _orphans_cb,
+                "conf": self._confirmation_cb,
+                "abrir": _open_cb,
+                "cancelar": _cancel_cb,
+                "lista": _list_cb,
+                "estado": _state_cb,
+                "motivo": _reason_cb,
+                "rmotivo": _retract_reason_cb,
+                "retractar": _retract_cb,
+                "atendida": _attended_cb,
+            }
+        )
+        self._pending: dict[str, PendingHandler] = (
+            {}
+            if minimal
+            else {
+                leads.REJECT_TEXT_KIND: leads.answer_reject_text,
+                leads.RETRACT_TEXT_KIND: leads.answer_retract_text,
+            }
+        )
+        self._confirmations: dict[str, ConfirmationHandler] = (
+            {}
+            if minimal
+            else {
+                leads.AUTH_QUESTION_KIND: leads.answer_authorization,
+                leads.ACCEPT_KIND: leads.confirm_accept,
+                leads.RETRACT_KIND: leads.confirm_retract,
+            }
+        )
 
     # --- Registro de handlers -----------------------------------------------------------
+
+    def defer(self, job: DeferredJob) -> None:
+        """Encola un trabajo asíncrono que corre tras el *commit*, fuera de la transacción."""
+        self._deferred.append(job)
+
+    def register_file_pending(self, kind: str, handler: FilePendingHandler) -> None:
+        """Entrada pendiente que espera un archivo (el contrato del abogado, spec 004)."""
+        self._file_pending[kind] = handler
 
     def register_command(self, name: str, handler: CommandHandler) -> None:
         self._commands[name] = handler
@@ -353,6 +403,9 @@ class CrmBot:
                 return compliance.answer_evidence(
                     conn, user, pending, u, prefetch, self._files, now
                 )
+            file_handler = None if pending is None else self._file_pending.get(pending.kind)
+            if pending is not None and file_handler is not None:
+                return file_handler(conn, user, pending, u, prefetch, now)
             pending_handler = None if pending is None else self._pending.get(pending.kind)
             if pending is not None and pending_handler is not None:
                 return pending_handler(conn, user, pending, u, now)
@@ -386,12 +439,15 @@ class CrmBot:
         routed = False
         out: list[Outgoing] = []
         self._export_jobs = []
+        self._deferred = []
         try:
             with self._db.tx() as tx:
-                if not repo.mark_update_processed(tx, u.update_id, now):
+                if not repo.mark_update_processed(tx, self._id_base + u.update_id, now):
                     return  # VCRM-079
-                repo.set_meta(tx, OFFSET_KEY, str(u.update_id + 1))
+                repo.set_meta(tx, self._offset_key, str(u.update_id + 1))
                 user = None if u.user_id is None else repo.active_user_by_telegram(tx, u.user_id)
+                if user is not None and not self._is_allowed(u.user_id):
+                    user = None  # lista blanca del segundo bot: silencio y auditoría
                 if user is None:  # VCRM-001/002: silencio y auditoría
                     repo.audit(
                         tx,
@@ -401,6 +457,8 @@ class CrmBot:
                         at=now,
                         detail=detail,
                     )
+                    if self._wants_id(u):
+                        out = [Outgoing(u.chat_id or 0, START_REPLY.format(id=u.user_id))]
                 elif u.chat_type != "private":
                     repo.audit(
                         tx,
@@ -415,6 +473,7 @@ class CrmBot:
                     routed = True
         except Exception as exc:  # noqa: BLE001 - regla O1: ningún error detiene el bucle
             self._export_jobs = []  # *rollback*: no se entrega nada de lo preparado
+            self._deferred = []
             out = self._record_handler_error(u, user, exc, now)
         finally:
             if prefetch is not None:  # temporal no consumido: nunca queda un archivo parcial
@@ -425,6 +484,10 @@ class CrmBot:
             if self._files is not None:
                 notice = await compliance.deliver_export(job, self._telegram, self._files)
                 await self._deliver(notice, user, now)
+        deferred, self._deferred = self._deferred, []
+        if user is not None:  # VCRM-A36: la red del asistente va fuera de la transacción
+            for later in deferred:
+                await self._deliver(await self._run_deferred(later, user.telegram_id), user, now)
         if u.callback_id is not None:
             await self._telegram.answer_callback(u.callback_id)
         if routed and self._kick is not None:
@@ -437,8 +500,8 @@ class CrmBot:
         logger.error("crm handler error: %s", type(exc).__name__)
         try:
             with self._db.tx() as tx:
-                repo.mark_update_processed(tx, u.update_id, now)
-                repo.set_meta(tx, OFFSET_KEY, str(u.update_id + 1))
+                repo.mark_update_processed(tx, self._id_base + u.update_id, now)
+                repo.set_meta(tx, self._offset_key, str(u.update_id + 1))
                 repo.audit(
                     tx,
                     actor="system" if user is None else f"user:{user.id}",
@@ -451,6 +514,26 @@ class CrmBot:
         if user is None:
             return []
         return [Outgoing(user.telegram_id, GENERIC_ERROR)]
+
+    def _wants_id(self, u: Update) -> bool:
+        text = (u.text or "").strip().lower()
+        return (
+            self._anonymous_start
+            and u.chat_type == "private"
+            and u.user_id is not None
+            and u.chat_id is not None
+            and (text == "/start" or text.startswith("/start "))
+        )
+
+    def _is_allowed(self, telegram_id: int | None) -> bool:
+        return self._allowed_ids is None or telegram_id in self._allowed_ids
+
+    async def _run_deferred(self, job: DeferredJob, chat_id: int) -> list[Outgoing]:
+        try:
+            return await job()
+        except Exception as exc:  # noqa: BLE001 - regla O1: ningún error detiene el bucle
+            logger.error("trabajo diferido falló: %s", type(exc).__name__)
+            return [Outgoing(chat_id, GENERIC_ERROR)]
 
     async def _deliver(self, out: list[Outgoing], actor: User | None, now: datetime) -> None:
         """Envío único; si no consta entregado → fila `fallida` sin cuerpo (VCRM-012)."""
@@ -472,7 +555,7 @@ class CrmBot:
         self, stop: asyncio.Event, heartbeat: Callable[[], None] | None = None
     ) -> None:
         with self._db.read() as conn:
-            raw = repo.get_meta(conn, OFFSET_KEY)
+            raw = repo.get_meta(conn, self._offset_key)
         offset = None if raw is None else int(raw)
         while not stop.is_set():
             try:

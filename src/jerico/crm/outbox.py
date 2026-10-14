@@ -82,7 +82,11 @@ class OutboxWorker:
         *,
         interval_s: float = DEFAULT_INTERVAL_S,
         on_failed: OnFailed | None = None,
+        lawyer_telegram: TelegramPort | None = None,
     ) -> None:
+        """`lawyer_telegram`: bot propio del abogado (spec 004); sus avisos salen por ahí."""
+        self._lawyer_telegram = lawyer_telegram
+        self._lawyer_ids: frozenset[int] = frozenset()
         self._db = db
         self._telegram = telegram
         self._email = email
@@ -115,6 +119,7 @@ class OutboxWorker:
         with self._db.read() as conn:
             due = repo.due_outbox(conn, now)
             targets = [self._target(conn, item) for item in due]
+            self._lawyer_ids = frozenset(u.id for u in repo.active_users(conn, Role.LAWYER))
         results = await asyncio.gather(
             *(self._send(item, target) for item, target in zip(due, targets, strict=True)),
             return_exceptions=True,
@@ -137,7 +142,12 @@ class OutboxWorker:
         if target is None:
             return SendResult(delivered=False, error="recipient_not_found", permanent=True)
         if item.channel == Channel.TELEGRAM:
-            return await self._telegram.send_message(int(target), item.body or "")
+            port = (
+                self._lawyer_telegram
+                if self._lawyer_telegram is not None and item.recipient_user_id in self._lawyer_ids
+                else self._telegram
+            )
+            return await port.send_message(int(target), item.body or "")
         return await self._email.send(str(target), item.subject or "", item.body or "")
 
     def _record(

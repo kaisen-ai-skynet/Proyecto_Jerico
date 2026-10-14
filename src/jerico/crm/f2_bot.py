@@ -154,7 +154,10 @@ def register_f2(bot: CrmBot, ctx: F2Context) -> None:
         if ctx.kick_delivery is not None:
             ctx.kick_delivery()
         return [
-            Outgoing(user.telegram_id, "Reintento programado: se enviará en el próximo barrido.")
+            Outgoing(
+                user.telegram_id,
+                "Reintento programado con éxito: se enviará en el próximo ciclo de envíos.",
+            )
         ]
 
     def cancel_failed(
@@ -192,7 +195,11 @@ def register_f2(bot: CrmBot, ctx: F2Context) -> None:
         lead_id = parse_short_id(parts[1]) if len(parts) == 2 else None
         if lead_id is None:
             return [
-                Outgoing(user.telegram_id, f"Formato no válido. Ejemplo: {EXAMPLE_REQUEST_AUTH}")
+                Outgoing(
+                    user.telegram_id,
+                    f"Formato no válido: debes indicar el lead para pedir la autorización. "
+                    f"Ejemplo: {EXAMPLE_REQUEST_AUTH}",
+                )
             ]
         return authreq.request_authorization(
             conn, user, lead_id, now, ctx.keys, ctx.settings, ctx.sender_name

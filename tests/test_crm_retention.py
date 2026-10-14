@@ -371,3 +371,15 @@ def test_vcrm147_failed_attachment_expiry_alerts_and_retries(
     _sweep(db, tg, store, ten + timedelta(days=1))
     assert not (store.base_dir / photo).exists()
     assert len(_audits(db, AuditAction.ATTACHMENT_EXPIRED)) == 1
+
+
+def test_retention_expire_attachments_sin_file_store_avisa_error(
+    db: CrmDatabase, tg: FakeTelegram, store: FlakyStore, users: dict[str, User]
+) -> None:
+    lead_id = _lead(db, users["com"].id, LeadState.WON, won_at=START)
+    _attach(db, store, lead_id, users["com"].id, "photo")
+    ten = add_years(START, 10)
+    asyncio.run(retention.daily_sweep(db, tg, ten, PARAMS, store=None, keys=(KEY,)))
+    cto_alerts = _texts(tg, CTO_TG)
+    assert len(cto_alerts) == 1
+    assert "no file store configured" in cto_alerts[0]

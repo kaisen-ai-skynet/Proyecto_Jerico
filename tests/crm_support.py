@@ -146,6 +146,16 @@ class SentEmail:
     headers: dict[str, str] = field(default_factory=dict)
 
 
+@dataclass(frozen=True)
+class SentAttachment:
+    to: str
+    subject: str
+    body: str
+    filename: str
+    content: bytes
+    mime: str
+
+
 class FakeEmailSender:
     """Doble de `EmailSender`; `configured=False` imita `UnconfiguredEmailSender`."""
 
@@ -153,6 +163,7 @@ class FakeEmailSender:
         self.configured = configured
         self.sent: list[SentEmail] = []
         self.attempts: list[SentEmail] = []
+        self.attachments: list[SentAttachment] = []
         self._failures: defaultdict[str, int] = defaultdict(int)
 
     def fail_next(self, to: str, times: int = 1) -> None:
@@ -170,6 +181,24 @@ class FakeEmailSender:
             return SendResult(delivered=False, error="smtp_error:SMTPServerDisconnected")
         self.sent.append(item)
         return SendResult(delivered=True, message_id=f"<{len(self.sent)}@fake.test>")
+
+    async def send_with_attachment(
+        self,
+        to: str,
+        subject: str,
+        body: str,
+        *,
+        filename: str,
+        content: bytes,
+        mime: str = "application/pdf",
+    ) -> SendResult:
+        if not self.configured:
+            return SendResult(delivered=False, permanent=True, error="mailbox_not_configured")
+        if self._failures[to] > 0:
+            self._failures[to] -= 1
+            return SendResult(delivered=False, error="smtp_error:SMTPServerDisconnected")
+        self.attachments.append(SentAttachment(to, subject, body, filename, content, mime))
+        return SendResult(delivered=True, message_id=f"<att{len(self.attachments)}@fake>")
 
 
 class FakeClock:

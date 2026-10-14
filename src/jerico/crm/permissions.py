@@ -35,6 +35,12 @@ class Action(StrEnum):
     REASSIGN = "reassign"
     RESOLVE_ALERT = "resolve_alert"
     MANAGE_CADENCE = "manage_cadence"  # F2: pausar, reanudar, frecuencia y reactivar
+    # Spec 004
+    PACKAGE_MANAGE = "package_manage"  # armar, editar, confirmar y cancelar el paquete de cierre
+    PACKAGE_VIEW = "package_view"  # consultar el paquete y el estado del contrato
+    CONTRACT_UPLOAD = "contract_upload"  # el abogado sube, devuelve o marca forma especial
+    CONTRACT_APPROVE = "contract_approve"  # aprobar el envío a firma (sale al cliente)
+    MAILBOX_VIEW = "mailbox_view"  # ver buzones y candidatos de lead
 
 
 Denial = Literal["role", "foreign_lead"]
@@ -67,6 +73,13 @@ MATRIX: dict[Action, dict[Role, Scope]] = {
     Action.REASSIGN: _row(_N, _A, _N),
     Action.RESOLVE_ALERT: _row(_N, _A, _N),
     Action.MANAGE_CADENCE: _row(_O, _A, _N),  # el abogado no accede al seguimiento (plan-f2 §5.9)
+    Action.PACKAGE_MANAGE: _row(_O, _A, _N),
+    Action.PACKAGE_VIEW: _row(
+        _O, _A, _V
+    ),  # el abogado, solo leads que alguna vez fueron «aceptado»
+    Action.CONTRACT_UPLOAD: _row(_N, _N, _V),  # VCRM-R04: solo el abogado sube contratos
+    Action.CONTRACT_APPROVE: _row(_O, _A, _N),  # VCRM-R04: el abogado no aprueba envíos
+    Action.MAILBOX_VIEW: _row(_O, _A, _N),  # VCRM-M02: cada comercial su buzón, el CTO todos
 }
 
 

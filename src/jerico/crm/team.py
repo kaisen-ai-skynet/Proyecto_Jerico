@@ -25,7 +25,7 @@ DENIED = "No tiene permiso para esta acción."
 _NOT_ADDED = " No se dio de alta al usuario."
 _ROLE_WORDS = {"comercial": Role.COMMERCIAL, "abogado": Role.LAWYER}
 _TG_RE = re.compile(r"^\d{1,19}$", re.ASCII)
-_REASSIGN_USAGE = "Use: /reasignar L-n; telegram_id|cto"
+_REASSIGN_USAGE = "Usa: /reasignar L-n; telegram_id|cto"
 
 
 def _body(text: str, command: str) -> str:
@@ -101,7 +101,7 @@ def add_user(conn: sqlite3.Connection, actor: User, text: str, now: datetime) ->
     if not raw_role:
         error = "Falta el rol (comercial o abogado)."
     elif role is None:
-        error = "El rol no es válido: use comercial o abogado."
+        error = "El rol no es válido: usa comercial o abogado."
     elif not raw_tg:
         error = "Falta el identificador de Telegram."
     elif telegram_id is None:
@@ -216,7 +216,7 @@ def reassign_keyboard(
         )
         for user in _targets(conn)
     )
-    text = f"Reasignar {short_id(lead_id)} ({assignee_label(current)}). Elija el destino:"
+    text = f"Reasignar {short_id(lead_id)} ({assignee_label(current)}). Elige el destino:"
     return [Outgoing(actor.telegram_id, text, rows)]
 
 

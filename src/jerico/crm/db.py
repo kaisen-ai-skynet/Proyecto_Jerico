@@ -10,6 +10,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
+from jerico.crm.closing_schema import CLOSING_DDL
 from jerico.crm.migrate import migrate_if_needed
 
 BUSY_TIMEOUT_MS = 60_000
@@ -194,6 +195,8 @@ _DDL: tuple[str, ...] = (
 )""",
     "INSERT INTO crm_meta (key, value) VALUES ('schema_version', '2') ON CONFLICT (key) DO NOTHING",
 )
+
+_DDL = _DDL + CLOSING_DDL
 
 SCHEMA_SQL = ";\n".join(_DDL) + ";\n"
 

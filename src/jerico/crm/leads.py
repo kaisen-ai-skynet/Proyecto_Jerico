@@ -92,7 +92,7 @@ AUTH_EVIDENCE_KIND = "authorization_evidence"
 SUPPRESSED = "Ese contacto solicitó no ser contactado. No se registró el lead."
 HIDDEN_DUPLICATE = "El contacto ya está registrado en el sistema; se avisó al CTO."
 AUTH_QUESTION = (
-    "¿Cuenta con un documento firmado o una captura que pruebe la autorización del titular?"
+    "¿Cuentas con un documento firmado o una captura que demuestre la autorización del titular?"
 )
 NO_ACCESS = "No tiene permiso para esta acción: no tiene acceso a ese lead."  # VCRM-109
 EXAMPLE_NOTE = "/nota L-0042; Llamar el martes para enviar la propuesta"
@@ -371,7 +371,7 @@ def add_attachment(
     tokens = (caption or "").split()
     lead_id = parse_short_id(tokens[0]) if tokens else None
     if lead_id is None:
-        text = f"Indique el lead en el pie del archivo (por ejemplo, L-0042). {NOT_SAVED}"
+        text = f"Por favor, indica el lead en el pie del archivo (por ejemplo, L-0042). {NOT_SAVED}"
         return [Outgoing(chat, text)]
     lead = repo.get_lead(conn, lead_id)
     if lead is None:
@@ -379,7 +379,11 @@ def add_attachment(
     if not file.result.ok:
         if file.result.error == "too_large":
             return [Outgoing(chat, f"El archivo supera el límite de 20 MB. {NOT_SAVED}")]
-        return [Outgoing(chat, f"No se pudo descargar el archivo. {NOT_SAVED} Intente de nuevo.")]
+        return [
+            Outgoing(
+                chat, f"No se pudo descargar el archivo. {NOT_SAVED} Por favor, intenta de nuevo."
+            )
+        ]
     decision = authorize(actor, Action.NOTE_ATTACH, lead)
     if not decision.allowed:
         return deny_lead(conn, actor, decision, lead.id, now)
@@ -436,7 +440,7 @@ def _edit_error_text(text: str, error: ParseError) -> str:
     if error.code == "field_not_editable":
         cause = f"El campo «{error.field}» no es editable."
     else:
-        cause = "Indique el lead (L-n), el campo y el valor."
+        cause = "Indica el lead (L-n), el campo y el valor."
     return f"{cause} {NOT_MODIFIED} {_editable_line()} Ejemplo: {EXAMPLE_EDIT}"
 
 
@@ -671,13 +675,13 @@ def _reason_prompt(actor: User, lead_id: int) -> Outgoing:
         for code, label in REJECT_REASONS.items()
     )
     return Outgoing(
-        actor.telegram_id, f"Elija el motivo de rechazo de {short_id(lead_id)}:", (row,)
+        actor.telegram_id, f"Elige el motivo de rechazo de {short_id(lead_id)}:", (row,)
     )
 
 
 def _ask_other_text(conn: sqlite3.Connection, actor: User, lead_id: int, now: datetime) -> Outgoing:
     repo.set_pending_input(conn, user_id=actor.id, kind=REJECT_TEXT_KIND, now=now, lead_id=lead_id)
-    return Outgoing(actor.telegram_id, f"Escriba el motivo de rechazo de {short_id(lead_id)}.")
+    return Outgoing(actor.telegram_id, f"Escribe el motivo de rechazo de {short_id(lead_id)}.")
 
 
 def _invalid_transition_text(src: LeadState, dst: LeadState, check: TransitionCheck) -> str:
@@ -822,7 +826,7 @@ def request_accept(
     )
     missing = missing_handoff_fields(lead)
     lines = [
-        f"¿Confirma la aceptación de {short_id(lead.id)}?",
+        f"¿Confirmas la aceptación de {short_id(lead.id)}?",
         f"Nombre o razón social: {name_or_company(lead) or lead.name or NO_VALUE}",
         f"Comercial: {_commercial(conn, lead)}",
         f"Estado actual: {src}",
@@ -1000,7 +1004,7 @@ def _retract_reason_prompt(actor: User, lead_id: int) -> Outgoing:
         (label, build_callback("rmotivo", str(lead_id), code))
         for code, label in REJECT_REASONS.items()
     )
-    text = f"Elija el motivo de la retractación de {short_id(lead_id)}:"
+    text = f"Elige el motivo de la retractación de {short_id(lead_id)}:"
     return Outgoing(actor.telegram_id, text, (row,))
 
 
@@ -1037,7 +1041,7 @@ def request_retract(
         repo.set_pending_input(
             conn, user_id=actor.id, kind=RETRACT_TEXT_KIND, now=now, lead_id=lead.id
         )
-        return [Outgoing(chat, f"Escriba el motivo de la retractación de {sid}.")]
+        return [Outgoing(chat, f"Escribe el motivo de la retractación de {sid}.")]
     conf_id = repo.create_confirmation(
         conn,
         kind=RETRACT_KIND,
@@ -1048,7 +1052,7 @@ def request_retract(
         reason_text=reason_text,
     )
     lines = [
-        f"¿Confirma la retractación de {sid}?",
+        f"¿Confirmas la retractación de {sid}?",
         f"Nombre o razón social: {name_or_company(lead) or lead.name or NO_VALUE}",
         f"Motivo: {_reason_label(reason, reason_text)}",
     ]

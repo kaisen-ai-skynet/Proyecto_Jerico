@@ -18,7 +18,7 @@ from jerico.crm.bot import CrmBot
 from jerico.crm.db import CrmDatabase
 from jerico.crm.files import MAX_ATTACHMENT_BYTES, LocalFileStore
 from jerico.crm.fingerprint import fingerprint
-from jerico.crm.model import AuditAction, AuthStatus, Channel, LeadState, Role, User
+from jerico.crm.model import AuditAction, AuthStatus, Channel, LeadState, PendingInput, Role, User
 from jerico.crm.outbox import OutboxWorker, enqueue_critical
 from jerico.crm.ports import FileKind, FileRef, Update
 from jerico.crm.timeutil import to_iso
@@ -657,3 +657,60 @@ def test_system_email_only_goes_to_authorized_users(
     assert mail.attempts
     assert {m.to for m in mail.attempts} <= allowed
     assert EMAIL not in {m.to for m in mail.attempts}
+
+
+def test_compliance_record_authorization_file_limpia_archivo_si_falla_bd(
+    db: CrmDatabase,
+    store: LocalFileStore,
+    users: dict[str, User],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from jerico.crm.leads import DownloadResult, Prefetched
+
+    lead_id = _lead(db, users["com"].id)
+    temp_file = tmp_path / "temp_ev.pdf"
+    temp_file.write_bytes(b"evidencia")
+    prefetched = Prefetched(
+        kind="document",
+        path=temp_file,
+        result=DownloadResult(ok=True, size=9),
+    )
+    pending = PendingInput(
+        user_id=users["com"].id,
+        kind="auth_evidence",
+        lead_id=lead_id,
+        data=None,
+        expires_at=to_iso(START),
+    )
+    update = Update(update_id=1, user_id=COM_TG, chat_id=COM_TG, chat_type="private")
+
+    def _fail_insert(*args: Any, **kwargs: Any) -> None:
+        raise RuntimeError("BD error simulado")
+
+    monkeypatch.setattr("jerico.crm.repo.insert_attachment", _fail_insert)
+
+    with db.tx() as tx:
+        with pytest.raises(RuntimeError, match="BD error simulado"):
+            compliance.answer_evidence(tx, users["com"], pending, update, prefetched, store, START)
+    assert not any(p.is_file() for p in store.base_dir.rglob("*"))
+
+
+def test_vcrm121_record_authorization_file_lead_rechazado_arranca_cadencia(
+    bot: CrmBot, tg: FakeTelegram, db: CrmDatabase, users: dict[str, User]
+) -> None:
+    lead_id = _lead(db, users["com"].id)
+    with db.tx() as tx:
+        repo.update_lead(
+            tx,
+            lead_id,
+            {"state": LeadState.REJECTED.value, "reject_reason": "precio"},
+            now=START,
+        )
+        repo.set_meta(tx, "f2_activated_at", to_iso(START))
+    _authorize_with_file(bot, tg, COM_TG, "document")
+    with db.read() as conn:
+        lead = repo.get_lead(conn, lead_id)
+        assert lead is not None and lead.state == "nurturing"
+        cad = repo.get_cadence(conn, lead_id)
+        assert cad is not None and cad.status == "active"

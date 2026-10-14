@@ -311,3 +311,10 @@ def test_deliver_now_no_hace_nada_si_f2_no_esta_activa(tmp_path: Path) -> None:
     asyncio.run(sweep.deliver_now(env.ctx, NOW))
     assert env.email.attempts == []
     env.close()
+
+
+def test_deliver_now_no_hace_nada_si_faltan_ajustes_f2(tmp_path: Path) -> None:
+    env = Env(tmp_path, settings=make_settings())
+    asyncio.run(sweep.deliver_now(env.ctx, NOW))
+    assert env.email.attempts == []
+    env.close()
