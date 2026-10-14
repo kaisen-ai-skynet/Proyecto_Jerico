@@ -5,10 +5,14 @@ Requisitos: VCRM-020..026; plan-f2 §5.9.
 import sqlite3
 from datetime import datetime
 
+from loguru import logger
+
 from jerico.crm import followup, leads, permissions, render, repo, timeutil
 from jerico.crm.model import Lead, LeadState, Outgoing, User
 from jerico.crm.parsing import build_callback
 from jerico.crm.render import short_id
+from jerico.decision.config import load_settings
+from jerico.decision.port import decidir
 
 NO_FOLLOWUP = "No hay leads en seguimiento."
 
@@ -41,6 +45,50 @@ def _format_lead_line(conn: sqlite3.Connection, lead: Lead) -> str:
     )
 
 
+def lead_followup_state(conn: sqlite3.Connection, lead: Lead, now: datetime) -> dict[str, str]:
+    """Calcula el vector de estado de un lead para la decisión de seguimiento_lead (VJT-063)."""
+    last_iso = lead.last_interaction_at or lead.registered_at
+    if last_iso:
+        days = max((now - timeutil.from_iso(last_iso)).days, 0)
+    else:
+        days = 0
+
+    if days == 0:
+        dias_bucket = "0"
+    elif 1 <= days <= 2:
+        dias_bucket = "1-2"
+    elif 3 <= days <= 7:
+        dias_bucket = "3-7"
+    elif 8 <= days <= 14:
+        dias_bucket = "8-14"
+    elif 15 <= days <= 30:
+        dias_bucket = "15-30"
+    elif 31 <= days <= 90:
+        dias_bucket = "31-90"
+    else:
+        dias_bucket = "mas_de_90"
+
+    cad = repo.get_cadence(conn, lead.id)
+    sent_count = cad.sent_count if cad is not None else 0
+    paso_val = str(min(max(sent_count, 0), 4))
+
+    state_map = {
+        LeadState.NEW.value: "nuevo",
+        LeadState.CONTACTED.value: "en_contacto",
+        LeadState.ACCEPTED.value: "propuesta",
+        LeadState.NURTURING.value: "esperando_cliente",
+        LeadState.PAUSED.value: "pausado",
+    }
+    estado_val = state_map.get(lead.state, "esperando_cliente")
+
+    return {
+        "dias_sin_contacto": dias_bucket,
+        "paso_cadencia": paso_val,
+        "estado_lead": estado_val,
+        "intentos_fallidos": "0",
+    }
+
+
 def following_command(
     conn: sqlite3.Connection, actor: User, text: str, now: datetime
 ) -> list[Outgoing]:
@@ -57,6 +105,16 @@ def following_command(
         return [Outgoing(actor.telegram_id, NO_FOLLOWUP)]
 
     in_followup.sort(key=lambda lead: lead.id)
+
+    # Enganche de decisión consultivo/asesor para seguimiento_lead (VJT-010a, VJT-063, T10):
+    try:
+        dec_settings = load_settings()
+        for lead in in_followup:
+            state = lead_followup_state(conn, lead, now)
+            decidir("seguimiento_lead", state=state, settings=dec_settings)
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("seguimiento: fallo al evaluar decision ({})", exc)
+
     lines = [_format_lead_line(conn, lead) for lead in in_followup]
     chunks = render.split_message("\n".join(lines))
     return [Outgoing(actor.telegram_id, chunk) for chunk in chunks]
@@ -111,4 +169,5 @@ __all__ = [
     "NO_FOLLOWUP",
     "cadence_buttons",
     "following_command",
+    "lead_followup_state",
 ]

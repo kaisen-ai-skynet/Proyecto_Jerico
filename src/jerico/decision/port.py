@@ -109,22 +109,23 @@ def decidir(
 
         # 4. Optimización de una sola opción (VJT-008)
         if len(allowed) == 1:
-            active_recorder.record(
-                {
-                    "event_id": event_id,
-                    "decision_key": dkey,
-                    "kind": kind,
-                    "tarea": tarea,
-                    "mode": modo,
-                    "state": state,
-                    "base_option": spec.base,
-                    "applied_option": allowed[0],
-                    "suggested_option": None,
-                    "source": "base",
-                    "reason": "una_opcion",
-                    "policy_version": active_policy.version,
-                }
-            )
+            if modo != "apagado":
+                active_recorder.record(
+                    {
+                        "event_id": event_id,
+                        "decision_key": dkey,
+                        "kind": kind,
+                        "tarea": tarea,
+                        "mode": modo,
+                        "state": state,
+                        "base_option": spec.base,
+                        "applied_option": allowed[0],
+                        "suggested_option": None,
+                        "source": "base",
+                        "reason": "una_opcion",
+                        "policy_version": active_policy.version,
+                    }
+                )
             return Decision(
                 option=allowed[0],
                 source="base",
@@ -135,22 +136,23 @@ def decidir(
 
         # 5. Modos apagado, sombra o clases A / asesor (VJT-003, VJT-010a, VJT-011)
         if spec.clase == "A" or spec.asesor or modo in ("apagado", "sombra"):
-            active_recorder.record(
-                {
-                    "event_id": event_id,
-                    "decision_key": dkey,
-                    "kind": kind,
-                    "tarea": tarea,
-                    "mode": modo,
-                    "state": state,
-                    "base_option": spec.base,
-                    "applied_option": spec.base,
-                    "suggested_option": None,
-                    "source": "base",
-                    "reason": modo,
-                    "policy_version": active_policy.version,
-                }
-            )
+            if modo != "apagado":
+                active_recorder.record(
+                    {
+                        "event_id": event_id,
+                        "decision_key": dkey,
+                        "kind": kind,
+                        "tarea": tarea,
+                        "mode": modo,
+                        "state": state,
+                        "base_option": spec.base,
+                        "applied_option": spec.base,
+                        "suggested_option": None,
+                        "source": "base",
+                        "reason": modo,
+                        "policy_version": active_policy.version,
+                    }
+                )
             return Decision(
                 option=spec.base,
                 source="base",
@@ -166,11 +168,7 @@ def decidir(
             aplicada, motivo_piso = apply_floor(
                 spec.clase, spec.orden_exigencia, spec.base, cached_opt, allowed
             )
-            suggested = (
-                cached_opt
-                if (modo == "sugerencia" and user_role == "cto")
-                else None
-            )
+            suggested = cached_opt if (modo == "sugerencia" and user_role == "cto") else None
             if modo == "sugerencia":
                 aplicada = spec.base
             return Decision(
@@ -233,22 +231,14 @@ def decidir(
                 decision_key=dkey,
             )
 
-        jev_option = (
-            answer.get("option", spec.base)
-            if isinstance(answer, dict)
-            else str(answer)
-        )
+        jev_option = answer.get("option", spec.base) if isinstance(answer, dict) else str(answer)
         aplicada, motivo_piso = apply_floor(
             spec.clase, spec.orden_exigencia, spec.base, jev_option, allowed
         )
 
         active_cache.put(dkey, jev_option)
 
-        suggested = (
-            jev_option
-            if (modo == "sugerencia" and user_role == "cto")
-            else None
-        )
+        suggested = jev_option if (modo == "sugerencia" and user_role == "cto") else None
         if modo == "sugerencia":
             aplicada = spec.base
 

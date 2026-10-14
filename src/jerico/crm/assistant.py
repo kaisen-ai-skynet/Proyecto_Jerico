@@ -34,6 +34,8 @@ from jerico.crm.parsing import parse_short_id
 from jerico.crm.pseudonym import Redactor
 from jerico.crm.render import state_label
 from jerico.crm.timeutil import from_iso
+from jerico.decision.config import load_settings
+from jerico.decision.port import decidir
 
 COMMAND = "asistente"
 MIN_OUTPUT_TOKENS = 50
@@ -95,7 +97,6 @@ class AssistantContext:
     budget: AssistantBudget
     clock: Callable[[], datetime]
     memory: AssistantMemory | None = None
-
 
 
 def _days_ago(iso: str, now: datetime) -> int:
@@ -296,6 +297,40 @@ async def _run(
     if client is None:  # el manejador ya lo descarta; defensa ante un cambio de cableado
         return [Outgoing(chat, UNAVAILABLE)]  # pragma: no cover
     role_str = user.role.value if hasattr(user.role, "value") else str(user.role)
+    task_map = {
+        "resumen": "resumen_lead",
+        "borrador": "borrador",
+        "pregunta": "cifras_agregadas",
+    }
+    task_name = task_map.get(sub, "resumen_lead")
+    prompt_len = len(prompt)
+    if prompt_len < 1000:
+        context_len = "corta"
+    elif prompt_len < 3000:
+        context_len = "media"
+    else:
+        context_len = "larga"
+
+    state = {
+        "tipo_tarea": task_name,
+        "longitud_contexto": context_len,
+    }
+
+    selected_model = ctx.settings.openai_model
+    try:
+        dec_settings = load_settings()
+        decision = decidir(
+            "modelo_asistente",
+            state=state,
+            tarea=task_name,
+            settings=dec_settings,
+            user_role=role_str,
+        )
+        if decision.option:
+            selected_model = decision.option
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("asistente: decidir fallback a modelo base ({})", exc)
+
     memory_ready = False
     if ctx.memory is not None and session_id is not None:
         try:
@@ -304,7 +339,7 @@ async def _run(
                 user_id=user.id,
                 role=role_str,
                 system_prompt=SYSTEM_PROMPTS[sub],
-                model=ctx.settings.openai_model,
+                model=selected_model,
             )
             memory_ready = True
         except Exception as exc:
@@ -337,7 +372,7 @@ async def _run(
                 role=role_str,
                 user_prompt=prompt,
                 assistant_response=result.text,
-                model=ctx.settings.openai_model,
+                model=selected_model,
                 prompt_tokens=result.input_tokens,
                 completion_tokens=result.output_tokens,
             )
