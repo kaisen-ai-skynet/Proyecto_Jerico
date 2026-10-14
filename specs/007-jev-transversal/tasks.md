@@ -98,7 +98,7 @@ Se guarda el código de salida real (sin tuberías que lo oculten). Debe pasar r
   - **Entregable exacto:** llamada a `decidir` en el asistente y registro del tipo `seguimiento_lead`; sin cambiar mensajes, topes ni presupuesto del asistente.
   - **Hecho cuando:** las pruebas del asistente existentes y nuevas pasan.
 
-- [ ] **T11 — Módulo CRM-consejero**
+- [x] **T11 — Módulo CRM-consejero**
   - **Delegable a Gemini:** según cada tarea (ver `crm-consejero/tasks.md`).
   - Requisitos: `VJC-001` a `VJC-040`.
   - **BLOQUEADA hasta:** Q2 y Q5 del módulo resueltas por el CTO (bloquean su Gate 1) y T08 hecha.
