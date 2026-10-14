@@ -51,3 +51,6 @@ TDD por tarea; dobles para IMAP/SMTP/firma/Telegram; pruebas negativas obligator
 
 ## 7. Estimación orientativa (sin verificar)
 C1 ≈ 12 tareas, C2 ≈ 12, C3 ≈ 14 (ver `tasks.md`).
+
+## 8. Decisión del 14/10 — bot del abogado (con Jev)
+Consultado Jev (`jev_decidir.py`): **mismo servicio con dos bots** frente a un proceso aparte. Elegido el mismo servicio: un solo escritor SQLite, un contenedor y un despliegue; el aislamiento de fallos se cubre con la lista blanca, el offset propio y el modo mínimo del `CrmBot`. Ver `implementacion.md`.
