@@ -296,14 +296,19 @@ async def _run(
     if client is None:  # el manejador ya lo descarta; defensa ante un cambio de cableado
         return [Outgoing(chat, UNAVAILABLE)]  # pragma: no cover
     role_str = user.role.value if hasattr(user.role, "value") else str(user.role)
+    memory_ready = False
     if ctx.memory is not None and session_id is not None:
-        ctx.memory.get_or_create_session(
-            session_id=session_id,
-            user_id=user.id,
-            role=role_str,
-            system_prompt=SYSTEM_PROMPTS[sub],
-            model=ctx.settings.openai_model,
-        )
+        try:
+            ctx.memory.get_or_create_session(
+                session_id=session_id,
+                user_id=user.id,
+                role=role_str,
+                system_prompt=SYSTEM_PROMPTS[sub],
+                model=ctx.settings.openai_model,
+            )
+            memory_ready = True
+        except Exception as exc:
+            logger.warning("asistente: memoria get_or_create_session degradada ({})", exc)
     try:
         result = await client.complete(
             system=SYSTEM_PROMPTS[sub],
@@ -324,17 +329,20 @@ async def _run(
         _audit(tx, user, lead_id, AuditOutcome.OK, now)
         if outcome.cap_reached:
             notice = _cto_notice(tx, ctx, now)
-    if ctx.memory is not None and session_id is not None:
-        ctx.memory.record_turn(
-            session_id=session_id,
-            user_id=user.id,
-            role=role_str,
-            user_prompt=prompt,
-            assistant_response=result.text,
-            model=ctx.settings.openai_model,
-            prompt_tokens=result.input_tokens,
-            completion_tokens=result.output_tokens,
-        )
+    if memory_ready and ctx.memory is not None and session_id is not None:
+        try:
+            ctx.memory.record_turn(
+                session_id=session_id,
+                user_id=user.id,
+                role=role_str,
+                user_prompt=prompt,
+                assistant_response=result.text,
+                model=ctx.settings.openai_model,
+                prompt_tokens=result.input_tokens,
+                completion_tokens=result.output_tokens,
+            )
+        except Exception as exc:
+            logger.warning("asistente: memoria record_turn degradada ({})", exc)
     cost = "no calculado" if outcome.cost_usd is None else f"{outcome.cost_usd:.4f} USD"
     logger.info(  # A21: sin texto del prompt ni de la respuesta
         "asistente: caso={} usuario={} entrada={} salida={} costo={}",

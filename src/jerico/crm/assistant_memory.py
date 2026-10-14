@@ -63,10 +63,19 @@ class AssistantMemory:
             raise AccessDeniedError(
                 f"acceso denegado: la sesión pertenece al usuario {record.user_id}"
             )
+        current_role = record.role if record.role is not None else role
+        if record.role is not None and record.role != role:
+            with self.engine._transaction() as conn:
+                conn.execute(
+                    "UPDATE sessions SET role = ?, updated_at = CURRENT_TIMESTAMP "
+                    "WHERE session_id = ?",
+                    (role, session_id),
+                )
+            current_role = role
         return AssistantSessionRecord(
             session_id=record.session_id,
             user_id=record.user_id if record.user_id is not None else user_id,
-            role=record.role if record.role is not None else role,
+            role=current_role,
             model=record.model,
             system_prompt_hash=record.system_prompt_hash,
             created_at=record.created_at,
@@ -86,6 +95,13 @@ class AssistantMemory:
             raise AccessDeniedError(
                 f"acceso denegado: usuario {user_id} intentó acceder a sesión de usuario {owner_id}"
             )
+        if row["role"] is not None and row["role"] != role:
+            with self.engine._transaction() as conn:
+                conn.execute(
+                    "UPDATE sessions SET role = ?, updated_at = CURRENT_TIMESTAMP "
+                    "WHERE session_id = ?",
+                    (role, session_id),
+                )
 
     def record_turn(
         self,
