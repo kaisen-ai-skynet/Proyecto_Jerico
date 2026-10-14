@@ -11,6 +11,11 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 
+from jerico.marketing.adaptadores.base import AdaptadorCanalBase
+from jerico.marketing.adaptadores.email_adapter import EmailAdapter
+from jerico.marketing.adaptadores.meta_ads_adapter import MetaAdsAdapter
+from jerico.marketing.adaptadores.social_organic_adapter import SocialOrganicAdapter
+from jerico.marketing.adaptadores.whatsapp_cloud_adapter import WhatsAppCloudAdapter
 from jerico.marketing.perfeccionador import PerfeccionadorMarketing
 from jerico.schemas.marketing import (
     CampanaMarketing,
@@ -41,6 +46,16 @@ class OrquestadorMarketing:
         self.gasto_acumulado_mensual_usd = Decimal("0.00")
         self._campanas: dict[str, CampanaMarketing] = {}
         self._despachos_ejecutados: set[str] = set()
+        self.adaptadores: dict[CanalMarketing, AdaptadorCanalBase] = {
+            CanalMarketing.CORREO: EmailAdapter(dry_run=self.dry_run),
+            CanalMarketing.WHATSAPP_OFICIAL: WhatsAppCloudAdapter(dry_run=self.dry_run),
+            CanalMarketing.META_ADS: MetaAdsAdapter(
+                dry_run=self.dry_run,
+                presupuesto_maximo_usd=self.presupuesto_maximo_mensual_usd,
+            ),
+            CanalMarketing.INSTAGRAM: SocialOrganicAdapter(dry_run=self.dry_run),
+            CanalMarketing.FACEBOOK: SocialOrganicAdapter(dry_run=self.dry_run),
+        }
 
     def proponer_campana(
         self,
@@ -145,9 +160,18 @@ class OrquestadorMarketing:
         campana.estado = EstadoCampana.RECHAZADA
         return campana
 
-    def despachar_campana(self, campana_id: str) -> dict[str, Any]:
+    def despachar_campana(
+        self,
+        campana_id: str,
+        destinatario: str | None = None,
+    ) -> dict[str, Any]:
         """Ejecuta el despacho de la campaña validando aprobación e idempotencia."""
         campana = self.obtener_campana(campana_id)
+
+        if campana.idempotency_key in self._despachos_ejecutados:
+            raise ValueError(
+                f"Despacho duplicado bloqueado por idempotencia: {campana.idempotency_key}"
+            )
 
         if campana.estado != EstadoCampana.APROBADA:
             msg = (
@@ -156,19 +180,15 @@ class OrquestadorMarketing:
             )
             raise PermissionError(msg)
 
-        if campana.idempotency_key in self._despachos_ejecutados:
-            raise ValueError(
-                f"Despacho duplicado bloqueado por idempotencia: {campana.idempotency_key}"
-            )
+        # Destinatario efectivo
+        dest_efectivo = destinatario or self._obtener_destinatario_por_defecto(campana.canal)
 
-        # Verificaciones por canal
-        if campana.canal == CanalMarketing.WHATSAPP_OFICIAL:
-            # WhatsApp exige Cloud API oficial
-            pass
-        elif campana.canal == CanalMarketing.META_ADS:
-            config = campana.meta_ad_config
-            if config and config.gasto_autorizado_usd > self.presupuesto_maximo_mensual_usd:
-                raise ValueError("Gasto de Meta Ads excede el límite permitido.")
+        # Despacho delegado a través del adaptador especializado
+        adaptador = self.adaptadores.get(campana.canal)
+        detalles_adaptador: dict[str, Any] = {}
+        if adaptador:
+            res_adaptador = adaptador.despachar(campana, destinatario=dest_efectivo)
+            detalles_adaptador = res_adaptador.detalles
 
         # Despacho en DRY_RUN simulado
         resultado: dict[str, Any]
@@ -178,9 +198,11 @@ class OrquestadorMarketing:
                 "campana_id": campana.id,
                 "canal": campana.canal.value,
                 "nombre": campana.nombre,
+                "destinatario": dest_efectivo,
                 "gasto_autorizado_usd": str(campana.gasto_autorizado_usd),
                 "idempotency_key": campana.idempotency_key,
                 "mensaje": "Despacho simulado exitoso sin emisión a red ni costo real.",
+                "detalles_adaptador": detalles_adaptador,
             }
         else:
             # En producción real requiere autorización explícita y credenciales
@@ -188,10 +210,27 @@ class OrquestadorMarketing:
                 "status": "despachado_real",
                 "campana_id": campana.id,
                 "canal": campana.canal.value,
+                "destinatario": dest_efectivo,
                 "idempotency_key": campana.idempotency_key,
+                "detalles_adaptador": detalles_adaptador,
             }
 
         self._despachos_ejecutados.add(campana.idempotency_key)
         self.gasto_acumulado_mensual_usd += campana.gasto_autorizado_usd
         campana.estado = EstadoCampana.DESPACHADA
         return resultado
+
+    @staticmethod
+    def _obtener_destinatario_por_defecto(canal: CanalMarketing) -> str:
+        """Asigna un destinatario o cuenta por defecto según el canal."""
+        match canal:
+            case CanalMarketing.CORREO:
+                return "contacto@kaizen.com.co"
+            case CanalMarketing.WHATSAPP_OFICIAL:
+                return "+573001234567"
+            case CanalMarketing.META_ADS:
+                return "act_default_account"
+            case CanalMarketing.INSTAGRAM:
+                return "@kaizen_oficial"
+            case CanalMarketing.FACEBOOK:
+                return "@kaizen_facebook"
