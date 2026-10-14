@@ -702,3 +702,88 @@ def test_watch_keeps_alert_state_when_notice_fails(env: Env) -> None:
     assert failed.returncode != 0
     _watch(env, 10, "running unhealthy")  # reintenta en la siguiente pasada
     assert len(env.notices()) == 2
+
+
+# ---------------------------------------------------------------- offsite_oci.sh (copia fuera)
+
+FAKE_OCI = r"""#!/usr/bin/env python3
+import json, os, sys
+args = sys.argv[1:]
+store = os.environ["FAKE_OCI_STORE"]
+os.makedirs(store, exist_ok=True)
+with open(os.path.join(os.path.dirname(store), "oci_calls.log"), "a") as log:
+    log.write(" ".join(args) + "\n")
+if os.environ.get("FAKE_OCI_FAIL"):
+    print("ServiceError: fallo forzado", file=sys.stderr); sys.exit(1)
+def opt(name):
+    return args[args.index(name) + 1]
+if args[:3] == ["os", "object", "list"]:
+    prefix = opt("--prefix") if "--prefix" in args else ""
+    names = sorted("crm/" + n for n in os.listdir(store))
+    print(json.dumps([n for n in names if n.startswith(prefix)]))
+elif args[:3] == ["os", "object", "put"]:
+    data = open(opt("--file"), "rb").read()
+    open(os.path.join(store, opt("--name").split("/", 1)[1]), "wb").write(data)
+elif args[:3] == ["os", "object", "delete"]:
+    os.remove(os.path.join(store, opt("--name").split("/", 1)[1]))
+else:
+    print(f"oci falso: no soportado {args}", file=sys.stderr); sys.exit(3)
+"""
+
+
+@pytest.fixture
+def oci_env(env: Env) -> Env:
+    _write_exec(env.tmp / "bin" / "oci", FAKE_OCI)
+    env.vars["FAKE_OCI_STORE"] = str(env.tmp / "oci" / "store")
+    env.vars["OCI_BUCKET"] = "jerico-backups"
+    env.backup_dir.mkdir(mode=0o700)
+    return env
+
+
+def _remote(env: Env) -> set[str]:
+    store = Path(env.vars["FAKE_OCI_STORE"])
+    return set(os.listdir(store)) if store.exists() else set()
+
+
+def test_offsite_uploads_missing_encrypted_backups(oci_env: Env) -> None:
+    env = oci_env
+    a, b = env.backup_dir / _stamp(2), env.backup_dir / _stamp(1)
+    for p in (a, b):
+        p.write_bytes(AGE_HEADER + b"x")
+    (env.backup_dir / "crm-20260101T000000Z.tar.age.partial").write_bytes(b"plano")
+    assert env.run("offsite_oci.sh").returncode == 0
+    assert _remote(env) == {a.name, b.name}
+    calls = (env.tmp / "oci" / "oci_calls.log").read_text()
+    assert calls.count("object put") == 2
+    assert env.run("offsite_oci.sh").returncode == 0  # idempotente
+    assert (env.tmp / "oci" / "oci_calls.log").read_text().count("object put") == 2
+
+
+def test_offsite_refuses_unencrypted_file(oci_env: Env) -> None:
+    env = oci_env
+    (env.backup_dir / _stamp(1)).write_bytes(b"SQLite format 3 en claro")
+    result = env.run("offsite_oci.sh")
+    assert result.returncode != 0
+    assert _remote(env) == set()
+    assert env.notices()
+
+
+def test_offsite_prunes_remote_beyond_retention(oci_env: Env) -> None:
+    env = oci_env
+    store = Path(env.vars["FAKE_OCI_STORE"])
+    store.mkdir(parents=True)
+    old, keep = _stamp(40), _stamp(5)
+    (store / old).write_bytes(AGE_HEADER)
+    (store / keep).write_bytes(AGE_HEADER)
+    (store / "otro.txt").write_bytes(b"")
+    (env.backup_dir / keep).write_bytes(AGE_HEADER)
+    assert env.run("offsite_oci.sh", REMOTE_RETENTION_DAYS="60").returncode == 0  # tope 30
+    assert _remote(env) == {keep, "otro.txt"}
+
+
+def test_offsite_failure_notifies(oci_env: Env) -> None:
+    env = oci_env
+    (env.backup_dir / _stamp(1)).write_bytes(AGE_HEADER)
+    result = env.run("offsite_oci.sh", FAKE_OCI_FAIL="1")
+    assert result.returncode != 0
+    assert any("fuera" in n.lower() for n in env.notices())

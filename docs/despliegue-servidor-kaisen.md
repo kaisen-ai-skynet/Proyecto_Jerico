@@ -1,9 +1,9 @@
 ---
 tipo: runbook
 proyecto: Jericó — Kaisen AI
-estado: listo para aprobación del CTO (nada ejecutado en el servidor)
+estado: EJECUTADO en kaisen-server el 14/10/2026 (§1 sin el 1.6; §1.7 y §7 añadidos)
 creado: "13/10/2026 10:25"
-modificado: "13/10/2026 22:00"
+modificado: "14/10/2026 01:43"
 ---
 
 # Runbook — Jericó CRM en kaisen-server
@@ -87,11 +87,36 @@ df -h ~ | tail -n 1
    - Backup diario a las 03:45; log en `~/jerico-backups/backup-crm.log`.
    - Vigía cada 5 min; log en `~/.local/state/jerico/healthwatch.log`.
    - cron en WSL2: si el servidor se reinicia, cron tiene que arrancar solo. El vigía de Hermes ya usa cron, así que hoy funciona. Si algún día deja de correr: `sudo service cron status`, y lee `research.md` §5 (`systemd=true` o `[boot] command` en `/etc/wsl.conf`).
-6. **Rotación de logs** (§5): aplica el override. El contenedor se recrea con el límite de logs, lo que supone un corte de unos segundos:
+6. **Rotación de logs** (§5) — **pendiente**: el 14/10 no se aplicó porque obliga a recrear `jerico-crm` (lo hará crm-director en su próximo despliegue, usando `jcs`). Aplica el override. El contenedor se recrea con el límite de logs, lo que supone un corte de unos segundos:
    ```bash
    jcs up -d jerico-crm && jcs ps jerico-crm
    docker inspect -f '{{.HostConfig.LogConfig}}' jerico-crm      # {json-file map[max-file:3 max-size:10m]}
    ```
+
+### 1.7 Copia fuera del servidor (OCI Object Storage, decidido con Jev)
+
+- **Bucket:** `jerico-backups` en el compartment `kaisen-jerico`. Es privado (`NoPublicAccess`), Standard y sin versionado; entra en el Always Free de 20 GB. Lo creó la CLI `oci` del servidor (`~/.oci`, en 700/600).
+- **Script:** `scripts/servidor/offsite_oci.sh`. Cuando acaba `backup_crm.sh`, sube los `crm-*.tar.age` que todavía no estén en el bucket, bajo el prefijo `crm/`. Solo sube archivos con cabecera age y borra del bucket los que tengan más de 30 días.
+- **Cron:** la línea de las 03:45 encadena `backup_crm.sh && offsite_oci.sh`.
+- **Comprobación:** `~/.local/bin/oci os object list --bucket-name jerico-backups --query "data[].name"`
+
+## 7. DocuSeal (firma electrónica, spec 004)
+
+- **Instalación:** `~/docuseal/docker-compose.yml`, copia de `deploy/docuseal/docker-compose.yml`. Imagen `docuseal/docuseal:3.3.2`, volumen `docuseal_data` (SQLite en `/data`), proyecto compose `docuseal`, **aparte de jerico**.
+- **Red:** el puerto se publica **solo en `127.0.0.1:3010`**. Además está en `jerico_net`, así que el CRM lo ve en `http://docuseal:3000`.
+- **Acceso del CTO:**
+  ```bash
+  ssh -L 3010:127.0.0.1:3010 kaisen-server
+  ```
+  Luego abre `http://127.0.0.1:3010`. El usuario y la contraseña están en `~/docuseal/admin-credentials.txt` (600): pásalos a tu gestor de contraseñas y borra el archivo con `shred -u`.
+- **Variables en `~/jerico/.env`:** `JERICO_CRM_DOCUSEAL_URL=http://docuseal:3000` y `JERICO_CRM_DOCUSEAL_TOKEN`, que es el token de API del usuario admin. El CRM solo las lee al **recrear** `jerico-crm`; eso lo hace crm-director cuando despliegue la spec 004.
+- **Limitación:** los firmantes externos no pueden abrir enlaces de `127.0.0.1`. Publicar la firma hacia fuera, con un túnel y dominio y con la aprobación del CTO, es una decisión pendiente de F2.
+- **Operación:**
+  ```bash
+  docker compose -p docuseal -f ~/docuseal/docker-compose.yml ps     # estado
+  docker compose -p docuseal -f ~/docuseal/docker-compose.yml logs --tail 25
+  ```
+  Para actualizar, cambia la etiqueta fija de la imagen y ejecuta `up -d`. Antes de hacerlo, copia el volumen.
 
 ## 2. Actualizar la versión
 
@@ -223,4 +248,4 @@ cat ~/.local/state/jerico/healthwatch.state          # estado del vigía (status
 Si no llega ningún aviso pero sospechas un problema: `cat ~/.local/state/jerico/healthwatch.state` y `crontab -l`.
 
 ---
-> 🕒 **Última modificación:** 13/10/2026 22:00 (Claude Code · Opus 5.5)
+> 🕒 **Última modificación:** 14/10/2026 01:43 (Claude Code · Opus 5.5)

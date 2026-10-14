@@ -1,0 +1,31 @@
+# DocuSeal autoalojado para la firma electrónica de Jericó (spec 004, F2), aparte del
+# compose de jerico. Uso en kaisen-server: ~/docuseal/docker-compose.yml
+#   docker compose -p docuseal -f ~/docuseal/docker-compose.yml up -d
+# Nunca público: solo 127.0.0.1:3010 en el host (acceso: ssh -L 3010:127.0.0.1:3010 kaisen-server)
+# y la red jerico_net, desde donde jerico-crm lo ve como http://docuseal:3000.
+services:
+  docuseal:
+    image: docuseal/docuseal:3.3.2
+    container_name: docuseal
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3010:3000"
+    volumes:
+      - docuseal_data:/data
+    mem_limit: 1g
+    cpus: 1.0
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - jerico_net
+
+networks:
+  jerico_net:
+    external: true
+
+volumes:
+  docuseal_data:
+    name: docuseal_data

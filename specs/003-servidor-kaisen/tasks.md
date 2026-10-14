@@ -3,7 +3,7 @@ tipo: tareas
 proyecto: Jericó — Kaisen AI
 estado: completas T01–T09 (revisión APROBADO en la ronda 2); falta la aprobación del CTO
 creado: "13/10/2026 10:22"
-modificado: "13/10/2026 22:00"
+modificado: "14/10/2026 01:43"
 ---
 
 # Tareas 003
@@ -33,8 +33,16 @@ modificado: "13/10/2026 22:00"
   7. Arreglos en el runbook (§1.6, §4.1, `install -d`).
   8. `env_get` con comentarios en línea.
 - **T09, ronda 2 (reviewer):** APROBADO. Los 8 defectos están corregidos, sin regresiones y con 37 tests.
-- **Pendiente:** que el CTO apruebe la spec (en BORRADOR, con SRV-06, 08 y 11 ajustados tras la revisión) y la ejecute en el servidor.
+- **Ejecutado en kaisen-server (14/10/2026 01:43, con el OK del CTO):**
+  - `age` 1.2.1 instalado; scripts copiados; destinatario público configurado.
+  - Primer backup `crm-20261014T063057Z.tar.age` (172 K, 600). Contra Docker real, sin restos en el contenedor.
+  - `restore verify` en la laptop: `integrity_check: ok`, `schema_version: 2`, 21 tablas.
+  - Aviso real por Telegram: OK.
+  - Cron de backup + copia OCI a las 03:45 y healthwatch cada 5 min (cron lo ejecutó a las 01:40).
+  - Copia fuera del servidor en el bucket OCI `jerico-backups`, decidida con Jev (`offsite_oci.sh`, con 4 tests).
+  - **Pendiente:** la rotación de logs del §1.6, porque obliga a recrear `jerico-crm`.
+- **Antes, pendiente:** que el CTO apruebe la spec (en BORRADOR, con SRV-06, 08 y 11 ajustados tras la revisión) y la ejecute en el servidor.
 - **No verificado:** nada de esto se ha probado contra Docker real, porque esta laptop no tiene acceso al socket sin sudo. Se verifica en el servidor con el paso 0 y el §1 del runbook.
 
 ---
-> 🕒 **Última modificación:** 13/10/2026 22:00 (Claude Code · Opus 5.5)
+> 🕒 **Última modificación:** 14/10/2026 01:43 (Claude Code · Opus 5.5)
