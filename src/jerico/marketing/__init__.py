@@ -9,6 +9,10 @@ from jerico.marketing.adaptadores import (
     SocialOrganicAdapter,
     WhatsAppCloudAdapter,
 )
+from jerico.marketing.bot import (
+    MARKETING_COMMAND_DESCRIPTIONS,
+    register_marketing_commands,
+)
 from jerico.marketing.linter import LinterMarcaKaizen
 from jerico.marketing.orquestador import OrquestadorMarketing
 from jerico.marketing.perfeccionador import PerfeccionadorMarketing
@@ -18,10 +22,12 @@ __all__ = [
     "EmailAdapter",
     "GestorActivosKaizen",
     "LinterMarcaKaizen",
+    "MARKETING_COMMAND_DESCRIPTIONS",
     "MetaAdsAdapter",
     "OrquestadorMarketing",
     "PerfeccionadorMarketing",
     "ResultadoDespacho",
     "SocialOrganicAdapter",
     "WhatsAppCloudAdapter",
+    "register_marketing_commands",
 ]

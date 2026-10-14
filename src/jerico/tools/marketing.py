@@ -14,7 +14,10 @@ import time
 from decimal import Decimal
 from typing import Any
 
-from jerico.marketing.orquestador import OrquestadorMarketing
+from jerico.marketing.orquestador import (
+    OrquestadorMarketing,
+    obtener_orquestador_global,
+)
 from jerico.schemas.marketing import (
     CanalMarketing,
     EstadoCampana,
@@ -22,17 +25,6 @@ from jerico.schemas.marketing import (
     Trato,
 )
 from jerico.tools.base import BaseTool
-
-_GLOBAL_ORQUESTADOR: OrquestadorMarketing | None = None
-
-
-def obtener_orquestador_global() -> OrquestadorMarketing:
-    """Devuelve o inicializa la instancia singleton en memoria del orquestador."""
-    global _GLOBAL_ORQUESTADOR
-    if _GLOBAL_ORQUESTADOR is None:
-        _GLOBAL_ORQUESTADOR = OrquestadorMarketing()
-    return _GLOBAL_ORQUESTADOR
-
 
 # ---------------------------------------------------------------------------
 # 1. Herramientas BaseTool para el registro de agentes
