@@ -17,6 +17,12 @@ class DecisionSettings:
         retention_days: int = 90,
         online: bool = False,
         min_leads: int = 20,
+        timeout_s: float = 3.0,
+        breaker_threshold: int = 3,
+        breaker_cooldown_s: float = 300.0,
+        api_key: str | None = None,
+        endpoint: str | None = None,
+        model: str = "jev-1.13.0",
     ) -> None:
         self.modes = modes or {}
         self.kill = kill
@@ -24,6 +30,12 @@ class DecisionSettings:
         self.retention_days = retention_days
         self.online = online
         self.min_leads = min_leads
+        self.timeout_s = timeout_s
+        self.breaker_threshold = breaker_threshold
+        self.breaker_cooldown_s = breaker_cooldown_s
+        self.api_key = api_key
+        self.endpoint = endpoint
+        self.model = model
 
     def is_kill_active(self) -> bool:
         """Comprueba si el interruptor general está activo por variable o marcador (VJT-014)."""
@@ -72,6 +84,22 @@ def load_settings() -> DecisionSettings:
     retention = int(os.getenv("JERICO_DECISION_RETENTION_DAYS", "90"))
     online = os.getenv("JERICO_DECISION_ONLINE", "false").lower() in ("true", "1", "yes")
     min_leads = int(os.getenv("JERICO_DECISION_MIN_LEADS", "20"))
+    timeout_s = float(os.getenv("JERICO_DECISION_TIMEOUT_S", "3"))
+
+    raw_breaker = os.getenv("JERICO_DECISION_BREAKER", "3,300").strip()
+    breaker_threshold = 3
+    breaker_cooldown_s = 300.0
+    if "," in raw_breaker:
+        parts = raw_breaker.split(",", 1)
+        try:
+            breaker_threshold = int(parts[0].strip())
+            breaker_cooldown_s = float(parts[1].strip())
+        except ValueError:
+            pass
+
+    api_key = os.getenv("TYPESAFE_API_KEY")
+    endpoint = os.getenv("TYPESAFE_ENDPOINT")
+    model = os.getenv("TYPESAFE_MODEL", "jev-1.13.0")
 
     return DecisionSettings(
         modes=modes,
@@ -80,4 +108,10 @@ def load_settings() -> DecisionSettings:
         retention_days=retention,
         online=online,
         min_leads=min_leads,
+        timeout_s=timeout_s,
+        breaker_threshold=breaker_threshold,
+        breaker_cooldown_s=breaker_cooldown_s,
+        api_key=api_key,
+        endpoint=endpoint,
+        model=model,
     )

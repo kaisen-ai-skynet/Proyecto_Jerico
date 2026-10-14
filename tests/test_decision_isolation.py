@@ -20,6 +20,24 @@ def test_no_network_imports_in_decision_package():
     }
 
     for py_file in decision_dir.glob("*.py"):
+        if py_file.name == "jev_client.py":
+            # El cliente de Nivel 2 solo usa biblioteca estándar (urllib); nunca librerías externas
+            tree = ast.parse(py_file.read_text(encoding="utf-8"), filename=str(py_file))
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Import):
+                    for alias in node.names:
+                        for prohibited in {"requests", "httpx", "aiohttp"}:
+                            assert not alias.name.startswith(prohibited), (
+                                f"Librería externa prohibida '{alias.name}' en jev_client.py"
+                            )
+                elif isinstance(node, ast.ImportFrom):
+                    module_name = node.module or ""
+                    for prohibited in {"requests", "httpx", "aiohttp"}:
+                        assert not module_name.startswith(prohibited), (
+                            f"Librería externa prohibida '{module_name}' en jev_client.py"
+                        )
+            continue
+
         tree = ast.parse(py_file.read_text(encoding="utf-8"), filename=str(py_file))
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):
@@ -70,10 +88,18 @@ def test_no_network_calls_in_apagado_and_sombra(tmp_path: Path):
     assert d_sombra.source == "base"
 
 
-def test_typesafe_url_not_present_in_f0_source():
-    """La dirección del servicio TypeSafe no aparece en los módulos de F0 (VJT-050)."""
+def test_typesafe_url_only_present_in_jev_client():
+    """La dirección del servicio TypeSafe solo aparece en jev_client.py
+    y en ningún otro módulo (VJT-050).
+    """
     decision_dir = Path(__file__).parent.parent / "src" / "jerico" / "decision"
+    jev_client_found = False
     for py_file in decision_dir.glob("*.py"):
         content = py_file.read_text(encoding="utf-8").lower()
-        assert "api.typesafe" not in content, f"URL de TypeSafe encontrada en {py_file.name}"
-        assert "typesafe.ai" not in content, f"URL de TypeSafe encontrada en {py_file.name}"
+        if py_file.name == "jev_client.py":
+            jev_client_found = True
+            assert "api.typesafe" in content, "jev_client.py debe contener el endpoint de TypeSafe"
+        else:
+            assert "api.typesafe" not in content, f"URL de TypeSafe encontrada en {py_file.name}"
+            assert "typesafe.ai" not in content, f"URL de TypeSafe encontrada en {py_file.name}"
+    assert jev_client_found, "jev_client.py debe existir en jerico.decision"

@@ -11,6 +11,11 @@ def test_load_settings_from_env(monkeypatch, tmp_path: Path):
     monkeypatch.setenv("JERICO_DECISION_RETENTION_DAYS", "45")
     monkeypatch.setenv("JERICO_DECISION_ONLINE", "true")
     monkeypatch.setenv("JERICO_DECISION_MIN_LEADS", "30")
+    monkeypatch.setenv("JERICO_DECISION_TIMEOUT_S", "5.5")
+    monkeypatch.setenv("JERICO_DECISION_BREAKER", "5,600")
+    monkeypatch.setenv("TYPESAFE_API_KEY", "test-ts-key")
+    monkeypatch.setenv("TYPESAFE_ENDPOINT", "https://custom.endpoint.ai/v1")
+    monkeypatch.setenv("TYPESAFE_MODEL", "jev-custom-1.0")
 
     settings = load_settings()
     assert settings.modes == {"nivel_turno": "sombra", "modelo_asistente": "sugerencia"}
@@ -19,6 +24,12 @@ def test_load_settings_from_env(monkeypatch, tmp_path: Path):
     assert settings.retention_days == 45
     assert settings.online is True
     assert settings.min_leads == 30
+    assert settings.timeout_s == 5.5
+    assert settings.breaker_threshold == 5
+    assert settings.breaker_cooldown_s == 600.0
+    assert settings.api_key == "test-ts-key"
+    assert settings.endpoint == "https://custom.endpoint.ai/v1"
+    assert settings.model == "jev-custom-1.0"
     assert settings.mode_for("nivel_turno") == "apagado"  # Por kill activo
 
 

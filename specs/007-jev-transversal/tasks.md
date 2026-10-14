@@ -107,7 +107,7 @@ Se guarda el código de salida real (sin tuberías que lo oculten). Debe pasar r
 
 ## C. Cliente en línea (F2)
 
-- [ ] **T12 — Cliente de Jev (Nivel 2)**
+- [x] **T12 — Cliente de Jev (Nivel 2)**
   - **Delegable a Gemini:** NO — red, secretos y tercero.
   - Requisitos: VJT-031, VJT-032, VJT-035, VJT-050, VJT-051, VJT-053.
   - **BLOQUEADA hasta:** orden del CTO para el Nivel 2; Q8 resuelta por escrito (enmienda o versión fija; constitución, principio 5); Q1 (cliente único) y Q5 (legal) resueltas.
@@ -115,7 +115,7 @@ Se guarda el código de salida real (sin tuberías que lo oculten). Debe pasar r
   - **Entregable exacto:** `src/jerico/decision/jev_client.py`, solo biblioteca estándar.
   - **Hecho cuando:** las pruebas pasan sin red.
 
-- [ ] **T13 — Modo sugerencia solo para el CTO**
+- [x] **T13 — Modo sugerencia solo para el CTO**
   - **Delegable a Gemini:** NO.
   - Requisitos: VJT-012, VJT-013, VJT-015.
   - **BLOQUEADA hasta:** T12 hecha y orden del CTO para ese tipo.
