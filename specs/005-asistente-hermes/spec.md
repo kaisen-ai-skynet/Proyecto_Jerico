@@ -2,7 +2,7 @@
 
 - **Estado:** BORRADOR para revisión del CTO (13/10/2026). Rama `asistente/f4-arquitectura-hermes`. Solo arquitectura y specs: sin código ni despliegue.
 - **Insumos:** `docs/architecture/hermes_master_architecture.md`; informe de mercado de `plan-gemini` (`docs/informes/mercado-asistentes-ia.md`, ver §7); código actual del repo (verificado: `src/jerico/agent/`, `memory.py`, `skills/{loader,validator,curator}.py`, `tools/registry.py`, `voice/{stt,tts}.py`, `crm/assistant.py`).
-- **Numeración:** 005 porque 003 es `003-catalogo-precios` (F6) y 004 ya lo usa `004-crm-cierre-contrato-firma` (CRM). Reconfirmar con `git branch -a` antes de integrar.
+- **Numeración:** 005, decidida con Jev (plan maestro §1): 003 servidor · 004 cierre-contrato · 005 asistente · 006 catálogo de precios · 007 Jev en el CRM (jer-jev).
 - **Reglas:** constitución de Jericó (Postgres en producción, sin alias `-latest`, humano en el bucle D5, subproceso aislado D3, sin `git push`), Ley 1581 y «gratis primero» (nada de pago sin OK del CTO).
 
 ## 1. Punto de partida (verificado)
@@ -55,18 +55,59 @@ Un solo asistente que, con el mismo núcleo, atienda por Telegram, web y voz. No
 
 **Fase A6 — Mejora continua.** Jev decide qué modelo usa cada tarea del asistente (reutiliza `Flota_Jev`); tablero de costo por turno; revisión trimestral contra el informe de mercado.
 
+## 3.1 Jev transversal a todo Jericó (CTO, 13/10/2026)
+
+Jev no se limita al CRM: es la capa de decisión de todo Jericó. Regla de diseño: **la IA propone, el código decide, y Jev ordena las opciones**; nunca decide una acción irreversible. Puntos de uso en el asistente (cada uno detrás de una función `decidir(pregunta, estado) → opción` que, si Jev falla, cae a una regla fija):
+
+| Punto | Pregunta a Jev (tipo `choice`) | Estado enviado (solo enums, booleanos y enteros) |
+|---|---|---|
+| Elegir modelo por tarea (A1/A6) | `modelo` | tipo de tarea, longitud estimada, si toca datos de clientes |
+| Habilidad a activar (A2) | `habilidad` | intención clasificada, rol |
+| Pedir aprobación o no (A3) | `escalar_humano` | reversibilidad, efecto externo |
+| Voz: continuar o pasar a humano (A4) | `siguiente_paso` | etapa de la llamada, intentos |
+| Seguimiento de leads | lo define la spec 007 (`jer-jev`) | vector de VJC-012 |
+
+Reglas: sin texto libre, nombres, teléfonos ni correos hacia Jev; `jev-latest` con el `model` devuelto guardado en cada decisión; registro de costo y tokens. Las decisiones de **desarrollo** (numeración, modelos) se consultan con `Flota_Jev/scripts/jev_decidir.py`; las de **producto** pasan por esta capa con su propio esquema. Coordinación: el consejero de seguimiento es de la spec 007 (`jer-jev`), que aquí se consume, no se repite.
+
+## 3.2 Enrutamiento de modelos (plan maestro §4, decidido con Jev el 13/10/2026)
+
+| Tarea del asistente | Modelo | Condición |
+|---|---|---|
+| Clasificar, extraer campos, resumir notas | `deepseek-chat` | **solo texto seudonimizado**; nunca nombres, teléfonos, correos ni documentos en claro |
+| Textos que lee el cliente (borradores, propuestas) | `gpt-6-luna` | con aprobación humana antes de enviar |
+| Contratos, precios finales, riesgos legales | `gpt-6-luna` (Opus como opción evaluada por Jev) | precios solo desde la herramienta de F6; contratos los confirma el abogado |
+| Generar webs/apps (A3) | Claude Sonnet o Gemini 3.8 Flash según Jev | sandbox, sin datos de clientes |
+
+Gemini 3.8 Flash y Argon quedan como opciones que Jev evalúa por costo y calidad. El tope de tokens (`JERICO_CRM_ASSISTANT_DAILY_TOKEN_CAP`) se ajusta por `.env`. Presupuesto global 10–25 USD/mes: ninguna fase contrata un servicio sin OK del CTO para ese paso.
+
+## 3.3 Contrato `schemas/` y precios deterministas
+
+Un único directorio `schemas/` (Pydantic + JSON Schema generado) con `Lead`, `Cotizacion` y `PaqueteContrato`, compartido por F2 (spec 004), F4 (esta) y F6 (spec 006). Esta spec solo los **consume**: el asistente produce un `Lead` borrador, una `Cotizacion` y un `PaqueteContrato` únicamente llamando a las herramientas; nunca construye el JSON a mano ni escribe cifras. **El LLM nunca calcula precios**: pide la `Cotizacion` a `consultar_catalogo` (spec 006), que es determinista y devuelve la versión del catálogo. Dueño de los esquemas: F2 (`crm-director`), con revisión de F4 y F6 antes de congelarlos; hasta entonces, los campos de esta spec son provisionales.
+
+## 3.4 Reglas transversales de las herramientas
+
+- **Idempotencia:** toda herramienta que cambie estado o dispare acciones externas (`crear_lead`, enviar correo, generar contrato, avisar al abogado) exige `idempotency_key` determinista (p. ej. hash de usuario + tipo + contenido normalizado + día); repetirla no duplica el efecto.
+- **`DRY_RUN`:** con `JERICO_EXTERNAL_COMMS_DRY_RUN=true` (valor por defecto) nada sale a terceros; todo se redirige al Telegram o correo del CTO.
+- **WhatsApp:** solo la API oficial (Cloud API de Meta); las no oficiales están descartadas.
+- **Voz y llamadas:** clonar una voz exige consentimiento escrito de esa persona; el agente avisa que es una IA; los contactos comerciales cumplen la Ley 2300 de 2023 (horarios, frecuencia, consentimiento). La validez de la firma electrónica la confirma el abogado.
+
 ## 4. Requisitos (EARS)
 
 - **R1** El asistente SHALL mantener la memoria de cada usuario en PostgreSQL, aislada por usuario y rol.
 - **R2** El prompt de sistema SHALL ser inmutable dentro de una sesión; lo variable SHALL ir en mensajes de usuario o de herramienta.
 - **R3** WHEN el asistente vaya a ejecutar una acción con efecto externo (crear lead, enviar correo, generar o publicar web), el sistema SHALL pedir aprobación humana con identidad verificada (D5).
-- **R4** El asistente SHALL consultar precios solo mediante la herramienta del catálogo (spec 003) y NO SHALL calcular ni inventar precios.
+- **R4** El asistente SHALL consultar precios solo mediante la herramienta del catálogo (spec 006) y NO SHALL calcular ni inventar precios.
 - **R5** La generación de webs y apps SHALL ocurrir en subproceso aislado, sin `docker.sock` y sin acceso a secretos ni a datos de clientes; el resultado SHALL quedar como borrador local.
 - **R6** WHILE un usuario supere su tope diario de tokens, el asistente SHALL responder con aviso y no llamar al modelo.
 - **R7** La voz SHALL registrar consentimiento y avisar al interlocutor que habla una IA; las grabaciones de clientes quedan fuera del repositorio.
 - **R8** Todo proveedor de pago (voz, nube, firma) SHALL requerir aprobación explícita del CTO documentada antes de integrarse.
 - **R9** Cada turno SHALL registrar modelo, tokens, herramientas usadas y versión del prompt.
 - **R10** La interfaz web SHALL usar el mismo gateway, roles y aprobaciones que Telegram.
+- **R11** Cada punto de decisión de §3.1 SHALL tener una regla fija de respaldo y registrar el `model` devuelto por Jev, el costo y los tokens; Jev NO SHALL recibir texto libre ni datos personales.
+- **R12** El asistente SHALL enrutar los modelos según §3.2; `deepseek-chat` SHALL recibir solo texto seudonimizado.
+- **R13** Toda herramienta con efecto de estado o externo SHALL exigir `idempotency_key` y respetar `JERICO_EXTERNAL_COMMS_DRY_RUN`.
+- **R14** Las entidades `Lead`, `Cotizacion` y `PaqueteContrato` SHALL provenir de `schemas/`; el LLM NO SHALL calcular precios (usa `consultar_catalogo`).
+- **R15** WhatsApp SHALL integrarse solo por la API oficial de Meta.
 
 ## 5. Decisiones que necesita el CTO
 
@@ -80,7 +121,7 @@ Un solo asistente que, con el mismo núcleo, atienda por Telegram, web y voz. No
 - Alcance «hace todo»: se controla con fases y criterios de salida medibles.
 - Costo de tokens: tope por usuario ya existe; se extiende por fase.
 - Datos de clientes en memoria del asistente (Ley 1581): memoria mínima, sin copiar documentos; retención definida en la spec de F2.
-- Voz: llamadas automatizadas tienen reglas de consentimiento y de contacto comercial en Colombia; **sin verificar con el abogado** (no se afirma qué norma aplica).
+- Voz: rige la Ley 2300 de 2023 para contactos comerciales (según el plan maestro); su alcance exacto sobre llamadas automatizadas lo confirma el abogado (sin verificar por mí).
 - Superposición con la spec de F2 (CRM) y con F3 (Jev en el núcleo): se coordina por el plan maestro.
 
 ## 7. Voz y mercado
