@@ -90,7 +90,7 @@ Se guarda el código de salida real (sin tuberías que lo oculten). Debe pasar r
 
 ## B. CRM (F1)
 
-- [ ] **T10 — Enganche en el CRM**
+- [x] **T10 — Enganche en el CRM**
   - **Delegable a Gemini:** NO — toca el asistente en producción.
   - Requisitos: VJT-008, VJT-063.
   - **BLOQUEADA hasta:** T08 hecha y base de código acordada (T17).
