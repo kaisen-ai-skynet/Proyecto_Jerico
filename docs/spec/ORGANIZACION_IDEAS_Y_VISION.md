@@ -86,7 +86,7 @@ A continuación se organizan y clasifican todos los deseos, requerimientos y amb
 * **Investigación Técnica y Benchmark:**
   * Investiga librerías, APIs de terceros, cambios en SDKs y documentación técnica sin saturar el flujo de trabajo del desarrollador.
 * **Indagación de Servicios Existentes y Futuros:**
-  * Jericó tiene indexado todo el catálogo de servicios de la empresa (Mundo de Oro ERP, Seguros Bolívar, TaxisMVP, Olmax, automatizaciones n8n) y puede contrastar requerimientos nuevos contra lo ya existente.
+  * Jericó tiene indexado todo el catálogo de servicios de la empresa (ERP para joyería, automatización para un corredor de seguros, MVP de movilidad, facturación electrónica, automatizaciones n8n) y puede contrastar requerimientos nuevos contra lo ya existente.
 
 ### Pilar V: Marketing, Prospección y Factoría de Demos
 * **Campañas de Marketing y Contenidos:**
@@ -98,7 +98,7 @@ A continuación se organizan y clasifican todos los deseos, requerimientos y amb
 
 ### Pilar VI: SysAdmin, DevOps y Arquitectura de Infraestructura
 * **Control del Servidor Central (`100.79.169.121`):**
-  * Monitoreo proactivo de contenedores Docker (`skynet-n8n-1`, `skynet-postgres-1`, `segurosbolivar-db`, `mundodeoro-db`, `bolivar-ai-gateway`).
+  * Monitoreo proactivo de contenedores Docker (`skynet-n8n-1`, `skynet-postgres-1`, `cliente-a-db`, `cliente-b-db`, `cliente-a-ai-gateway`).
   * Watchdogs inteligentes con auto-remediación (reiniciar contenedores caídos, limpiar logs, liberar espacio).
 * **Organización de Bases de Datos:**
   * Mantenimiento de integridad, respaldo de esquemas y verificación de cuotas en PostgreSQL, Supabase y Notion.

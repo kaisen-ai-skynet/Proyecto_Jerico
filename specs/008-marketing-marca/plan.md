@@ -34,7 +34,7 @@ tests/
 1. **Reutilización de Activos Existentes (`Kaizen_Activos`):**
    - Conexión con `ACT-CRM-01` (`Proyecto_Jerico`): Registra interacciones de prospección y estado de conversión.
    - Conexión con `ACT-CRM-04` (`Kaisen_AI/scripts/test_oportunidades.py`): Algoritmo para orientar a qué segmento disparar cada campaña.
-   - Conexión con `ACT-IA-01` (`Seguros_Bolivar/csbolivar/13-asistente-ia.md`): Protocolo de notificación bidireccional por Telegram.
+   - Conexión con `ACT-IA-01` (`Cliente_A/proyecto/13-asistente-ia.md`): Protocolo de notificación bidireccional por Telegram.
    - Conexión con `ACT-IA-03` (`prompts-reutilizables.md`): Inyección de directivas inmutables y control de versiones por hash.
    - Conexión con `ACT-CON-01` (`pgcrypto` / Ley 1581): Cifrado de teléfonos y correos en reposo.
 

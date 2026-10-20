@@ -106,7 +106,7 @@ Para evitar sobrecargar un solo agente, Jericó opera con agentes desacoplados c
 ### 2. `JericoComercial` (Frontline y Factoría de Demos)
 * **Atención al Cliente:** Chatbot empático y profesional conectado al sitio web o canales de prospección.
 * **Calificación de Leads:** Mapeo de presupuesto, tiempos y necesidades técnicas.
-* **Generación de Demos:** Capacidad de ensamblar demos parametrizadas (por ejemplo, instancias de prueba del ERP de Mundo de Oro o cotizadores de seguros).
+* **Generación de Demos:** Capacidad de ensamblar demos parametrizadas (por ejemplo, instancias de prueba de un ERP para joyería o cotizadores de seguros).
 
 ### 3. `JericoDev` (Asistente de Ingeniería de Software)
 * **Desarrollo de Código:** Creación de componentes React, endpoints FastAPI, modelos de datos Prisma/SQLAlchemy y migraciones.
@@ -115,7 +115,7 @@ Para evitar sobrecargar un solo agente, Jericó opera con agentes desacoplados c
 
 ### 4. `JericoDevOps` (SysAdmin y Salud de Servidores)
 * **Interacción Directa con Docker:** Conectado al socket de Docker en `desktop-8f1b898`.
-* **Supervisión Continua:** Conoce el estado de salud de `skynet-n8n-1`, `segurosbolivar-db`, `mundodeoro-db` y `bolivar-ai-gateway`.
+* **Supervisión Continua:** Conoce el estado de salud de `skynet-n8n-1`, `cliente-a-db`, `cliente-b-db` y `cliente-a-ai-gateway`.
 * **Watchdog Inteligente:** No reinicia contenedores por códigos HTTP temporales (corrige el error de `jarvis-salud.sh`).
 * **Migraciones Asistidas:** Ejecuta scripts de backup y despliegues con capacidad de rollback inmediato.
 

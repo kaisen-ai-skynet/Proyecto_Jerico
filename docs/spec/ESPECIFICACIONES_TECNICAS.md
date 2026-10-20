@@ -32,7 +32,7 @@ Página Padre Raíz: `e59a8560-3ffc-40fe-9d98-abff1c4b7561`
   * Juan Pablo (Backend / Seguridad): `kaisen.ia.pablo.back` *(OJO: dominio 'ia')*
   * Duván (Comercial): `kaisen.ai.comercial`
   * Juan José (Jurídica): `kaisen.ai.juanjose.juridica`
-  * Lucas (Operaciones): `lucasjaramillolol@gmail.com`
+  * Lucas (Operaciones): (correo de operaciones, fuera del repositorio)
 
 ---
 
@@ -45,7 +45,7 @@ Página Padre Raíz: `e59a8560-3ffc-40fe-9d98-abff1c4b7561`
 * **Servicios de Datos:**
   * PostgreSQL interno: `skynet-postgres-1:5432`
   * Redis interno: `skynet-redis-1:6379`
-  * Gateway IA local: `bolivar-ai-gateway` (puerto 8080/11434, modelo `qwen3:4b` vía Ollama cuando se configure el GPU toolkit).
+  * Gateway IA local: `cliente-a-ai-gateway` (puerto 8080/11434, modelo `qwen3:4b` vía Ollama cuando se configure el GPU toolkit).
 
 ---
 
@@ -54,6 +54,6 @@ Página Padre Raíz: `e59a8560-3ffc-40fe-9d98-abff1c4b7561`
 1. **Protocolo de Confirmación Obligatoria (Escritura):**
    * Antes de ejecutar cualquier mutación (crear/modificar tickets en YouTrack, registrar filas en Notion, modificar eventos de Calendar o enviar correos/mensajes masivos), Jericó debe presentar el resumen exacto al usuario y esperar su aprobación explícita.
 2. **Aislamiento de Clientes:**
-   * Las bases de datos de clientes (`segurosbolivar-db`, `mundodeoro-db`) están estrictamente aisladas del backend del asistente.
+   * Las bases de datos de clientes (`cliente-a-db`, `cliente-b-db`) están estrictamente aisladas del backend del asistente.
 3. **Manejo de Secretos:**
    * Nunca almacenar credenciales en texto claro en repositorios. Consumir variables de entorno inyectadas mediante Docker o `.env` protegido.

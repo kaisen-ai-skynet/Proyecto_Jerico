@@ -11,5 +11,5 @@ repos:
     hooks:
       - id: end-of-file-fixer
       - id: trailing-whitespace
-        exclude: ^(INFORME-HERDR-2026-09-29\.md|docs/spec/PLAN_CONEXION_VPS_ORACLE_EQUIPO\.md|docs/decisiones/.*|docs/SPEC_JERICO_V2\.md|docs/runbook-aprovisionamiento-vps\.md)$
+        exclude: ^(docs/informes/herdr-2026-09-29\.md|docs/spec/PLAN_CONEXION_VPS_ORACLE_EQUIPO\.md|docs/decisiones/.*|docs/SPEC_JERICO_V2\.md|docs/runbook-aprovisionamiento-vps\.md)$
       - id: check-yaml

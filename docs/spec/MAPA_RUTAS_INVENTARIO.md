@@ -30,7 +30,7 @@ Ecosistema utilizado históricamente, basado en 25 flujos de n8n, scripts de hos
   * `skynet-agency-local-backup-2026-07-08.zip` (Respaldo integral comprimido)
 
 ### B. Documentación Operativa y de Control
-* **Protocolo de Pausa (2026-08-16):** `~/Kaisen_AI/01_Proyectos/Seguros_Bolivar/jp_seguros_n8n/PAUSA-JARVIS-2026-08-16.md`
+* **Protocolo de Pausa (2026-08-16):** `~/Kaisen_AI/01_Proyectos/Cliente_A/jp_seguros_n8n/PAUSA-JARVIS-2026-08-16.md`
 * **Informe Antigravity P0-3 (Guardrail de Pausa):** `~/Kaisen_AI/01_Proyectos/Kaisen_AI/kaisen ai/ANTIGRAVITY/entregables/P0-3/pausa-jarvis.md`
 * **Plantilla de Mensajes para Telegram:** `~/Kaisen_AI/01_Proyectos/Kaisen_AI/kaisen-despliegues/mensaje-para-jarvis.md`
 * **Auditoría de Estado Completo (2026-08-07):** `~/Kaisen_AI/01_Proyectos/Kaisen_AI/reportes/kaisen-estado-completo-2026-08-07.md`
