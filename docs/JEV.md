@@ -28,10 +28,10 @@ decision = decidir(
     state={"tipo_tarea": "resumen_lead", "longitud_contexto": "media"},
     tarea="resumen_lead",
 )
-decision.option    # opción final que se aplica
-decision.source    # "base", "jev", "cache"…
-decision.reason    # por qué (estado inválido, clase A, cortacircuitos…)
-decision.suggested # lo que propuso Jev (en modo sugerencia)
+decision.option  # opción final que se aplica
+decision.source  # "base", "jev", "cache"…
+decision.reason  # por qué (estado inválido, clase A, cortacircuitos…)
+decision.suggested  # lo que propuso Jev (en modo sugerencia)
 ```
 
 `decidir()` **nunca lanza excepciones** al invocador (requisito VJT-030). Ante cualquier error, devuelve la regla base con el motivo.
