@@ -243,12 +243,6 @@ El proyecto está en evolución y se enfoca en construir una base sólida para a
 
 ---
 
-## Nota importante sobre licencia
-
-Este repositorio se comparte como proyecto técnico y de portfolio. Si lo vas a publicar más ampliamente con fines profesionales, conviene definir una licencia explícita antes de usarlo como proyecto open source.
-
----
-
 <p align="center">
   <strong>Jericó</strong><br>
   IA para negocio, decisiones y automatización operativa.
