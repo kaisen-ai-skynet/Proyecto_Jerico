@@ -239,7 +239,7 @@ El proyecto está en evolución y se enfoca en construir una base sólida para a
 ## Contacto
 
 - GitHub: https://github.com/kaisen-ai-skynet
-- Perfil de portfolio: [agrega aquí tu LinkedIn / portfolio / correo]
+- Perfil de portfolio:  linkedin.com/in/juan-santiago-gonzález-marín-4260a1217
 
 ---
 
