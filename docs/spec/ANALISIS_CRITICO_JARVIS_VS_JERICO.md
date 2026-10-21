@@ -68,7 +68,7 @@ Jarvis consolidó la especificación de 38 herramientas que le permitían intera
   * `skynet-postgres-1` y `skynet-redis-1` (Persistencia interna de n8n y cola).
   * `skynet-cloudflared-1` (Túnel Zero Trust hacia `n8n.getkaisen.com`).
   * `jarvis-renderer` (Renderizado de diagramas).
-  * Bases de datos aisladas de clientes: `segurosbolivar-db`, `mundodeoro-db`.
+  * Bases de datos aisladas de clientes: `cliente-a-db`, `cliente-b-db`.
 * **Scripts en el Host (`/home/kaisenai/`):**
   * `jarvis-salud.sh` (Vigía en cron cada 5 min).
   * `jarvis-metrics.py` (Métricas de sistema, actualmente pausado).
@@ -127,7 +127,7 @@ flowchart TD
 4. **El Protocolo de Confirmación de Escritura:**
    * La regla de que ningún agente modifica YouTrack, Calendar o bases de datos sin autorización previa del usuario es un guardrail vital que debe ser el estándar de Jericó.
 5. **La Topología de Infraestructura Segura:**
-   * La red Tailscale (`kaisen.ai`), el acceso por SSH con llaves `ed25519` y el aislamiento de un contenedor de base de datos por cliente (`segurosbolivar-db`, `mundodeoro-db`) son arquitecturas sólidas que se mantienen.
+   * La red Tailscale (`kaisen.ai`), el acceso por SSH con llaves `ed25519` y el aislamiento de un contenedor de base de datos por cliente (`cliente-a-db`, `cliente-b-db`) son arquitecturas sólidas que se mantienen.
 
 ### ❌ QUÉ NO VALE LA PENA (Debe Desecharse / Reemplazarse):
 1. **n8n como Núcleo de Inteligencia Artificial:**

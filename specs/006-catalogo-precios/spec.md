@@ -51,7 +51,7 @@ planes:
 ## 5. Decisiones que necesita el CTO (no las tomo yo)
 
 1. ¿Qué precio es el oficial: el de propuesta (3,22 / 4,32 / 5,52 M) o el de fórmula (5,76 / 6,12 / 7,00 M)? El catálogo guarda ambos; solo `precio_propuesta` se cotiza hasta que decida.
-2. ¿Los planes de Mundo de Oro y Olmax son planes del catálogo general o precios por cliente? Propuesta: planes generales (Estándar, Único, Premium) y los precios por cliente en el CRM, no en el catálogo.
+2. ¿Los planes de los primeros clientes son planes del catálogo general o precios por cliente? Propuesta: planes generales (Estándar, Único, Premium) y los precios por cliente en el CRM, no en el catálogo.
 3. ¿Quién aprueba una versión `vigente`? Propuesta: solo el CTO, por commit en rama propia.
 
 ## 6. Riesgos

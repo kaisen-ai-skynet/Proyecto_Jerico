@@ -72,7 +72,7 @@ flowchart TD
 ### 3.1. Gateway y Ruteo Omnicanal
 * **Telegram:** Recepción de mensajes de texto y notas de voz. Las notas de voz son transcritas mediante Whisper / Gemini Multimodal antes de ingresar a la cola del orquestador.
 * **Siri / Atajos de Apple:** Endpoint `/api/v1/siri` optimizado para respuestas concisas (2-4 oraciones, sin markdown complejo ni emojis innecesarios).
-* **Autenticación e Identidad:** Whitelist estricto de usuarios (Telegram ID `2099727924` para Santiago). Respuestas de error silenciosas o de rechazo para usuarios no autorizados.
+* **Autenticación e Identidad:** Whitelist estricto de usuarios (ID de Telegram del CTO configurado en `JERICO_ALLOWED_TELEGRAM_IDS`). Respuestas de error silenciosas o de rechazo para usuarios no autorizados.
 
 ### 3.2. Ruteo Inteligente de Modelos (Token Router) — v2 20/09/2026 16:00
 Hereda el patrón de Jarvis pero con duo barato OpenAI-compatible:
